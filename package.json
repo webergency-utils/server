@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
   "author": "radixxko",
@@ -23,11 +23,11 @@
   },
   "scripts": {
     "clean": "rm -rf ./dist/* node_modules package-lock.json && npm i",
+    "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\"",
     "build": "npm run clean && tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "version": "npm run build && npm publish && npm run commit && git push",
-    "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\""
+    "version": "npm run build && npm publish && npm run commit && git push"
   },
   "repository": {
     "type": "git",
