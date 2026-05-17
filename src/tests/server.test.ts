@@ -497,5 +497,36 @@ describe('Server & Metadata', () => {
             expect(new Uint8Array(raw1)).toEqual(body);
             expect(raw1).toBe(raw2); // Cached reference
         });
+
+        it('should log routes and incoming requests when logs: true is specified', async () => {
+            const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            
+            const server = new Server({ port: 3004, logs: true });
+            
+            // Register controller and endpoint
+            MetadataStore.registerController('LogCtrl', { getLog: () => ({ hello: 'log' }) });
+            MetadataStore.registerEndpoint({
+                controller: 'LogCtrl', methodName: 'getLog', httpMethod: 'GET', path: '/log-test',
+                params: [], guards: [], interceptors: [], meta: {}
+            });
+            
+            await server.start();
+            
+            // Verify registration log
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📝 Registered route: GET    /log-test -> LogCtrl.getLog'));
+            
+            // Simulate incoming request
+            const request = new Request('http://localhost:3004/log-test', { method: 'GET' });
+            const response = await server.fetch(request);
+            
+            // Verify request and response logs
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📡 --> GET /log-test'));
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📡 <-- GET /log-test - 200'));
+            
+            expect(response.status).toBe(200);
+            
+            consoleSpy.mockRestore();
+        });
     });
 });
+

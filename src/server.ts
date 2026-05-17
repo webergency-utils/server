@@ -16,6 +16,7 @@ export interface ServerOptions {
   controllers?: any[];
   interceptors?: any[];
   guards?: any[];
+  logs?: boolean;
 }
 
 export type ServerEvents = {
@@ -41,8 +42,12 @@ export class Server extends EventEmitter {
   private init() {
     for (const endpoint of MetadataStore.getEndpoints()) {
       this.router.add(endpoint);
+      if (this.options.logs) {
+        console.log(`📝 Registered route: ${endpoint.httpMethod.padEnd(6)} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`);
+      }
     }
   }
+
 
   public on<K extends keyof ServerEvents>(event: K, handler: ServerEvents[K]) {
     if (!this.events[event]) this.events[event] = new Set();
@@ -163,12 +168,16 @@ export class Server extends EventEmitter {
     }
 
     this.activeRequests++;
+    const startTime = Date.now();
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method;
     
-    try {
-      const url = new URL(request.url);
-      const path = url.pathname;
-      const method = request.method;
+    if (this.options.logs) {
+      console.log(`📡 --> ${method} ${path}${url.search ? url.search : ''}`);
+    }
 
+    try {
       const match = this.router.find(method, path);
       
       let finalMatch = match;
@@ -179,7 +188,13 @@ export class Server extends EventEmitter {
                      this.router.find('DELETE', path);
       }
 
-      if (!finalMatch) return new Response('Not Found', { status: 404 });
+      if (!finalMatch) {
+        if (this.options.logs) {
+          const duration = Date.now() - startTime;
+          console.log(`📡 <-- ${method} ${path} - 404 Not Found (${duration}ms)`);
+        }
+        return new Response('Not Found', { status: 404 });
+      }
 
       const req = request as AugmentedRequest;
       req.params = finalMatch.params;
@@ -187,10 +202,20 @@ export class Server extends EventEmitter {
       req.globalCors = this.options.cors;
       req.meta = finalMatch.metadata.meta;
 
-      return await this.execute(finalMatch.metadata, req);
+      const response = await this.execute(finalMatch.metadata, req);
+      
+      if (this.options.logs) {
+        const duration = Date.now() - startTime;
+        console.log(`📡 <-- ${method} ${path} - ${response.status} (${duration}ms)`);
+      }
+      return response;
     } catch (err: any) {
       this.internalEmit('error', err);
       console.error('Server Error:', err);
+      if (this.options.logs) {
+        const duration = Date.now() - startTime;
+        console.log(`📡 <-- ${method} ${path} - 500 Internal Server Error (${duration}ms)`);
+      }
       return new Response(JSON.stringify({ success: false, error: err.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -199,6 +224,7 @@ export class Server extends EventEmitter {
       this.activeRequests--;
     }
   };
+
 
   private async execute(metadata: EndpointMetadata, req: AugmentedRequest): Promise<Response> {
     return Context.run({ request: req, metadata }, async () => {
