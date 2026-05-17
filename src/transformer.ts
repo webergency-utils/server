@@ -480,23 +480,40 @@ export default function compilerPlugin(program: ts.Program) {
       const prepends: ts.Statement[] = [];
       const appends: ts.Statement[] = [];
 
-      // Import MetadataStore as __server_metadata_store from '@webergency-utils/server'
+      // Initialize __server_metadata_store locally from globalThis to ensure 100% ESM & CommonJS compatibility
+      // with zero module alias/symbol binding dependencies.
       prepends.push(
-        ts.factory.createImportDeclaration(
+        ts.factory.createVariableStatement(
           undefined,
-          ts.factory.createImportClause(
-            false,
-            undefined,
-            ts.factory.createNamedImports([
-              ts.factory.createImportSpecifier(
-                false,
-                ts.factory.createIdentifier('MetadataStore'),
-                ts.factory.createIdentifier('__server_metadata_store')
+          ts.factory.createVariableDeclarationList([
+            ts.factory.createVariableDeclaration(
+              ts.factory.createIdentifier('__server_metadata_store'),
+              undefined,
+              undefined,
+              ts.factory.createBinaryExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('globalThis'),
+                  '__WEBERGENCY_SERVER_METADATA_STORE__'
+                ),
+                ts.SyntaxKind.BarBarToken,
+                ts.factory.createParenthesizedExpression(
+                  ts.factory.createBinaryExpression(
+                    ts.factory.createPropertyAccessExpression(
+                      ts.factory.createIdentifier('globalThis'),
+                      '__WEBERGENCY_SERVER_METADATA_STORE__'
+                    ),
+                    ts.SyntaxKind.EqualsToken,
+                    ts.factory.createObjectLiteralExpression([
+                      ts.factory.createPropertyAssignment('endpoints', ts.factory.createArrayLiteralExpression([])),
+                      ts.factory.createPropertyAssignment('controllers', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
+                      ts.factory.createPropertyAssignment('guards', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
+                      ts.factory.createPropertyAssignment('interceptors', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, []))
+                    ], true)
+                  )
+                )
               )
-            ])
-          ),
-          ts.factory.createStringLiteral('@webergency-utils/server'),
-          undefined
+            )
+          ], ts.NodeFlags.Const)
         )
       );
 
@@ -558,8 +575,11 @@ export default function compilerPlugin(program: ts.Program) {
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
-                ts.factory.createIdentifier('__server_metadata_store'),
-                'registerGuard'
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'guards'
+                ),
+                'set'
               ),
               undefined,
               [
@@ -581,8 +601,11 @@ export default function compilerPlugin(program: ts.Program) {
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
-                ts.factory.createIdentifier('__server_metadata_store'),
-                'registerInterceptor'
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'interceptors'
+                ),
+                'set'
               ),
               undefined,
               [
@@ -604,8 +627,11 @@ export default function compilerPlugin(program: ts.Program) {
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
-                ts.factory.createIdentifier('__server_metadata_store'),
-                'registerEndpoint'
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'endpoints'
+                ),
+                'push'
               ),
               undefined,
               [objectToExpression(ep)]
@@ -639,9 +665,9 @@ export default function compilerPlugin(program: ts.Program) {
 
           // Inject properties
           for (const [propName, typeName] of controllerInfo.injections.entries()) {
-            let storeMethod = 'getController';
-            if (registry.guards.has(typeName)) storeMethod = 'getGuard';
-            else if (registry.interceptors.has(typeName)) storeMethod = 'getInterceptor';
+            let storeMap = 'controllers';
+            if (registry.guards.has(typeName)) storeMap = 'guards';
+            else if (registry.interceptors.has(typeName)) storeMap = 'interceptors';
 
             appends.push(
               ts.factory.createExpressionStatement(
@@ -653,8 +679,11 @@ export default function compilerPlugin(program: ts.Program) {
                   ts.SyntaxKind.EqualsToken,
                   ts.factory.createCallExpression(
                     ts.factory.createPropertyAccessExpression(
-                      ts.factory.createIdentifier('__server_metadata_store'),
-                      storeMethod
+                      ts.factory.createPropertyAccessExpression(
+                        ts.factory.createIdentifier('__server_metadata_store'),
+                        storeMap
+                      ),
+                      'get'
                     ),
                     undefined,
                     [ts.factory.createStringLiteral(typeName)]
@@ -669,8 +698,11 @@ export default function compilerPlugin(program: ts.Program) {
             ts.factory.createExpressionStatement(
               ts.factory.createCallExpression(
                 ts.factory.createPropertyAccessExpression(
-                  ts.factory.createIdentifier('__server_metadata_store'),
-                  'registerController'
+                  ts.factory.createPropertyAccessExpression(
+                    ts.factory.createIdentifier('__server_metadata_store'),
+                    'controllers'
+                  ),
+                  'set'
                 ),
                 undefined,
                 [
@@ -686,8 +718,11 @@ export default function compilerPlugin(program: ts.Program) {
             ts.factory.createExpressionStatement(
               ts.factory.createCallExpression(
                 ts.factory.createPropertyAccessExpression(
-                  ts.factory.createIdentifier('__server_metadata_store'),
-                  'registerController'
+                  ts.factory.createPropertyAccessExpression(
+                    ts.factory.createIdentifier('__server_metadata_store'),
+                    'controllers'
+                  ),
+                  'set'
                 ),
                 undefined,
                 [
@@ -703,6 +738,7 @@ export default function compilerPlugin(program: ts.Program) {
           );
         }
       }
+
 
       // Prepend utility/validator statements and append registration statements
       return ts.factory.updateSourceFile(transformedSourceFile, [
