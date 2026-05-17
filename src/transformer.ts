@@ -530,19 +530,22 @@ export default function compilerPlugin(program: ts.Program) {
 
       // Declare all the validators in local variables: const __val_[hash] = expr;
       for (const [hash, expr] of registry.validators.entries()) {
-        registrations.push(
-          ts.factory.createVariableStatement(
-            undefined,
-            ts.factory.createVariableDeclarationList([
-              ts.factory.createVariableDeclaration(
-                ts.factory.createIdentifier(`__val_${hash}`),
-                undefined,
-                undefined,
-                expr
-              )
-            ], ts.NodeFlags.Const)
-          )
-        );
+        if (!hasVariableDeclaration(transformedSourceFile.statements, `__val_${hash}`) &&
+            !hasVariableDeclaration(registrations, `__val_${hash}`)) {
+          registrations.push(
+            ts.factory.createVariableStatement(
+              undefined,
+              ts.factory.createVariableDeclarationList([
+                ts.factory.createVariableDeclaration(
+                  ts.factory.createIdentifier(`__val_${hash}`),
+                  undefined,
+                  undefined,
+                  expr
+                )
+              ], ts.NodeFlags.Const)
+            )
+          );
+        }
       }
 
       // Register Guards
