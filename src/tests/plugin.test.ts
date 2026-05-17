@@ -58,6 +58,7 @@ describe('TypeScript Compiler Plugin Transformer', () => {
 
     // Should import MetadataStore as __server_metadata_store
     expect(compiled).toContain('import { MetadataStore as __server_metadata_store } from "@webergency-utils/server"');
+
     
     // Should import typechecker runtime
     expect(compiled).toContain('import "@webergency-utils/typechecker/runtime"');

@@ -477,8 +477,11 @@ export default function compilerPlugin(program: ts.Program) {
       // 3. Generate and append the self-registration nodes
       const registrations: ts.Statement[] = [];
 
+      const prepends: ts.Statement[] = [];
+      const appends: ts.Statement[] = [];
+
       // Import MetadataStore as __server_metadata_store from '@webergency-utils/server'
-      registrations.push(
+      prepends.push(
         ts.factory.createImportDeclaration(
           undefined,
           ts.factory.createImportClause(
@@ -499,7 +502,7 @@ export default function compilerPlugin(program: ts.Program) {
 
       // Import typechecker runtime side-effects if we have validators
       if (registry.validators.size > 0) {
-        registrations.push(
+        prepends.push(
           ts.factory.createImportDeclaration(
             undefined,
             undefined,
@@ -508,8 +511,9 @@ export default function compilerPlugin(program: ts.Program) {
           )
         );
 
-        if (!hasVariableDeclaration(transformedSourceFile.statements, 'validators')) {
-          registrations.push(
+        if (!hasVariableDeclaration(transformedSourceFile.statements, 'validators') &&
+            !hasVariableDeclaration(prepends, 'validators')) {
+          prepends.push(
             ts.factory.createVariableStatement(
               undefined,
               ts.factory.createVariableDeclarationList([
@@ -531,8 +535,8 @@ export default function compilerPlugin(program: ts.Program) {
       // Declare all the validators in local variables: const __val_[hash] = expr;
       for (const [hash, expr] of registry.validators.entries()) {
         if (!hasVariableDeclaration(transformedSourceFile.statements, `__val_${hash}`) &&
-            !hasVariableDeclaration(registrations, `__val_${hash}`)) {
-          registrations.push(
+            !hasVariableDeclaration(prepends, `__val_${hash}`)) {
+          prepends.push(
             ts.factory.createVariableStatement(
               undefined,
               ts.factory.createVariableDeclarationList([
@@ -550,7 +554,7 @@ export default function compilerPlugin(program: ts.Program) {
 
       // Register Guards
       for (const name of registry.guards.keys()) {
-        registrations.push(
+        appends.push(
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
@@ -573,7 +577,7 @@ export default function compilerPlugin(program: ts.Program) {
 
       // Register Interceptors
       for (const name of registry.interceptors.keys()) {
-        registrations.push(
+        appends.push(
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
@@ -596,7 +600,7 @@ export default function compilerPlugin(program: ts.Program) {
 
       // Register Endpoints
       for (const ep of registry.endpoints) {
-        registrations.push(
+        appends.push(
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
@@ -615,7 +619,7 @@ export default function compilerPlugin(program: ts.Program) {
         const controllerInfo = registry.controllers.get(controllerName);
         if (controllerInfo && controllerInfo.injections.size > 0) {
           // const _instance_Name = new Name();
-          registrations.push(
+          appends.push(
             ts.factory.createVariableStatement(
               undefined,
               ts.factory.createVariableDeclarationList([
@@ -639,7 +643,7 @@ export default function compilerPlugin(program: ts.Program) {
             if (registry.guards.has(typeName)) storeMethod = 'getGuard';
             else if (registry.interceptors.has(typeName)) storeMethod = 'getInterceptor';
 
-            registrations.push(
+            appends.push(
               ts.factory.createExpressionStatement(
                 ts.factory.createBinaryExpression(
                   ts.factory.createPropertyAccessExpression(
@@ -661,7 +665,7 @@ export default function compilerPlugin(program: ts.Program) {
           }
 
           // Register populated instance
-          registrations.push(
+          appends.push(
             ts.factory.createExpressionStatement(
               ts.factory.createCallExpression(
                 ts.factory.createPropertyAccessExpression(
@@ -678,7 +682,7 @@ export default function compilerPlugin(program: ts.Program) {
           );
         } else {
           // No injections: direct registration
-          registrations.push(
+          appends.push(
             ts.factory.createExpressionStatement(
               ts.factory.createCallExpression(
                 ts.factory.createPropertyAccessExpression(
@@ -700,11 +704,13 @@ export default function compilerPlugin(program: ts.Program) {
         }
       }
 
-      // Append registrations to the bottom of the sourceFile
+      // Prepend utility/validator statements and append registration statements
       return ts.factory.updateSourceFile(transformedSourceFile, [
+        ...prepends,
         ...transformedSourceFile.statements,
-        ...registrations
+        ...appends
       ]);
+
     };
   };
 }
