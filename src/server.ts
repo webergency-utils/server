@@ -274,7 +274,9 @@ export class Server extends EventEmitter {
   }
 
   public async start() {
-    await loadAutoMetadata();
+    if (MetadataStore.getEndpoints().length === 0) {
+      await loadAutoMetadata();
+    }
     this.init();
 
     const { port } = this.options;

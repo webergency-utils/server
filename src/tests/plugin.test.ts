@@ -1,0 +1,80 @@
+import { describe, it, expect } from 'vitest';
+import ts from 'typescript';
+import * as fs from 'fs';
+import * as path from 'path';
+import compilerPlugin from '../transformer.js';
+
+describe('TypeScript Compiler Plugin Transformer', () => {
+  function compileAndTransform(sourceCode: string): string {
+    const tempFile = path.resolve('./temp_test_controller.ts');
+    fs.writeFileSync(tempFile, sourceCode);
+
+    try {
+      const program = ts.createProgram([tempFile], {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.NodeNext,
+        moduleResolution: ts.ModuleResolutionKind.NodeNext,
+        skipLibCheck: true,
+        experimentalDecorators: true
+      });
+
+      const sourceFile = program.getSourceFile(tempFile);
+      if (!sourceFile) throw new Error("Could not load source file");
+
+      const result = ts.transform(sourceFile, [compilerPlugin(program)]);
+      const printer = ts.createPrinter();
+      return printer.printFile(result.transformed[0]);
+    } finally {
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    }
+  }
+
+  it('should transform a simple controller and append self-registrations', () => {
+    const code = `
+      import { Controller, Get, Post, Body, Param } from '../decorators.js';
+
+      interface User {
+        id: string;
+        name: string;
+      }
+
+      @Controller('/users')
+      export class UserController {
+        @Get('/:id')
+        getUser(@Param('id') id: string) {
+          return { id, name: 'Alice' };
+        }
+
+        @Post()
+        createUser(@Body('strip') user: User) {
+          return user;
+        }
+      }
+    `;
+
+    const compiled = compileAndTransform(code);
+
+    // Should import MetadataStore
+    expect(compiled).toContain('import { MetadataStore } from "@webergency-utils/server"');
+    
+    // Should import typechecker runtime
+    expect(compiled).toContain('import "@webergency-utils/typechecker/runtime"');
+
+    // Should declare validator constant
+    expect(compiled).toContain("const __val_");
+
+    // Should register controller
+    expect(compiled).toContain('MetadataStore.registerController("UserController", new UserController())');
+
+    // Should register GET /users/:id endpoint
+    expect(compiled).toContain('httpMethod: "GET"');
+    expect(compiled).toContain('path: "/users/:id"');
+
+    // Should register POST /users endpoint with validator
+    expect(compiled).toContain('httpMethod: "POST"');
+    expect(compiled).toContain('path: "/users"');
+    expect(compiled).toContain("validator: __val_");
+  });
+});

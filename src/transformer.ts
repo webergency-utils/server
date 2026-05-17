@@ -408,3 +408,293 @@ export function generateManifestCode(registry: ProjectRegistry, controllerMap: M
 
   return imports + external + logic + (validatorCodeMap.size > 0 ? validatorsCode : '') + endpointsCode;
 }
+
+function objectToExpression(obj: any): ts.Expression {
+  if (obj === null) return ts.factory.createNull();
+  if (obj === undefined) return ts.factory.createIdentifier('undefined');
+  if (typeof obj === 'string') return ts.factory.createStringLiteral(obj);
+  if (typeof obj === 'number') return ts.factory.createNumericLiteral(obj.toString());
+  if (typeof obj === 'boolean') return obj ? ts.factory.createTrue() : ts.factory.createFalse();
+  if (Array.isArray(obj)) {
+    return ts.factory.createArrayLiteralExpression(obj.map(item => objectToExpression(item)));
+  }
+  if (typeof obj === 'object') {
+    const properties: ts.ObjectLiteralElementLike[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === 'validator' && typeof value === 'string' && value !== '') {
+        properties.push(
+          ts.factory.createPropertyAssignment(
+            ts.factory.createIdentifier(key),
+            ts.factory.createIdentifier(`__val_${value}`)
+          )
+        );
+      } else {
+        properties.push(
+          ts.factory.createPropertyAssignment(
+            ts.factory.createIdentifier(key),
+            objectToExpression(value)
+          )
+        );
+      }
+    }
+    return ts.factory.createObjectLiteralExpression(properties, true);
+  }
+  throw new Error(`Unsupported object type: ${typeof obj}`);
+}
+
+export default function compilerPlugin(program: ts.Program) {
+  const checker = program.getTypeChecker();
+
+  return (context: ts.TransformationContext) => {
+    return (sourceFile: ts.SourceFile) => {
+      // 1. Check if the file has any class with a @Controller decorator
+      let hasController = false;
+      const checkNode = (node: ts.Node) => {
+        if (ts.isClassDeclaration(node)) {
+          const decorators = ts.getDecorators(node);
+          if (decorators) {
+            for (const d of decorators) {
+              if (ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) && d.expression.expression.text === 'Controller') {
+                hasController = true;
+                break;
+              }
+            }
+          }
+        }
+        ts.forEachChild(node, checkNode);
+      };
+      checkNode(sourceFile);
+
+      if (!hasController) {
+        return sourceFile;
+      }
+
+      // 2. Run our standard analysis transformer on this file to collect all endpoints and validators
+      const registry = createRegistry();
+      const runTransform = transformer(program, registry)(context);
+      const transformedSourceFile = runTransform(sourceFile);
+
+      // 3. Generate and append the self-registration nodes
+      const registrations: ts.Statement[] = [];
+
+      // Import MetadataStore from '@webergency-utils/server'
+      registrations.push(
+        ts.factory.createImportDeclaration(
+          undefined,
+          ts.factory.createImportClause(
+            false,
+            undefined,
+            ts.factory.createNamedImports([
+              ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier('MetadataStore'))
+            ])
+          ),
+          ts.factory.createStringLiteral('@webergency-utils/server'),
+          undefined
+        )
+      );
+
+      // Import typechecker runtime side-effects if we have validators
+      if (registry.validators.size > 0) {
+        registrations.push(
+          ts.factory.createImportDeclaration(
+            undefined,
+            undefined,
+            ts.factory.createStringLiteral('@webergency-utils/typechecker/runtime'),
+            undefined
+          )
+        );
+        registrations.push(
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList([
+              ts.factory.createVariableDeclaration(
+                ts.factory.createIdentifier('validators'),
+                undefined,
+                undefined,
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('globalThis'),
+                  '__WEBERGENCY_TYPECHECKER_VALIDATORS__'
+                )
+              )
+            ], ts.NodeFlags.Const)
+          )
+        );
+      }
+
+      // Declare all the validators in local variables: const __val_[hash] = expr;
+      for (const [hash, expr] of registry.validators.entries()) {
+        registrations.push(
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList([
+              ts.factory.createVariableDeclaration(
+                ts.factory.createIdentifier(`__val_${hash}`),
+                undefined,
+                undefined,
+                expr
+              )
+            ], ts.NodeFlags.Const)
+          )
+        );
+      }
+
+      // Register Guards
+      for (const name of registry.guards.keys()) {
+        registrations.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createIdentifier('MetadataStore'),
+                'registerGuard'
+              ),
+              undefined,
+              [
+                ts.factory.createStringLiteral(name),
+                ts.factory.createNewExpression(
+                  ts.factory.createIdentifier(name),
+                  undefined,
+                  []
+                )
+              ]
+            )
+          )
+        );
+      }
+
+      // Register Interceptors
+      for (const name of registry.interceptors.keys()) {
+        registrations.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createIdentifier('MetadataStore'),
+                'registerInterceptor'
+              ),
+              undefined,
+              [
+                ts.factory.createStringLiteral(name),
+                ts.factory.createNewExpression(
+                  ts.factory.createIdentifier(name),
+                  undefined,
+                  []
+                )
+              ]
+            )
+          )
+        );
+      }
+
+      // Register Endpoints
+      for (const ep of registry.endpoints) {
+        registrations.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createIdentifier('MetadataStore'),
+                'registerEndpoint'
+              ),
+              undefined,
+              [objectToExpression(ep)]
+            )
+          )
+        );
+      }
+
+      // Register Controllers (instantiate and handle injections)
+      for (const controllerName of registry.controllers.keys()) {
+        const controllerInfo = registry.controllers.get(controllerName);
+        if (controllerInfo && controllerInfo.injections.size > 0) {
+          // const _instance_Name = new Name();
+          registrations.push(
+            ts.factory.createVariableStatement(
+              undefined,
+              ts.factory.createVariableDeclarationList([
+                ts.factory.createVariableDeclaration(
+                  ts.factory.createIdentifier(`_instance_${controllerName}`),
+                  undefined,
+                  undefined,
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier(controllerName),
+                    undefined,
+                    []
+                  )
+                )
+              ], ts.NodeFlags.Const)
+            )
+          );
+
+          // Inject properties
+          for (const [propName, typeName] of controllerInfo.injections.entries()) {
+            let storeMethod = 'getController';
+            if (registry.guards.has(typeName)) storeMethod = 'getGuard';
+            else if (registry.interceptors.has(typeName)) storeMethod = 'getInterceptor';
+
+            registrations.push(
+              ts.factory.createExpressionStatement(
+                ts.factory.createBinaryExpression(
+                  ts.factory.createPropertyAccessExpression(
+                    ts.factory.createIdentifier(`_instance_${controllerName}`),
+                    propName
+                  ),
+                  ts.SyntaxKind.EqualsToken,
+                  ts.factory.createCallExpression(
+                    ts.factory.createPropertyAccessExpression(
+                      ts.factory.createIdentifier('MetadataStore'),
+                      storeMethod
+                    ),
+                    undefined,
+                    [ts.factory.createStringLiteral(typeName)]
+                  )
+                )
+              )
+            );
+          }
+
+          // Register populated instance
+          registrations.push(
+            ts.factory.createExpressionStatement(
+              ts.factory.createCallExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('MetadataStore'),
+                  'registerController'
+                ),
+                undefined,
+                [
+                  ts.factory.createStringLiteral(controllerName),
+                  ts.factory.createIdentifier(`_instance_${controllerName}`)
+                ]
+              )
+            )
+          );
+        } else {
+          // No injections: direct registration
+          registrations.push(
+            ts.factory.createExpressionStatement(
+              ts.factory.createCallExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('MetadataStore'),
+                  'registerController'
+                ),
+                undefined,
+                [
+                  ts.factory.createStringLiteral(controllerName),
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier(controllerName),
+                    undefined,
+                    []
+                  )
+                ]
+              )
+            )
+          );
+        }
+      }
+
+      // Append registrations to the bottom of the sourceFile
+      return ts.factory.updateSourceFile(transformedSourceFile, [
+        ...transformedSourceFile.statements,
+        ...registrations
+      ]);
+    };
+  };
+}
