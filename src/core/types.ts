@@ -38,3 +38,27 @@ export interface AugmentedRequest extends Request {
   _json?: any;
   _raw?: ArrayBuffer;
 }
+
+export interface LogContext {
+  type: 'server_start' | 'server_shutdown' | 'registration' | 'request_start' | 'request_end' | 'error';
+  port?: number;
+  runtime?: string;
+  reason?: string;
+  method?: string;
+  path?: string;
+  url?: string;
+  status?: number;
+  duration?: number;
+  controller?: string;
+  action?: string;
+  error?: Error;
+  [key: string]: any;
+}
+
+export interface Logger {
+  info(message: any, context?: LogContext): void;
+  warn(message: any, context?: LogContext): void;
+  error(message: any, context?: LogContext): void;
+  debug?(message: any, context?: LogContext): void;
+}
+

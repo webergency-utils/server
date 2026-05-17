@@ -528,5 +528,51 @@ describe('Server & Metadata', () => {
             consoleSpy.mockRestore();
         });
     });
+
+    describe('Logger Integration', () => {
+        it('should dispatch registration, request, and lifecycle events with structured LogContext metadata', async () => {
+            const logs: any[] = [];
+            const customLogger = {
+                info: (msg: string, ctx: any) => logs.push({ level: 'info', msg, ctx }),
+                warn: (msg: string, ctx: any) => logs.push({ level: 'warn', msg, ctx }),
+                error: (msg: string, ctx: any) => logs.push({ level: 'error', msg, ctx })
+            };
+
+            const server = new Server({ port: 3005, logs: true, logger: customLogger });
+
+            // 1. Verify Registration Log
+            MetadataStore.registerController('MockCtrl', { mockAction: () => 'ok' });
+            MetadataStore.registerEndpoint({
+                controller: 'MockCtrl', methodName: 'mockAction', httpMethod: 'GET', path: '/mock-log',
+                params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            await server.start();
+
+            const regLog = logs.find(l => l.ctx?.type === 'registration');
+            expect(regLog).toBeDefined();
+            expect(regLog.ctx.method).toBe('GET');
+            expect(regLog.ctx.path).toBe('/mock-log');
+            expect(regLog.ctx.controller).toBe('MockCtrl');
+            expect(regLog.ctx.action).toBe('mockAction');
+
+            // 2. Verify Request & Response Log
+            const request = new Request('http://localhost:3005/mock-log', { method: 'GET' });
+            await server.fetch(request);
+
+            const startLog = logs.find(l => l.ctx?.type === 'request_start');
+            expect(startLog).toBeDefined();
+            expect(startLog.ctx.method).toBe('GET');
+            expect(startLog.ctx.path).toBe('/mock-log');
+
+            const endLog = logs.find(l => l.ctx?.type === 'request_end');
+            expect(endLog).toBeDefined();
+            expect(endLog.ctx.method).toBe('GET');
+            expect(endLog.ctx.path).toBe('/mock-log');
+            expect(endLog.ctx.status).toBe(200);
+            expect(endLog.ctx.duration).toBeGreaterThanOrEqual(0);
+        });
+    });
 });
+
 

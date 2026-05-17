@@ -2,12 +2,27 @@ import { EventEmitter } from 'node:events';
 import { Router } from './core/router.js';
 import { QueryParser } from './helpers/parsers.js';
 import { MetadataStore } from './core/metadata.js';
-import { EndpointMetadata, ParamMetadata, AugmentedRequest } from './core/types.js';
+import { EndpointMetadata, ParamMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
 import { RequestContext, Context } from './core/context.js';
 import { CorsOptions } from './decorators.js';
 import { loadAutoMetadata } from './config.js';
 import * as path from 'path';
 import * as fs from 'fs';
+
+export class ConsoleLogger implements Logger {
+  info(message: any, context?: LogContext) {
+    console.log(message);
+  }
+  warn(message: any, context?: LogContext) {
+    console.warn(message);
+  }
+  error(message: any, context?: LogContext) {
+    console.error(message);
+  }
+  debug(message: any, context?: LogContext) {
+    console.debug(message);
+  }
+}
 
 export interface ServerOptions {
   port: number;
@@ -17,6 +32,7 @@ export interface ServerOptions {
   interceptors?: any[];
   guards?: any[];
   logs?: boolean;
+  logger?: Logger;
 }
 
 export type ServerEvents = {
@@ -33,9 +49,11 @@ export class Server extends EventEmitter {
   private isShuttingDown = false;
   private nodeServer?: any;
   private events: { [K in keyof ServerEvents]?: Set<any> } = {};
+  public logger: Logger;
 
   constructor(private options: ServerOptions) {
     super();
+    this.logger = options.logger || new ConsoleLogger();
     this.setupSignals();
   }
 
@@ -43,7 +61,16 @@ export class Server extends EventEmitter {
     for (const endpoint of MetadataStore.getEndpoints()) {
       this.router.add(endpoint);
       if (this.options.logs) {
-        console.log(`📝 Registered route: ${endpoint.httpMethod.padEnd(6)} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`);
+        this.logger.info(
+          `📝 Registered route: ${endpoint.httpMethod.padEnd(6)} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
+          {
+            type: 'registration',
+            method: endpoint.httpMethod,
+            path: endpoint.path,
+            controller: endpoint.controller,
+            action: endpoint.methodName
+          }
+        );
       }
     }
   }
@@ -66,7 +93,10 @@ export class Server extends EventEmitter {
 
   private setupSignals() {
     const handleSignal = (signal: string) => {
-      console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+      this.logger.warn(`\n🛑 Received ${signal}. Starting graceful shutdown...`, {
+        type: 'server_shutdown',
+        reason: signal
+      });
       this.shutdown();
     };
 
@@ -87,19 +117,30 @@ export class Server extends EventEmitter {
 
     if (this.nodeServer) {
       this.nodeServer.close(() => {
-        console.log('✔ Node.js server stopped accepting new connections.');
+        this.logger.info('✔ Node.js server stopped accepting new connections.', {
+          type: 'server_shutdown',
+          reason: 'connections_closed'
+        });
       });
     }
 
     const timeout = this.options.shutdownTimeout || 10000;
     const startTime = Date.now();
 
-    console.log(`⌛ Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`);
+    this.logger.info(`⌛ Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
+      type: 'server_shutdown',
+      activeRequests: this.activeRequests,
+      timeout
+    });
 
     const checkActive = async () => {
       while (this.activeRequests > 0) {
         if (Date.now() - startTime > timeout) {
-          console.warn(`⚠️ Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`);
+          this.logger.warn(`⚠️ Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
+            type: 'server_shutdown',
+            reason: 'timeout',
+            activeRequests: this.activeRequests
+          });
           break;
         }
         await new Promise(r => setTimeout(r, 100));
@@ -107,7 +148,10 @@ export class Server extends EventEmitter {
     };
 
     await checkActive();
-    console.log('👋 Shutdown complete. Goodbye!');
+    this.logger.info('👋 Shutdown complete. Goodbye!', {
+      type: 'server_shutdown',
+      reason: 'complete'
+    });
     this.internalEmit('shutdown');
     
     if (typeof process !== 'undefined') process.exit(0);
@@ -174,7 +218,12 @@ export class Server extends EventEmitter {
     const method = request.method;
     
     if (this.options.logs) {
-      console.log(`📡 --> ${method} ${path}${url.search ? url.search : ''}`);
+      this.logger.info(`📡 --> ${method} ${path}${url.search ? url.search : ''}`, {
+        type: 'request_start',
+        method,
+        path,
+        url: request.url
+      });
     }
 
     try {
@@ -191,7 +240,13 @@ export class Server extends EventEmitter {
       if (!finalMatch) {
         if (this.options.logs) {
           const duration = Date.now() - startTime;
-          console.log(`📡 <-- ${method} ${path} - 404 Not Found (${duration}ms)`);
+          this.logger.info(`📡 <-- ${method} ${path} - 404 Not Found (${duration}ms)`, {
+            type: 'request_end',
+            method,
+            path,
+            status: 404,
+            duration
+          });
         }
         return new Response('Not Found', { status: 404 });
       }
@@ -206,15 +261,30 @@ export class Server extends EventEmitter {
       
       if (this.options.logs) {
         const duration = Date.now() - startTime;
-        console.log(`📡 <-- ${method} ${path} - ${response.status} (${duration}ms)`);
+        this.logger.info(`📡 <-- ${method} ${path} - ${response.status} (${duration}ms)`, {
+          type: 'request_end',
+          method,
+          path,
+          status: response.status,
+          duration
+        });
       }
       return response;
     } catch (err: any) {
       this.internalEmit('error', err);
-      console.error('Server Error:', err);
+      this.logger.error(`Server Error: ${err.message}`, {
+        type: 'error',
+        error: err
+      });
       if (this.options.logs) {
         const duration = Date.now() - startTime;
-        console.log(`📡 <-- ${method} ${path} - 500 Internal Server Error (${duration}ms)`);
+        this.logger.info(`📡 <-- ${method} ${path} - 500 Internal Server Error (${duration}ms)`, {
+          type: 'request_end',
+          method,
+          path,
+          status: 500,
+          duration
+        });
       }
       return new Response(JSON.stringify({ success: false, error: err.message }), {
         status: 500,
@@ -308,15 +378,27 @@ export class Server extends EventEmitter {
     const { port } = this.options;
     const runtime = this.detectRuntime();
 
-    console.log(`📡 Runtime Detected: ${runtime}`);
+    this.logger.info(`📡 Runtime Detected: ${runtime}`, {
+      type: 'server_start',
+      runtime
+    });
 
     if (runtime === 'Bun') {
       (globalThis as any).Bun.serve({ port, fetch: this.fetch });
-      console.log(`🚀 Bun server running at http://localhost:${port}`);
+      this.logger.info(`🚀 Bun server running at http://localhost:${port}`, {
+        type: 'server_start',
+        runtime: 'Bun',
+        port
+      });
       this.internalEmit('start', port);
     } 
     else if (runtime === 'Deno') {
       (globalThis as any).Deno.serve({ port }, this.fetch);
+      this.logger.info(`🚀 Deno server running at http://localhost:${port}`, {
+        type: 'server_start',
+        runtime: 'Deno',
+        port
+      });
       this.internalEmit('start', port);
     } 
     else {
@@ -352,6 +434,12 @@ export class Server extends EventEmitter {
         Readable.fromWeb(response.body).pipe(res);
       } else res.end();
     });
-    this.nodeServer.listen(port, () => console.log(`🚀 Node.js bridge server running at http://localhost:${port}`));
+    this.nodeServer.listen(port, () => {
+      this.logger.info(`🚀 Node.js bridge server running at http://localhost:${port}`, {
+        type: 'server_start',
+        runtime: 'Node',
+        port
+      });
+    });
   }
 }
