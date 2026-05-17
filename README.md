@@ -21,7 +21,24 @@ A high-performance, industrial-grade web server framework designed for the moder
 
 ```bash
 npm install @webergency-utils/server
-npm install -D @webergency-utils/typechecker
+npm install -D typescript ts-patch @webergency-utils/typechecker
+```
+
+### ⚙️ tsconfig.json Setup
+Enable AOT routing and validation by adding `@webergency-utils/server/transformer` to your compiler plugins:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "experimentalDecorators": true,
+    "plugins": [
+      { "transform": "@webergency-utils/server/transformer" }
+    ]
+  }
+}
 ```
 
 ---
@@ -29,7 +46,7 @@ npm install -D @webergency-utils/typechecker
 ## 🛠️ Usage
 
 ### 1. Define your Controller
-Write standard, type-safe controllers using decorators. These decorators are used by the AOT engine and then stripped for production.
+Write standard, type-safe controllers using decorators. Route mapping and parameter validations are injected in-flight at compile time.
 
 ```typescript
 import { Controller, Get, Post, Body, Param } from '@webergency-utils/server';
@@ -54,23 +71,21 @@ export class UserController {
 }
 ```
 
-### 2. Build (AOT Transformation)
-Run the transformer to generate your server manifest and clean JavaScript controllers.
-
-```bash
-npx webergency-server-build
-```
-
-### 3. Start the Server
-The `Endpoint` class automatically detects your runtime and starts the most efficient server available.
+### 2. Start the Server
+The `Server` class automatically picks up the in-flight self-registered controllers at load time. Simply import your controllers and start the server!
 
 ```typescript
-import { Endpoint } from '@webergency-utils/server';
-import './generated/metadata.js'; // The AOT-generated manifest
+import { Server } from '@webergency-utils/server';
+import { UserController } from './UserController.js';
 
-const server = new Endpoint({ port: 3000 });
+const server = new Server({
+  port: 3000,
+  controllers: [UserController]
+});
+
 await server.start();
 ```
+
 
 ---
 
