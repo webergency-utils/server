@@ -1,8 +1,9 @@
 {
   "name": "@webergency-utils/server",
   "version": "0.0.1",
-  "description": "Zero-reflection AOT web server",
+  "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
+  "author": "radixxko",
   "main": "dist/server/src/index.js",
   "types": "dist/server/src/index.d.ts",
   "bin": {
@@ -21,13 +22,23 @@
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
-    "build": "tsc",
+    "clean": "rm -rf ./dist/* node_modules package-lock.json && npm i",
+    "build": "npm run clean && tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "prepublishOnly": "npm run build"
+    "version": "npm run build && npm publish && npm run commit && git push",
+    "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\""
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webergency-utils/server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webergency-utils/server/issues"
+  },
+  "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "file:../typechecker"
+    "@webergency-utils/typechecker": "^0.0.12"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
