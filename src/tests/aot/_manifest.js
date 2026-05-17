@@ -19,7 +19,25 @@ var __val_12886f9d00055adf = validators.number;
 var __val_04c78f82f98a8cf4 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["name", "age"], "User"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["name", "age"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["age", false, __val_12886f9d00055adf]
@@ -32,7 +50,25 @@ var __val_6d1570e5b8d6d45a = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_2258654cc0f69d37 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["type", "val"], "{ type: \"simple\"; val: string; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["type", "val"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["type", false, __val_6d1570e5b8d6d45a],
         ["val", false, __val_473287f8298dba71]
@@ -47,7 +83,25 @@ var __val_e5da2f9fabafe20e = (v, path, ctx) => validators.array(v, path, ctx, __
 var __val_b421a9236dfde58e = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["id", "tags"], "{ id: number; tags: string[]; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["id", "tags"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["tags", false, __val_e5da2f9fabafe20e]
@@ -58,7 +112,25 @@ var __val_b421a9236dfde58e = (v, path, ctx) => {
 var __val_5c5ed695091ba342 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["type", "data"], "{ type: \"complex\"; data: { id: number; tags: string[]; }; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["type", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["type", false, __val_68056e96638382b6],
         ["data", false, __val_b421a9236dfde58e]
@@ -75,7 +147,25 @@ var __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_55e3fcb8d722f805 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["reason"], "{ reason: string; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["reason"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["reason", false, __val_473287f8298dba71]
     ]);
@@ -91,7 +181,25 @@ var __val_8c1c1b2d325f9de6 = (v, path, ctx) => validators.array(v, path, ctx, __
 var __val_ee0036d6218e9d04 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["id", "user", "tags"], "Nested"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["id", "user", "tags"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["user", true, __val_04c78f82f98a8cf4],
@@ -103,7 +211,25 @@ var __val_ee0036d6218e9d04 = (v, path, ctx) => {
 var __val_1ecb4c157494e4eb = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["a"], "{ a: string; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["a"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["a", false, __val_473287f8298dba71]
     ]);
@@ -113,7 +239,25 @@ var __val_1ecb4c157494e4eb = (v, path, ctx) => {
 var __val_5a59b4127f6bdb93 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["b"], "{ b: number; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["b"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["b", false, __val_12886f9d00055adf]
     ]);
@@ -148,7 +292,25 @@ var __val_75d012fe28656e0a = validators.bigint;
 var __val_91d782a2d0de1354 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["name", "active"], "{ name: string; active: boolean; }"))
         return v;
-    let data = ctx.mode === "strip" ? {} : v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["name", "active"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
     validators.props(v, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["active", false, __val_ced862ef1505bc73]
