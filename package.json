@@ -1,0 +1,42 @@
+{
+  "name": "@webergency-utils/server",
+  "version": "0.0.1",
+  "description": "Zero-reflection AOT web server",
+  "type": "module",
+  "main": "dist/server/src/index.js",
+  "types": "dist/server/src/index.d.ts",
+  "bin": {
+    "webergency-server-build": "./dist/server/src/cli.js"
+  },
+  "exports": {
+    ".": "./dist/server/src/index.js",
+    "./transformer": "./dist/server/src/transformer.js"
+  },
+  "files": [
+    "dist",
+    "USAGE.md",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@webergency-utils/typechecker": "file:../typechecker"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.6"
+  }
+}
