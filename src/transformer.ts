@@ -740,16 +740,63 @@ export default function compilerPlugin(program: ts.Program) {
       }
 
 
-      // Prepend utility/validator statements and append registration statements
-      return ts.factory.updateSourceFile(transformedSourceFile, [
-        ...prepends,
-        ...transformedSourceFile.statements,
-        ...appends
-      ]);
+      const mergedStatements = [...prepends, ...transformedSourceFile.statements];
+      const insertIndex = findInsertionIndex(mergedStatements);
+
+      const finalStatements = [
+        ...mergedStatements.slice(0, insertIndex),
+        ...appends,
+        ...mergedStatements.slice(insertIndex)
+      ];
+
+      return ts.factory.updateSourceFile(transformedSourceFile, finalStatements);
 
     };
   };
 }
+
+
+function findInsertionIndex(statements: readonly ts.Statement[]): number {
+  let lastClassIndex = -1;
+  for (let i = 0; i < statements.length; i++) {
+    if (ts.isClassDeclaration(statements[i])) {
+      lastClassIndex = i;
+    }
+  }
+
+  const startIndex = lastClassIndex !== -1 ? lastClassIndex + 1 : 0;
+
+  for (let i = startIndex; i < statements.length; i++) {
+    const s = statements[i];
+
+    if (ts.isImportDeclaration(s) || ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s)) {
+      continue;
+    }
+
+    if (ts.isVariableStatement(s)) {
+      let isPrependedVar = true;
+      for (const decl of s.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name)) {
+          const text = decl.name.text;
+          if (text !== 'validators' && text !== 'MetadataStore' && text !== '__server_metadata_store' && !text.startsWith('__val_')) {
+            isPrependedVar = false;
+            break;
+          }
+        } else {
+          isPrependedVar = false;
+          break;
+        }
+      }
+      if (isPrependedVar) {
+        continue;
+      }
+    }
+
+    return i;
+  }
+  return statements.length;
+}
+
 
 function hasVariableDeclaration(statements: readonly ts.Statement[], name: string): boolean {
   for (const statement of statements) {
@@ -763,4 +810,5 @@ function hasVariableDeclaration(statements: readonly ts.Statement[], name: strin
   }
   return false;
 }
+
 
