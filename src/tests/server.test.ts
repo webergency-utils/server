@@ -513,15 +513,15 @@ describe('Server & Metadata', () => {
             await server.start();
             
             // Verify registration log
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📝 Registered route: GET    /log-test -> LogCtrl.getLog'));
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Registered route: GET    /log-test -> LogCtrl.getLog'));
             
             // Simulate incoming request
             const request = new Request('http://localhost:3004/log-test', { method: 'GET' });
             const response = await server.fetch(request);
             
             // Verify request and response logs
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📡 --> GET /log-test'));
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📡 <-- GET /log-test - 200'));
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('--> GET /log-test'));
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('<-- GET /log-test - 200'));
             
             expect(response.status).toBe(200);
             

@@ -62,7 +62,7 @@ export class Server extends EventEmitter {
       this.router.add(endpoint);
       if (this.options.logs) {
         this.logger.info(
-          `📝 Registered route: ${endpoint.httpMethod.padEnd(6)} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
+          `Registered route: ${endpoint.httpMethod.padEnd(6)} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
           {
             type: 'registration',
             method: endpoint.httpMethod,
@@ -93,7 +93,7 @@ export class Server extends EventEmitter {
 
   private setupSignals() {
     const handleSignal = (signal: string) => {
-      this.logger.warn(`\n🛑 Received ${signal}. Starting graceful shutdown...`, {
+      this.logger.warn(`\nReceived ${signal}. Starting graceful shutdown...`, {
         type: 'server_shutdown',
         reason: signal
       });
@@ -117,7 +117,7 @@ export class Server extends EventEmitter {
 
     if (this.nodeServer) {
       this.nodeServer.close(() => {
-        this.logger.info('✔ Node.js server stopped accepting new connections.', {
+        this.logger.info('Node.js server stopped accepting new connections.', {
           type: 'server_shutdown',
           reason: 'connections_closed'
         });
@@ -127,7 +127,7 @@ export class Server extends EventEmitter {
     const timeout = this.options.shutdownTimeout || 10000;
     const startTime = Date.now();
 
-    this.logger.info(`⌛ Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
+    this.logger.info(`Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
       type: 'server_shutdown',
       activeRequests: this.activeRequests,
       timeout
@@ -136,7 +136,7 @@ export class Server extends EventEmitter {
     const checkActive = async () => {
       while (this.activeRequests > 0) {
         if (Date.now() - startTime > timeout) {
-          this.logger.warn(`⚠️ Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
+          this.logger.warn(`Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
             type: 'server_shutdown',
             reason: 'timeout',
             activeRequests: this.activeRequests
@@ -148,7 +148,7 @@ export class Server extends EventEmitter {
     };
 
     await checkActive();
-    this.logger.info('👋 Shutdown complete. Goodbye!', {
+    this.logger.info('Shutdown complete. Goodbye!', {
       type: 'server_shutdown',
       reason: 'complete'
     });
@@ -218,7 +218,7 @@ export class Server extends EventEmitter {
     const method = request.method;
     
     if (this.options.logs) {
-      this.logger.info(`📡 --> ${method} ${path}${url.search ? url.search : ''}`, {
+      this.logger.info(`--> ${method} ${path}${url.search ? url.search : ''}`, {
         type: 'request_start',
         method,
         path,
@@ -240,7 +240,7 @@ export class Server extends EventEmitter {
       if (!finalMatch) {
         if (this.options.logs) {
           const duration = Date.now() - startTime;
-          this.logger.info(`📡 <-- ${method} ${path} - 404 Not Found (${duration}ms)`, {
+          this.logger.info(`<-- ${method} ${path} - 404 Not Found (${duration}ms)`, {
             type: 'request_end',
             method,
             path,
@@ -261,7 +261,7 @@ export class Server extends EventEmitter {
       
       if (this.options.logs) {
         const duration = Date.now() - startTime;
-        this.logger.info(`📡 <-- ${method} ${path} - ${response.status} (${duration}ms)`, {
+        this.logger.info(`<-- ${method} ${path} - ${response.status} (${duration}ms)`, {
           type: 'request_end',
           method,
           path,
@@ -278,7 +278,7 @@ export class Server extends EventEmitter {
       });
       if (this.options.logs) {
         const duration = Date.now() - startTime;
-        this.logger.info(`📡 <-- ${method} ${path} - 500 Internal Server Error (${duration}ms)`, {
+        this.logger.info(`<-- ${method} ${path} - 500 Internal Server Error (${duration}ms)`, {
           type: 'request_end',
           method,
           path,
@@ -385,7 +385,7 @@ export class Server extends EventEmitter {
 
     if (runtime === 'Bun') {
       (globalThis as any).Bun.serve({ port, fetch: this.fetch });
-      this.logger.info(`🚀 Bun server running at http://localhost:${port}`, {
+      this.logger.info(`Bun server running at http://localhost:${port}`, {
         type: 'server_start',
         runtime: 'Bun',
         port
@@ -394,7 +394,7 @@ export class Server extends EventEmitter {
     } 
     else if (runtime === 'Deno') {
       (globalThis as any).Deno.serve({ port }, this.fetch);
-      this.logger.info(`🚀 Deno server running at http://localhost:${port}`, {
+      this.logger.info(`Deno server running at http://localhost:${port}`, {
         type: 'server_start',
         runtime: 'Deno',
         port
@@ -435,7 +435,7 @@ export class Server extends EventEmitter {
       } else res.end();
     });
     this.nodeServer.listen(port, () => {
-      this.logger.info(`🚀 Node.js bridge server running at http://localhost:${port}`, {
+      this.logger.info(`Node.js bridge server running at http://localhost:${port}`, {
         type: 'server_start',
         runtime: 'Node',
         port
