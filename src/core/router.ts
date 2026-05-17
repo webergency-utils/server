@@ -1,46 +1,37 @@
-import { Method, EndpointMetadata, AugmentedRequest } from './types.js';
+import { Method, EndpointMetadata } from './types.js';
+import { pathMatcher, MatchFunction } from '../helpers/match.js';
 
 export interface Route {
   method: Method;
   path: string;
   metadata: EndpointMetadata;
-  regex: RegExp;
-  paramNames: string[];
+  matchFn: MatchFunction<any>;
 }
 
 export class Router {
   private routes: Route[] = [];
 
   public add(metadata: EndpointMetadata) {
-    const paramNames: string[] = [];
-    const regexSource = metadata.path
-      .replace(/:([a-zA-Z0-9_]+)/g, (_, name) => {
-        paramNames.push(name);
-        return '([^/]+)';
-      })
-      .replace(/\//g, '\\/');
-    
     this.routes.push({
       method: metadata.httpMethod,
       path: metadata.path,
       metadata,
-      regex: new RegExp(`^${regexSource}$`),
-      paramNames,
+      matchFn: pathMatcher(metadata.path, { sensitive: true, end: true })
     });
   }
 
   public find(method: string, path: string) {
-    const route = this.routes.find(r => r.method === method && r.regex.test(path));
-    if (!route) return null;
-
-    const match = path.match(route.regex);
-    const params: Record<string, string> = {};
-    if (match) {
-      route.paramNames.forEach((name, i) => {
-        params[name] = decodeURIComponent(match[i + 1]);
-      });
+    for (const route of this.routes) {
+      if (route.method !== method) continue;
+      
+      const match = route.matchFn(path);
+      if (match) {
+        return {
+          metadata: route.metadata,
+          params: match.params
+        };
+      }
     }
-
-    return { metadata: route.metadata, params };
+    return null;
   }
 }
