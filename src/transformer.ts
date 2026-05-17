@@ -477,7 +477,7 @@ export default function compilerPlugin(program: ts.Program) {
       // 3. Generate and append the self-registration nodes
       const registrations: ts.Statement[] = [];
 
-      // Import MetadataStore from '@webergency-utils/server'
+      // Import MetadataStore as __server_metadata_store from '@webergency-utils/server'
       registrations.push(
         ts.factory.createImportDeclaration(
           undefined,
@@ -485,7 +485,11 @@ export default function compilerPlugin(program: ts.Program) {
             false,
             undefined,
             ts.factory.createNamedImports([
-              ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier('MetadataStore'))
+              ts.factory.createImportSpecifier(
+                false,
+                ts.factory.createIdentifier('MetadataStore'),
+                ts.factory.createIdentifier('__server_metadata_store')
+              )
             ])
           ),
           ts.factory.createStringLiteral('@webergency-utils/server'),
@@ -503,22 +507,25 @@ export default function compilerPlugin(program: ts.Program) {
             undefined
           )
         );
-        registrations.push(
-          ts.factory.createVariableStatement(
-            undefined,
-            ts.factory.createVariableDeclarationList([
-              ts.factory.createVariableDeclaration(
-                ts.factory.createIdentifier('validators'),
-                undefined,
-                undefined,
-                ts.factory.createPropertyAccessExpression(
-                  ts.factory.createIdentifier('globalThis'),
-                  '__WEBERGENCY_TYPECHECKER_VALIDATORS__'
+
+        if (!hasVariableDeclaration(transformedSourceFile.statements, 'validators')) {
+          registrations.push(
+            ts.factory.createVariableStatement(
+              undefined,
+              ts.factory.createVariableDeclarationList([
+                ts.factory.createVariableDeclaration(
+                  ts.factory.createIdentifier('validators'),
+                  undefined,
+                  undefined,
+                  ts.factory.createPropertyAccessExpression(
+                    ts.factory.createIdentifier('globalThis'),
+                    '__WEBERGENCY_TYPECHECKER_VALIDATORS__'
+                  )
                 )
-              )
-            ], ts.NodeFlags.Const)
-          )
-        );
+              ], ts.NodeFlags.Const)
+            )
+          );
+        }
       }
 
       // Declare all the validators in local variables: const __val_[hash] = expr;
@@ -544,7 +551,7 @@ export default function compilerPlugin(program: ts.Program) {
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
-                ts.factory.createIdentifier('MetadataStore'),
+                ts.factory.createIdentifier('__server_metadata_store'),
                 'registerGuard'
               ),
               undefined,
@@ -567,7 +574,7 @@ export default function compilerPlugin(program: ts.Program) {
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
-                ts.factory.createIdentifier('MetadataStore'),
+                ts.factory.createIdentifier('__server_metadata_store'),
                 'registerInterceptor'
               ),
               undefined,
@@ -590,7 +597,7 @@ export default function compilerPlugin(program: ts.Program) {
           ts.factory.createExpressionStatement(
             ts.factory.createCallExpression(
               ts.factory.createPropertyAccessExpression(
-                ts.factory.createIdentifier('MetadataStore'),
+                ts.factory.createIdentifier('__server_metadata_store'),
                 'registerEndpoint'
               ),
               undefined,
@@ -639,7 +646,7 @@ export default function compilerPlugin(program: ts.Program) {
                   ts.SyntaxKind.EqualsToken,
                   ts.factory.createCallExpression(
                     ts.factory.createPropertyAccessExpression(
-                      ts.factory.createIdentifier('MetadataStore'),
+                      ts.factory.createIdentifier('__server_metadata_store'),
                       storeMethod
                     ),
                     undefined,
@@ -655,7 +662,7 @@ export default function compilerPlugin(program: ts.Program) {
             ts.factory.createExpressionStatement(
               ts.factory.createCallExpression(
                 ts.factory.createPropertyAccessExpression(
-                  ts.factory.createIdentifier('MetadataStore'),
+                  ts.factory.createIdentifier('__server_metadata_store'),
                   'registerController'
                 ),
                 undefined,
@@ -672,7 +679,7 @@ export default function compilerPlugin(program: ts.Program) {
             ts.factory.createExpressionStatement(
               ts.factory.createCallExpression(
                 ts.factory.createPropertyAccessExpression(
-                  ts.factory.createIdentifier('MetadataStore'),
+                  ts.factory.createIdentifier('__server_metadata_store'),
                   'registerController'
                 ),
                 undefined,
@@ -698,3 +705,17 @@ export default function compilerPlugin(program: ts.Program) {
     };
   };
 }
+
+function hasVariableDeclaration(statements: readonly ts.Statement[], name: string): boolean {
+  for (const statement of statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const decl of statement.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === name) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+

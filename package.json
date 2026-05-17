@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
   "author": "radixxko",

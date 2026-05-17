@@ -56,8 +56,8 @@ describe('TypeScript Compiler Plugin Transformer', () => {
 
     const compiled = compileAndTransform(code);
 
-    // Should import MetadataStore
-    expect(compiled).toContain('import { MetadataStore } from "@webergency-utils/server"');
+    // Should import MetadataStore as __server_metadata_store
+    expect(compiled).toContain('import { MetadataStore as __server_metadata_store } from "@webergency-utils/server"');
     
     // Should import typechecker runtime
     expect(compiled).toContain('import "@webergency-utils/typechecker/runtime"');
@@ -66,7 +66,7 @@ describe('TypeScript Compiler Plugin Transformer', () => {
     expect(compiled).toContain("const __val_");
 
     // Should register controller
-    expect(compiled).toContain('MetadataStore.registerController("UserController", new UserController())');
+    expect(compiled).toContain('__server_metadata_store.registerController("UserController", new UserController())');
 
     // Should register GET /users/:id endpoint
     expect(compiled).toContain('httpMethod: "GET"');
