@@ -174,3 +174,21 @@ export class SecureController {
         return 'ok';
     }
 }
+
+@Controller()
+@Security({ frameguard: 'deny', timeout: 500 })
+export class BaseController {}
+
+@Controller('/inherited')
+export class InheritedController extends BaseController {
+    @Get('/test')
+    getTest() {
+        return 'ok';
+    }
+
+    @Get('/override')
+    @Security({ frameguard: false })
+    getOverride() {
+        return 'ok';
+    }
+}

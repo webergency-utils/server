@@ -4,6 +4,8 @@ import { isEvenNumber } from './controllers.js';
 import { TypeSafetyController } from './controllers.js';
 import { TagParityController } from './controllers.js';
 import { SecureController } from './controllers.js';
+import { BaseController } from './controllers.js';
+import { InheritedController } from './controllers.js';
 
 // --- EXTERNAL MANIFESTS ---
 
@@ -14,6 +16,10 @@ const _instance_TagParityController = new TagParityController();
 MetadataStore.registerController('TagParityController', _instance_TagParityController);
 const _instance_SecureController = new SecureController();
 MetadataStore.registerController('SecureController', _instance_SecureController);
+const _instance_BaseController = new BaseController();
+MetadataStore.registerController('BaseController', _instance_BaseController);
+const _instance_InheritedController = new InheritedController();
+MetadataStore.registerController('InheritedController', _instance_InheritedController);
 
 // --- VALIDATORS ---
 var __val_473287f8298dba71 = validators.string;
@@ -287,9 +293,9 @@ var __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, 
 
 var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
 
-var __val_07236ffc6e7f979c = validators.date;
+var __val_f9834a172fd7d90a = validators.date;
 
-var __val_cafa731585ef26c4 = validators.regexp;
+var __val_5951b2b17cbc4b1f = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -707,12 +713,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_07236ffc6e7f979c
+			validator: __val_f9834a172fd7d90a
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_cafa731585ef26c4
+			validator: __val_5951b2b17cbc4b1f
 		},
 		{
 			source: 'Query',
@@ -923,6 +929,35 @@ MetadataStore.registerEndpoint({
 	methodName: 'getOverride',
 	httpMethod: 'GET',
 	path: '/secure-controller/override',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {},
+	security: {
+		frameguard: false
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'InheritedController',
+	methodName: 'getTest',
+	httpMethod: 'GET',
+	path: '/inherited/test',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {},
+	security: {
+		frameguard: 'deny',
+		timeout: 500
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'InheritedController',
+	methodName: 'getOverride',
+	httpMethod: 'GET',
+	path: '/inherited/override',
 	params: [],
 	guards: [],
 	interceptors: [],

@@ -310,6 +310,85 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
         }
       };
 
+      const collectClassMetadata = (classDecl: ts.ClassDeclaration) => {
+        const sourceFile = classDecl.getSourceFile();
+        let corsConfigs: any[] = [];
+        let securityConfigs: any[] = [];
+        let guards: any[] = [];
+        let interceptors: string[] = [];
+
+        const type = checker.getTypeAtLocation(classDecl);
+        const baseTypes = type.getBaseTypes();
+        if (baseTypes) {
+          for (const baseType of baseTypes) {
+            const symbol = baseType.getSymbol() || baseType.aliasSymbol;
+            const baseDecl = symbol?.valueDeclaration || symbol?.declarations?.[0];
+            if (baseDecl && ts.isClassDeclaration(baseDecl)) {
+              const parentMeta = collectClassMetadata(baseDecl);
+              corsConfigs.push(...parentMeta.corsConfigs);
+              securityConfigs.push(...parentMeta.securityConfigs);
+              guards.push(...parentMeta.guards);
+              interceptors.push(...parentMeta.interceptors);
+            }
+          }
+        }
+
+        const decorators = ts.getDecorators(classDecl);
+        
+        const directCors = extractCorsConfig(decorators, sourceFile);
+        if (directCors !== undefined) {
+          corsConfigs.push(directCors);
+        }
+
+        const directSecurity = extractSecurityConfig(decorators, sourceFile);
+        if (directSecurity !== undefined) {
+          securityConfigs.push(directSecurity);
+        }
+
+        const directGuards: any[] = [];
+        let guardDec: ts.Decorator | null = null;
+        if (decorators) {
+          for (const d of decorators) {
+            if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Protect') {
+              guardDec = d;
+              break;
+            }
+          }
+        }
+        if (guardDec && ts.isCallExpression(guardDec.expression)) {
+          for (const arg of guardDec.expression.arguments) {
+            const g = resolveGuardMetadata(arg, classDecl);
+            if (g) directGuards.push(g);
+          }
+        }
+        guards.push(...directGuards);
+
+        const directInterceptors: string[] = [];
+        let interceptDec: ts.Decorator | null = null;
+        if (decorators) {
+          for (const d of decorators) {
+            if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Intercept') {
+              interceptDec = d;
+              break;
+            }
+          }
+        }
+        if (interceptDec && ts.isCallExpression(interceptDec.expression)) {
+          for (const arg of interceptDec.expression.arguments) {
+            const i = resolveClassRef(arg, registry.interceptors);
+            if (i) directInterceptors.push(i);
+          }
+        }
+        interceptors.push(...directInterceptors);
+
+        return {
+          corsConfigs,
+          securityConfigs,
+          guards,
+          interceptors
+        };
+      };
+
       for (const statement of sourceFile.statements) {
         if (ts.isClassDeclaration(statement)) {
           const decorators = ts.getDecorators(statement);
@@ -325,18 +404,36 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
             let classPublic = false;
             if (decorators) for (const d of decorators) if (d.expression.getText().includes('Public')) { classPublic = true; break; }
 
-            const classCors = extractCorsConfig(decorators, sourceFile);
-            const classSecurity = extractSecurityConfig(decorators, sourceFile);
+            const classMeta = collectClassMetadata(statement);
 
-            const classGuards: any[] = [];
-            let classGuardDec: ts.Decorator | null = null;
-            if (decorators) for (const d of decorators) if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Protect') { classGuardDec = d; break; }
-            if (classGuardDec && ts.isCallExpression(classGuardDec.expression)) for (const arg of classGuardDec.expression.arguments) { const g = resolveGuardMetadata(arg, statement); if (g) classGuards.push(g); }
+            // Merge CorsConfigs hierarchically (parent -> child)
+            let classCors: any = undefined;
+            if (classMeta.corsConfigs.length > 0) {
+              classCors = {};
+              for (const c of classMeta.corsConfigs) {
+                if (typeof c === 'object') {
+                  classCors = { ...classCors, ...c };
+                } else {
+                  classCors = c;
+                }
+              }
+            }
 
-            const classInterceptors: string[] = [];
-            let classInterceptDec: ts.Decorator | null = null;
-            if (decorators) for (const d of decorators) if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Intercept') { classInterceptDec = d; break; }
-            if (classInterceptDec && ts.isCallExpression(classInterceptDec.expression)) for (const arg of classInterceptDec.expression.arguments) { const i = resolveClassRef(arg, registry.interceptors); if (i) classInterceptors.push(i); }
+            // Merge SecurityConfigs hierarchically (parent -> child)
+            let classSecurity: any = undefined;
+            if (classMeta.securityConfigs.length > 0) {
+              classSecurity = {};
+              for (const s of classMeta.securityConfigs) {
+                if (typeof s === 'object') {
+                  classSecurity = { ...classSecurity, ...s };
+                } else {
+                  classSecurity = s;
+                }
+              }
+            }
+
+            const classGuards = classMeta.guards;
+            const classInterceptors = classMeta.interceptors;
 
             // Scan for property injections AFTER decorators have registered their classes
             scanInjections(statement, controllerName);

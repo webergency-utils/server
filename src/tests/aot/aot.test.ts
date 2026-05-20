@@ -352,5 +352,16 @@ describe('Actual AOT Integration Test', () => {
             expect(res2.status).toBe(200);
             expect(res2.headers.get('X-Frame-Options')).toBeNull();
         });
+
+        it('should inherit security decorators from base controller', async () => {
+            const res1 = await server.fetch(new Request('http://localhost/inherited/test'));
+            expect(res1.status).toBe(200);
+            expect(res1.headers.get('X-Frame-Options')).toBe('DENY');
+
+            // Should override frameguard: false but still inherit timeout: 500
+            const res2 = await server.fetch(new Request('http://localhost/inherited/override'));
+            expect(res2.status).toBe(200);
+            expect(res2.headers.get('X-Frame-Options')).toBeNull();
+        });
     });
 });
