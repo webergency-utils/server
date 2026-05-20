@@ -342,5 +342,15 @@ describe('Actual AOT Integration Test', () => {
             const data2 = await res2.json();
             expect(data2.errors[0].expected).toBe('Custom<isEvenNumber>');
         });
+
+        it('should correctly apply secure headers extracted during AOT', async () => {
+            const res1 = await server.fetch(new Request('http://localhost/secure-controller/default'));
+            expect(res1.status).toBe(200);
+            expect(res1.headers.get('X-Frame-Options')).toBe('DENY');
+
+            const res2 = await server.fetch(new Request('http://localhost/secure-controller/override'));
+            expect(res2.status).toBe(200);
+            expect(res2.headers.get('X-Frame-Options')).toBeNull();
+        });
     });
 });

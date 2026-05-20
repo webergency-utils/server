@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, SecureHeaders } from '../../index.js';
 
 import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems, constraint } from '@webergency-utils/typechecker';
 
@@ -157,5 +157,20 @@ export class TagParityController {
         @Body() items: number[] & UniqueItems
     ) {
         return items;
+    }
+}
+
+@Controller('/secure-controller')
+@SecureHeaders({ frameguard: 'deny' })
+export class SecureController {
+    @Get('/default')
+    getDefault() {
+        return 'ok';
+    }
+
+    @Get('/override')
+    @SecureHeaders({ frameguard: false })
+    getOverride() {
+        return 'ok';
     }
 }

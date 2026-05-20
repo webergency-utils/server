@@ -4,9 +4,10 @@ import { QueryParser } from './helpers/parsers.js';
 import { MetadataStore } from './core/metadata.js';
 import { EndpointMetadata, ParamMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
 import { RequestContext, Context } from './core/context.js';
-import { CorsOptions } from './decorators.js';
+import { CorsOptions, SecureHeadersOptions } from './decorators.js';
 import { loadAutoMetadata } from './config.js';
 import { handleCors } from './helpers/cors.js';
+import { mergeSecureHeadersConfigs, generateSecureHeaders } from './helpers/secure-headers.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -28,6 +29,7 @@ export class ConsoleLogger implements Logger {
 export interface ServerOptions {
   port: number;
   cors?: CorsOptions;
+  secureHeaders?: SecureHeadersOptions | boolean;
   shutdownTimeout?: number;
   controllers?: any[];
   interceptors?: any[];
@@ -232,8 +234,32 @@ export class Server extends EventEmitter {
       return res;
     };
 
+    const applySecureHeaders = (res: Response, config: any): Response => {
+      if (config === undefined) return res;
+      const headers = generateSecureHeaders(config);
+      try {
+        for (const [key, value] of Object.entries(headers)) {
+          res.headers.set(key, value);
+        }
+        return res;
+      } catch (e) {
+        const newHeaders = new Headers(res.headers);
+        for (const [key, value] of Object.entries(headers)) {
+          newHeaders.set(key, value);
+        }
+        return new Response(res.body, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: newHeaders
+        });
+      }
+    };
+
     if (this.isShuttingDown) {
-      return applyCors(new Response('Service Unavailable (Shutting Down)', { status: 503 }), this.options.cors);
+      let res = new Response('Service Unavailable (Shutting Down)', { status: 503 });
+      res = applyCors(res, this.options.cors);
+      res = applySecureHeaders(res, mergeSecureHeadersConfigs([this.options.secureHeaders]));
+      return res;
     }
 
     this.activeRequests++;
@@ -264,6 +290,8 @@ export class Server extends EventEmitter {
       }
 
       const corsConfig = finalMatch ? (finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors) : this.options.cors;
+      const routeSecureHeaders = finalMatch ? finalMatch.metadata.secureHeaders : undefined;
+      const secureHeadersConfig = mergeSecureHeadersConfigs([this.options.secureHeaders, routeSecureHeaders]);
 
       if (method === 'OPTIONS' && corsConfig) {
         const corsRes = handleCors(request, corsConfig);
@@ -278,7 +306,7 @@ export class Server extends EventEmitter {
               duration
             });
           }
-          return corsRes;
+          return applySecureHeaders(corsRes, secureHeadersConfig);
         }
       }
 
@@ -293,7 +321,10 @@ export class Server extends EventEmitter {
             duration
           });
         }
-        return applyCors(new Response('Not Found', { status: 404 }), this.options.cors);
+        let res = new Response('Not Found', { status: 404 });
+        res = applyCors(res, this.options.cors);
+        res = applySecureHeaders(res, mergeSecureHeadersConfigs([this.options.secureHeaders]));
+        return res;
       }
 
       const req = request as AugmentedRequest;
@@ -301,10 +332,13 @@ export class Server extends EventEmitter {
       req.query = QueryParser.parse(url.search.startsWith('?') ? url.search.slice(1) : url.search);
       req.globalCors = this.options.cors;
       req.cors = finalMatch.metadata.cors;
+      req.globalSecureHeaders = this.options.secureHeaders;
+      req.secureHeaders = finalMatch.metadata.secureHeaders;
       req.meta = finalMatch.metadata.meta;
 
       let response = await this.execute(finalMatch.metadata, req);
       response = applyCors(response, corsConfig);
+      response = applySecureHeaders(response, secureHeadersConfig);
       
       if (this.options.logs) {
         const duration = Date.now() - startTime;
@@ -335,10 +369,16 @@ export class Server extends EventEmitter {
       }
       
       const corsConfig = finalMatch ? (finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors) : this.options.cors;
-      return applyCors(new Response(JSON.stringify({ success: false, error: err.message }), {
+      const routeSecureHeaders = finalMatch ? finalMatch.metadata.secureHeaders : undefined;
+      const secureHeadersConfig = mergeSecureHeadersConfigs([this.options.secureHeaders, routeSecureHeaders]);
+      
+      let res = new Response(JSON.stringify({ success: false, error: err.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
-      }), corsConfig);
+      });
+      res = applyCors(res, corsConfig);
+      res = applySecureHeaders(res, secureHeadersConfig);
+      return res;
     } finally {
       this.activeRequests--;
     }

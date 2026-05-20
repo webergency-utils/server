@@ -64,6 +64,22 @@ export interface CorsOptions {
 
 export function Cors(config?: CorsOptions | string): any { return () => {}; }
 
+export interface SecureHeadersOptions {
+  frameguard?: boolean | 'deny' | 'sameorigin' | { action: 'deny' | 'sameorigin' };
+  noSniff?: boolean;
+  hsts?: boolean | { maxAge?: number; includeSubDomains?: boolean; preload?: boolean };
+  downloadOptions?: boolean;
+  permittedCrossDomainPolicies?: boolean | 'none' | 'master-only' | 'by-content-type' | 'all';
+  referrerPolicy?: boolean | string;
+  xssFilter?: boolean;
+  csp?: boolean | string | Record<string, string[]>;
+  coep?: boolean | 'require-corp' | 'credentialless' | 'unsafe-none';
+  coop?: boolean | 'same-origin' | 'same-origin-allow-popups' | 'unsafe-none';
+  corp?: boolean | 'same-origin' | 'same-site' | 'cross-origin';
+}
+
+export function SecureHeaders(config?: SecureHeadersOptions | boolean): any { return () => {}; }
+
 /**
  * Guard Interface
  */

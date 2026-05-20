@@ -3,6 +3,7 @@ import { validators } from '@webergency-utils/typechecker';
 import { isEvenNumber } from './controllers.js';
 import { TypeSafetyController } from './controllers.js';
 import { TagParityController } from './controllers.js';
+import { SecureController } from './controllers.js';
 
 // --- EXTERNAL MANIFESTS ---
 
@@ -11,6 +12,8 @@ const _instance_TypeSafetyController = new TypeSafetyController();
 MetadataStore.registerController('TypeSafetyController', _instance_TypeSafetyController);
 const _instance_TagParityController = new TagParityController();
 MetadataStore.registerController('TagParityController', _instance_TagParityController);
+const _instance_SecureController = new SecureController();
+MetadataStore.registerController('SecureController', _instance_SecureController);
 
 // --- VALIDATORS ---
 var __val_473287f8298dba71 = validators.string;
@@ -284,9 +287,9 @@ var __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, 
 
 var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
 
-var __val_8fb8e2f3a7d33439 = validators.date;
+var __val_07236ffc6e7f979c = validators.date;
 
-var __val_2e330dd0c9748192 = validators.regexp;
+var __val_cafa731585ef26c4 = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -704,12 +707,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_8fb8e2f3a7d33439
+			validator: __val_07236ffc6e7f979c
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_2e330dd0c9748192
+			validator: __val_cafa731585ef26c4
 		},
 		{
 			source: 'Query',
@@ -899,5 +902,33 @@ MetadataStore.registerEndpoint({
 	guards: [],
 	interceptors: [],
 	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'SecureController',
+	methodName: 'getDefault',
+	httpMethod: 'GET',
+	path: '/secure-controller/default',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {},
+	secureHeaders: {
+		frameguard: 'deny'
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'SecureController',
+	methodName: 'getOverride',
+	httpMethod: 'GET',
+	path: '/secure-controller/override',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {},
+	secureHeaders: {
+		frameguard: false
+	}
 });
 
