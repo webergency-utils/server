@@ -44,6 +44,65 @@ export function createRegistry(): ProjectRegistry {
   };
 }
 
+function parseExpression(expr: ts.Expression, sourceFile: ts.SourceFile): any {
+  if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+    return expr.text;
+  }
+  if (ts.isNumericLiteral(expr)) {
+    return Number(expr.text);
+  }
+  if (expr.kind === ts.SyntaxKind.TrueKeyword) {
+    return true;
+  }
+  if (expr.kind === ts.SyntaxKind.FalseKeyword) {
+    return false;
+  }
+  if (expr.kind === ts.SyntaxKind.NullKeyword) {
+    return null;
+  }
+  if (ts.isIdentifier(expr) && expr.text === 'undefined') {
+    return undefined;
+  }
+  if (ts.isArrayLiteralExpression(expr)) {
+    return expr.elements.map(e => parseExpression(e, sourceFile));
+  }
+  if (ts.isObjectLiteralExpression(expr)) {
+    const obj: Record<string, any> = {};
+    for (const prop of expr.properties) {
+      if (ts.isPropertyAssignment(prop)) {
+        const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : prop.name.getText(sourceFile);
+        obj[key] = parseExpression(prop.initializer, sourceFile);
+      }
+    }
+    return obj;
+  }
+  
+  // Print expression to code for other node types
+  const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
+  const code = printer.printNode(ts.EmitHint.Expression, expr, sourceFile);
+  return { __raw_code__: code };
+}
+
+function extractCorsConfig(decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile): any {
+  if (!decorators) return undefined;
+  for (const d of decorators) {
+    const isCors = 
+      (ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) && d.expression.expression.text === 'Cors') ||
+      (ts.isIdentifier(d.expression) && d.expression.text === 'Cors');
+      
+    if (isCors) {
+      if (ts.isCallExpression(d.expression)) {
+        if (d.expression.arguments.length > 0) {
+          return parseExpression(d.expression.arguments[0], sourceFile);
+        }
+        return {};
+      }
+      return {};
+    }
+  }
+  return undefined;
+}
+
 export function discoverFromEntryPoint(program: ts.Program, entryFile: string, registry: ProjectRegistry) {
   const checker = program.getTypeChecker();
   const discoveredFiles = new Set<string>();
@@ -246,6 +305,8 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
             let classPublic = false;
             if (decorators) for (const d of decorators) if (d.expression.getText().includes('Public')) { classPublic = true; break; }
 
+            const classCors = extractCorsConfig(decorators, sourceFile);
+
             const classGuards: any[] = [];
             let classGuardDec: ts.Decorator | null = null;
             if (decorators) for (const d of decorators) if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Protect') { classGuardDec = d; break; }
@@ -275,6 +336,9 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                   let methodPublic = false;
                   if (mDecs) for (const d of mDecs) if (d.expression.getText().includes('Public')) { methodPublic = true; break; }
 
+                  const methodCors = extractCorsConfig(mDecs, sourceFile);
+                  const activeCors = methodCors !== undefined ? methodCors : classCors;
+
                   const methodGuards: any[] = [];
                   let mGuardDec: ts.Decorator | null = null;
                   if (mDecs) for (const d of mDecs) if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Protect') { mGuardDec = d; break; }
@@ -289,10 +353,14 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                   const activeInterceptors = [...classInterceptors, ...methodInterceptors];
                   const paramsMetadata = resolveParamsMetadata(member.parameters);
 
-                  registry.endpoints.push({
+                  const endpoint: any = {
                     controller: controllerName, methodName: member.name.getText(), httpMethod: method.toUpperCase(), path: fullPath,
                     params: paramsMetadata, guards: activeGuards, interceptors: activeInterceptors, meta: {}
-                  });
+                  };
+                  if (activeCors !== undefined) {
+                    endpoint.cors = activeCors;
+                  }
+                  registry.endpoints.push(endpoint);
                 }
               }
             }
@@ -318,9 +386,35 @@ export function generateManifestCode(registry: ProjectRegistry, controllerMap: M
   const manifestDir = path.dirname(manifestPath);
   const finalControllerMap = controllerMap.size > 0 ? controllerMap : new Map(Array.from(registry.controllers.entries()).map(([k, v]) => [k, v.path]));
 
+  const customImports = new Map<string, Set<string>>();
+  const cleanedUtils = new Set<string>();
+  
+  for (const util of registry.requiredUtils) {
+    if (util.startsWith('custom:')) {
+      const parts = util.split(':');
+      const fnName = parts[1];
+      const filePath = parts.slice(2).join(':');
+      if (!customImports.has(filePath)) {
+        customImports.set(filePath, new Set());
+      }
+      customImports.get(filePath)!.add(fnName);
+    } else {
+      cleanedUtils.add(util);
+    }
+  }
+
   let imports = `import { MetadataStore } from '@webergency-utils/server';\n`;
-  if (registry.requiredUtils.size > 0) {
+  if (cleanedUtils.size > 0) {
     imports += `import { validators } from '@webergency-utils/typechecker';\n`;
+  }
+
+  for (const [fullPath, fnNames] of customImports.entries()) {
+    let rel = path.relative(manifestDir, fullPath).replace(/\.ts$/, '.js');
+    if (!rel.startsWith('.') && !rel.startsWith('/')) {
+      rel = './' + rel;
+    }
+    const names = Array.from(fnNames).join(', ');
+    imports += `import { ${names} } from '${rel}';\n`;
   }
 
   let logic = `\n// --- SINGLETONS ---\n`;
@@ -397,6 +491,15 @@ export function generateManifestCode(registry: ProjectRegistry, controllerMap: M
       return code ? `"validator": ${code}` : match;
     });
 
+    // Replace __raw_code__ placeholders before cleaning up quotes
+    epJson = epJson.replace(/\{\s*"__raw_code__":\s*"([^"]+)"\s*\}/g, (match, rawCode) => {
+      try {
+        return JSON.parse('"' + rawCode + '"');
+      } catch (e) {
+        return rawCode;
+      }
+    });
+
     // Clean up JSON for JS (remove quotes from keys, use single quotes)
     epJson = epJson
       .replace(/"([^"]+)":/g, '$1:')
@@ -419,6 +522,14 @@ function objectToExpression(obj: any): ts.Expression {
     return ts.factory.createArrayLiteralExpression(obj.map(item => objectToExpression(item)));
   }
   if (typeof obj === 'object') {
+    if (typeof obj.__raw_code__ === 'string') {
+      const tempSourceFile = ts.createSourceFile('temp_ast.ts', `(${obj.__raw_code__})`, ts.ScriptTarget.Latest, true);
+      const statement = tempSourceFile.statements[0];
+      if (statement && ts.isExpressionStatement(statement)) {
+        return statement.expression;
+      }
+      return ts.factory.createIdentifier(obj.__raw_code__);
+    }
     const properties: ts.ObjectLiteralElementLike[] = [];
     for (const [key, value] of Object.entries(obj)) {
       if (key === 'validator' && typeof value === 'string' && value !== '') {

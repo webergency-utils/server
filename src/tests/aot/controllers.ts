@@ -1,6 +1,12 @@
 import { Controller, Post, Body, Get, Query, Intercept } from '../../index.js';
 
-import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems } from '@webergency-utils/typechecker';
+import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems, constraint } from '@webergency-utils/typechecker';
+
+export const isEvenNumber = (val: number) => val % 2 === 0;
+
+export interface CustomUser {
+    val: number & constraint.Custom<typeof isEvenNumber>;
+}
 
 export interface User {
     name: string;
@@ -111,6 +117,11 @@ export class TypeSafetyController {
     @Get('/tags')
     tags(@Query('pass') pass: string & MinLength<8>, @Query('age') age: number & Minimum<18>) {
         return { success: true, pass, age };
+    }
+
+    @Post('/custom-validator')
+    customValidator(@Body('strip') data: CustomUser) {
+        return { success: true, data };
     }
 }
 

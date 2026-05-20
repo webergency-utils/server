@@ -322,5 +322,25 @@ describe('Actual AOT Integration Test', () => {
             const data2 = await res2.json();
             expect(data2.errors[0].expected).toBe('UniqueItems');
         });
+
+        it('should support custom validator functions with auto-imports', async () => {
+            const res1 = await server.fetch(new Request('http://localhost/type-safety/custom-validator', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ val: 2 })
+            }));
+            expect(res1.status).toBe(200);
+            const data1 = await res1.json();
+            expect(data1.data.val).toBe(2);
+
+            const res2 = await server.fetch(new Request('http://localhost/type-safety/custom-validator', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ val: 3 })
+            }));
+            expect(res2.status).toBe(400);
+            const data2 = await res2.json();
+            expect(data2.errors[0].expected).toBe('Custom<isEvenNumber>');
+        });
     });
 });

@@ -77,4 +77,36 @@ describe('TypeScript Compiler Plugin Transformer', () => {
     expect(compiled).toContain('path: "/users"');
     expect(compiled).toContain("validator: __val_");
   });
+
+  it('should transform CORS decorators at class and method level', () => {
+    const code = `
+      import { Controller, Get, Post, Cors } from '../decorators.js';
+
+      @Cors({ origin: 'http://localhost', credentials: true })
+      @Controller('/api')
+      export class ApiController {
+        @Get('/public')
+        @Cors()
+        getPublic() {
+          return { ok: true };
+        }
+
+        @Post('/restricted')
+        @Cors({ origin: (o) => o === 'http://trusted', allowedHeaders: ['Content-Type', 'X-Custom-*'] })
+        getRestricted() {
+          return { ok: true };
+        }
+      }
+    `;
+
+    const compiled = compileAndTransform(code);
+
+    // getPublic has @Cors() without params, which resolves to {}
+    expect(compiled).toContain('cors: {}');
+
+    // getRestricted has method level @Cors with inline arrow function and array of wildcards
+    expect(compiled).toContain('origin: (o) => o === \'http://trusted\'');
+    expect(compiled).toContain('allowedHeaders: [\'Content-Type\', \'X-Custom-*\']');
+  });
 });
+

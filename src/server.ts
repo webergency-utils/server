@@ -6,6 +6,7 @@ import { EndpointMetadata, ParamMetadata, AugmentedRequest, Logger, LogContext }
 import { RequestContext, Context } from './core/context.js';
 import { CorsOptions } from './decorators.js';
 import { loadAutoMetadata } from './config.js';
+import { handleCors } from './helpers/cors.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -207,8 +208,32 @@ export class Server extends EventEmitter {
   public fetch = async (request: Request): Promise<Response> => {
     this.internalEmit('request', request);
     
+    const applyCors = (res: Response, config: any): Response => {
+      if (!config) return res;
+      const corsHeaders = handleCors(request, config);
+      if (corsHeaders && !(corsHeaders instanceof Response)) {
+        try {
+          for (const [key, value] of Object.entries(corsHeaders)) {
+            res.headers.set(key, value);
+          }
+          return res;
+        } catch (e) {
+          const newHeaders = new Headers(res.headers);
+          for (const [key, value] of Object.entries(corsHeaders)) {
+            newHeaders.set(key, value);
+          }
+          return new Response(res.body, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: newHeaders
+          });
+        }
+      }
+      return res;
+    };
+
     if (this.isShuttingDown) {
-      return new Response('Service Unavailable (Shutting Down)', { status: 503 });
+      return applyCors(new Response('Service Unavailable (Shutting Down)', { status: 503 }), this.options.cors);
     }
 
     this.activeRequests++;
@@ -226,15 +251,35 @@ export class Server extends EventEmitter {
       });
     }
 
+    let finalMatch: any = null;
     try {
       const match = this.router.find(method, path);
       
-      let finalMatch = match;
+      finalMatch = match;
       if (!match && method === 'OPTIONS') {
         finalMatch = this.router.find('GET', path) || 
                      this.router.find('POST', path) || 
                      this.router.find('PUT', path) || 
                      this.router.find('DELETE', path);
+      }
+
+      const corsConfig = finalMatch ? (finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors) : this.options.cors;
+
+      if (method === 'OPTIONS' && corsConfig) {
+        const corsRes = handleCors(request, corsConfig);
+        if (corsRes instanceof Response) {
+          if (this.options.logs) {
+            const duration = Date.now() - startTime;
+            this.logger.info(`<-- ${method} ${path} - 204 CORS Preflight (${duration}ms)`, {
+              type: 'request_end',
+              method,
+              path,
+              status: 204,
+              duration
+            });
+          }
+          return corsRes;
+        }
       }
 
       if (!finalMatch) {
@@ -248,16 +293,18 @@ export class Server extends EventEmitter {
             duration
           });
         }
-        return new Response('Not Found', { status: 404 });
+        return applyCors(new Response('Not Found', { status: 404 }), this.options.cors);
       }
 
       const req = request as AugmentedRequest;
       req.params = finalMatch.params;
       req.query = QueryParser.parse(url.search.startsWith('?') ? url.search.slice(1) : url.search);
       req.globalCors = this.options.cors;
+      req.cors = finalMatch.metadata.cors;
       req.meta = finalMatch.metadata.meta;
 
-      const response = await this.execute(finalMatch.metadata, req);
+      let response = await this.execute(finalMatch.metadata, req);
+      response = applyCors(response, corsConfig);
       
       if (this.options.logs) {
         const duration = Date.now() - startTime;
@@ -286,10 +333,12 @@ export class Server extends EventEmitter {
           duration
         });
       }
-      return new Response(JSON.stringify({ success: false, error: err.message }), {
+      
+      const corsConfig = finalMatch ? (finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors) : this.options.cors;
+      return applyCors(new Response(JSON.stringify({ success: false, error: err.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }), corsConfig);
     } finally {
       this.activeRequests--;
     }

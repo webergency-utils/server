@@ -54,15 +54,15 @@ export function Protect(guard: string | Function, ...guards: (string | Function)
 export function Intercept(...interceptors: any[]): any { return () => {}; }
 
 export interface CorsOptions {
-  origin?: string | string[] | boolean;
-  methods?: string | string[];
-  allowedHeaders?: string | string[];
+  origin?: string | string[] | boolean | Function;
+  methods?: string | string[] | Function;
+  allowedHeaders?: string | string[] | Function;
   exposedHeaders?: string | string[];
   credentials?: boolean;
   maxAge?: number;
 }
 
-export function Cors(config: CorsOptions | string): any { return () => {}; }
+export function Cors(config?: CorsOptions | string): any { return () => {}; }
 
 /**
  * Guard Interface

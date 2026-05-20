@@ -1,5 +1,6 @@
 import { MetadataStore } from '@webergency-utils/server';
 import { validators } from '@webergency-utils/typechecker';
+import { isEvenNumber } from './controllers.js';
 import { TypeSafetyController } from './controllers.js';
 import { TagParityController } from './controllers.js';
 
@@ -283,9 +284,9 @@ var __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, 
 
 var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
 
-var __val_aff9105ecab8ebe6 = validators.date;
+var __val_8fb8e2f3a7d33439 = validators.date;
 
-var __val_0c5e9ccfab9b6861 = validators.regexp;
+var __val_2e330dd0c9748192 = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -342,6 +343,46 @@ var __val_37c14191d7986595 = (v, path, ctx) => {
     if (_s === false)
         ctx.success = false;
     return v;
+};
+
+var __val_68c5a02a527ab0fc = (v, path, ctx) => {
+    const _s = ctx.success;
+    ctx.success = true;
+    v = validators.number(v, path, ctx);
+    if (ctx.success && v !== undefined && v !== null) {
+        validators.custom(v, path, ctx, isEvenNumber);
+    }
+    if (_s === false)
+        ctx.success = false;
+    return v;
+};
+
+var __val_e07351f5c6fe82e2 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["val"], "CustomUser"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["val"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["val", false, __val_68c5a02a527ab0fc]
+    ]);
+    return data;
 };
 
 var __val_6e9d6dc4e79aca25 = (v, path, ctx) => {
@@ -663,12 +704,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_aff9105ecab8ebe6
+			validator: __val_8fb8e2f3a7d33439
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_0c5e9ccfab9b6861
+			validator: __val_2e330dd0c9748192
 		},
 		{
 			source: 'Query',
@@ -747,6 +788,24 @@ MetadataStore.registerEndpoint({
 			source: 'Query',
 			name: 'age',
 			validator: __val_37c14191d7986595
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'TypeSafetyController',
+	methodName: 'customValidator',
+	httpMethod: 'POST',
+	path: '/type-safety/custom-validator',
+	params: [
+		{
+			source: 'Body',
+			name: '',
+			validator: __val_e07351f5c6fe82e2,
+			mode: 'strip'
 		}
 	],
 	guards: [],
