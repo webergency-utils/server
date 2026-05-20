@@ -913,7 +913,7 @@ MetadataStore.registerEndpoint({
 	guards: [],
 	interceptors: [],
 	meta: {},
-	secureHeaders: {
+	security: {
 		frameguard: 'deny'
 	}
 });
@@ -927,7 +927,7 @@ MetadataStore.registerEndpoint({
 	guards: [],
 	interceptors: [],
 	meta: {},
-	secureHeaders: {
+	security: {
 		frameguard: false
 	}
 });

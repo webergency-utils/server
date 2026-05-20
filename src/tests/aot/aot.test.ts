@@ -343,7 +343,7 @@ describe('Actual AOT Integration Test', () => {
             expect(data2.errors[0].expected).toBe('Custom<isEvenNumber>');
         });
 
-        it('should correctly apply secure headers extracted during AOT', async () => {
+        it('should correctly apply security config extracted during AOT', async () => {
             const res1 = await server.fetch(new Request('http://localhost/secure-controller/default'));
             expect(res1.status).toBe(200);
             expect(res1.headers.get('X-Frame-Options')).toBe('DENY');

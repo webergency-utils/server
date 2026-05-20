@@ -103,14 +103,14 @@ function extractCorsConfig(decorators: readonly ts.Decorator[] | undefined, sour
   return undefined;
 }
 
-function extractSecureHeadersConfig(decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile): any {
+function extractSecurityConfig(decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile): any {
   if (!decorators) return undefined;
   for (const d of decorators) {
-    const isSecureHeaders = 
-      (ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) && d.expression.expression.text === 'SecureHeaders') ||
-      (ts.isIdentifier(d.expression) && d.expression.text === 'SecureHeaders');
+    const isSecurity = 
+      (ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) && d.expression.expression.text === 'Security') ||
+      (ts.isIdentifier(d.expression) && d.expression.text === 'Security');
       
-    if (isSecureHeaders) {
+    if (isSecurity) {
       if (ts.isCallExpression(d.expression)) {
         if (d.expression.arguments.length > 0) {
           return parseExpression(d.expression.arguments[0], sourceFile);
@@ -326,7 +326,7 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
             if (decorators) for (const d of decorators) if (d.expression.getText().includes('Public')) { classPublic = true; break; }
 
             const classCors = extractCorsConfig(decorators, sourceFile);
-            const classSecureHeaders = extractSecureHeadersConfig(decorators, sourceFile);
+            const classSecurity = extractSecurityConfig(decorators, sourceFile);
 
             const classGuards: any[] = [];
             let classGuardDec: ts.Decorator | null = null;
@@ -360,8 +360,8 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                   const methodCors = extractCorsConfig(mDecs, sourceFile);
                   const activeCors = methodCors !== undefined ? methodCors : classCors;
 
-                  const methodSecureHeaders = extractSecureHeadersConfig(mDecs, sourceFile);
-                  const activeSecureHeaders = methodSecureHeaders !== undefined ? methodSecureHeaders : classSecureHeaders;
+                  const methodSecurity = extractSecurityConfig(mDecs, sourceFile);
+                  const activeSecurity = methodSecurity !== undefined ? methodSecurity : classSecurity;
 
                   const methodGuards: any[] = [];
                   let mGuardDec: ts.Decorator | null = null;
@@ -384,8 +384,8 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                   if (activeCors !== undefined) {
                     endpoint.cors = activeCors;
                   }
-                  if (activeSecureHeaders !== undefined) {
-                    endpoint.secureHeaders = activeSecureHeaders;
+                  if (activeSecurity !== undefined) {
+                    endpoint.security = activeSecurity;
                   }
                   registry.endpoints.push(endpoint);
                 }

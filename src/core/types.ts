@@ -26,7 +26,7 @@ export interface EndpointMetadata {
   guards: GuardMetadata[];
   interceptors: string[];
   cors?: any;
-  secureHeaders?: any;
+  security?: any;
   meta: Record<string, any>;
 }
 
@@ -37,8 +37,8 @@ export interface AugmentedRequest extends Request {
   query: Record<string, string>;
   globalCors?: any;
   cors?: any;
-  globalSecureHeaders?: any;
-  secureHeaders?: any;
+  globalSecurity?: any;
+  security?: any;
   meta: Record<string, any>;
   _json?: any;
   _raw?: ArrayBuffer;

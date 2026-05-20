@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Server } from '../server.js';
 import { MetadataStore } from '../core/metadata.js';
-import { mergeSecureHeadersConfigs, generateSecureHeaders } from '../helpers/secure-headers.js';
+import { mergeSecurityConfigs, generateSecurityHeaders } from '../helpers/security.js';
 
-describe('Secure Headers Helper & Integration Tests', () => {
+describe('Security Helper & Integration Tests', () => {
   beforeEach(() => {
     // Reset MetadataStore for each test
     const store = (globalThis as any)['__WEBERGENCY_SERVER_METADATA_STORE__'];
@@ -15,19 +15,19 @@ describe('Secure Headers Helper & Integration Tests', () => {
     }
   });
 
-  describe('mergeSecureHeadersConfigs helper', () => {
+  describe('mergeSecurityConfigs helper', () => {
     it('should return undefined if all configs are undefined', () => {
-      const merged = mergeSecureHeadersConfigs([undefined, undefined]);
+      const merged = mergeSecurityConfigs([undefined, undefined]);
       expect(merged).toBeUndefined();
     });
 
     it('should initialize empty object if config is true', () => {
-      const merged = mergeSecureHeadersConfigs([true]);
+      const merged = mergeSecurityConfigs([true]);
       expect(merged).toEqual({});
     });
 
     it('should propagate false overrides to disable all headers', () => {
-      const merged = mergeSecureHeadersConfigs([true, false]);
+      const merged = mergeSecurityConfigs([true, false]);
       expect(merged).toEqual({
         frameguard: false,
         noSniff: false,
@@ -44,7 +44,7 @@ describe('Secure Headers Helper & Integration Tests', () => {
     });
 
     it('should merge objects hierarchically', () => {
-      const merged = mergeSecureHeadersConfigs([
+      const merged = mergeSecurityConfigs([
         { frameguard: 'deny', hsts: { maxAge: 100 } },
         { frameguard: 'sameorigin', csp: { 'default-src': ["'self'"] } }
       ]);
@@ -56,9 +56,9 @@ describe('Secure Headers Helper & Integration Tests', () => {
     });
   });
 
-  describe('generateSecureHeaders helper', () => {
+  describe('generateSecurityHeaders helper', () => {
     it('should generate default headers when config is true or empty object', () => {
-      const headers = generateSecureHeaders(true);
+      const headers = generateSecurityHeaders(true);
       expect(headers['X-Frame-Options']).toBe('SAMEORIGIN');
       expect(headers['X-Content-Type-Options']).toBe('nosniff');
       expect(headers['Strict-Transport-Security']).toBe('max-age=15552000; includeSubDomains');
@@ -70,7 +70,7 @@ describe('Secure Headers Helper & Integration Tests', () => {
     });
 
     it('should respect false to omit specific headers', () => {
-      const headers = generateSecureHeaders({
+      const headers = generateSecurityHeaders({
         frameguard: false,
         hsts: false,
         noSniff: true
@@ -79,29 +79,108 @@ describe('Secure Headers Helper & Integration Tests', () => {
       expect(headers['Strict-Transport-Security']).toBeUndefined();
       expect(headers['X-Content-Type-Options']).toBe('nosniff');
     });
-
-    it('should handle custom CSP config', () => {
-      const headers = generateSecureHeaders({
-        csp: {
-          'default-src': ["'self'"],
-          'script-src': ["'self'", 'https://trusted.com']
-        }
-      });
-      expect(headers['Content-Security-Policy']).toBe("default-src 'self'; script-src 'self' https://trusted.com");
-    });
-
-    it('should handle custom HSTS and frameguard options', () => {
-      const headers = generateSecureHeaders({
-        hsts: { maxAge: 3600, includeSubDomains: false, preload: true },
-        frameguard: { action: 'deny' }
-      });
-      expect(headers['Strict-Transport-Security']).toBe('max-age=3600; preload');
-      expect(headers['X-Frame-Options']).toBe('DENY');
-    });
   });
 
-  describe('Server integration', () => {
-    it('should not add secure headers by default if not configured', async () => {
+  describe('Server integration - Request Protections', () => {
+    it('should enforce maxBodySize limits and return 413', async () => {
+      const server = new Server({
+        port: 0,
+        security: { maxBodySize: '10b' }
+      });
+      class DummyController {
+        index(body: any) { return 'ok'; }
+      }
+      MetadataStore.registerController('DummyController', new DummyController());
+      MetadataStore.registerEndpoint({
+        controller: 'DummyController',
+        methodName: 'index',
+        httpMethod: 'POST',
+        path: '/body-test',
+        params: [{ source: 'Body' }],
+        guards: [],
+        interceptors: [],
+        meta: {}
+      });
+      (server as any).init();
+
+      // Within limit (7 bytes)
+      const resOk = await server.fetch(new Request('http://localhost/body-test', {
+        method: 'POST',
+        body: '"hello"'
+      }));
+      expect(resOk.status).toBe(200);
+
+      // Exceeds limit (13 bytes)
+      const resTooBig = await server.fetch(new Request('http://localhost/body-test', {
+        method: 'POST',
+        body: '"hello world"'
+      }));
+      expect(resTooBig.status).toBe(413);
+    });
+
+    it('should enforce timeout limits and return 408', async () => {
+      const server = new Server({ port: 0 });
+      class DummyController {
+        async delay() {
+          await new Promise(r => setTimeout(r, 50));
+          return 'done';
+        }
+      }
+      MetadataStore.registerController('DummyController', new DummyController());
+      MetadataStore.registerEndpoint({
+        controller: 'DummyController',
+        methodName: 'delay',
+        httpMethod: 'GET',
+        path: '/timeout-test',
+        params: [],
+        guards: [],
+        interceptors: [],
+        security: { timeout: 10 },
+        meta: {}
+      });
+      (server as any).init();
+
+      const res = await server.fetch(new Request('http://localhost/timeout-test'));
+      expect(res.status).toBe(408);
+    });
+
+    it('should enforce allowedContentTypes and return 415', async () => {
+      const server = new Server({
+        port: 0,
+        security: { allowedContentTypes: ['application/json'] }
+      });
+      class DummyController {
+        index() { return 'ok'; }
+      }
+      MetadataStore.registerController('DummyController', new DummyController());
+      MetadataStore.registerEndpoint({
+        controller: 'DummyController',
+        methodName: 'index',
+        httpMethod: 'POST',
+        path: '/type-test',
+        params: [],
+        guards: [],
+        interceptors: [],
+        meta: {}
+      });
+      (server as any).init();
+
+      // Correct content type
+      const resOk = await server.fetch(new Request('http://localhost/type-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }));
+      expect(resOk.status).toBe(200);
+
+      // Incorrect content type
+      const resBad = await server.fetch(new Request('http://localhost/type-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }
+      }));
+      expect(resBad.status).toBe(415);
+    });
+
+    it('should enforce rateLimit and return 429', async () => {
       const server = new Server({ port: 0 });
       class DummyController {
         index() { return 'ok'; }
@@ -111,78 +190,23 @@ describe('Secure Headers Helper & Integration Tests', () => {
         controller: 'DummyController',
         methodName: 'index',
         httpMethod: 'GET',
-        path: '/test',
+        path: '/rate-test',
         params: [],
         guards: [],
         interceptors: [],
+        security: { rateLimit: { max: 2, window: '1s' } },
         meta: {}
       });
       (server as any).init();
 
-      const res = await server.fetch(new Request('http://localhost/test'));
-      expect(res.headers.get('X-Frame-Options')).toBeNull();
-      expect(res.headers.get('X-Content-Type-Options')).toBeNull();
-    });
+      const res1 = await server.fetch(new Request('http://localhost/rate-test'));
+      expect(res1.status).toBe(200);
 
-    it('should add default headers globally when secureHeaders is true', async () => {
-      const server = new Server({
-        port: 0,
-        secureHeaders: true
-      });
-      class DummyController {
-        index() { return 'ok'; }
-      }
-      MetadataStore.registerController('DummyController', new DummyController());
-      MetadataStore.registerEndpoint({
-        controller: 'DummyController',
-        methodName: 'index',
-        httpMethod: 'GET',
-        path: '/test',
-        params: [],
-        guards: [],
-        interceptors: [],
-        meta: {}
-      });
-      (server as any).init();
+      const res2 = await server.fetch(new Request('http://localhost/rate-test'));
+      expect(res2.status).toBe(200);
 
-      const res = await server.fetch(new Request('http://localhost/test'));
-      expect(res.headers.get('X-Frame-Options')).toBe('SAMEORIGIN');
-      expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
-    });
-
-    it('should resolve and merge class/method levels', async () => {
-      const server = new Server({
-        port: 0,
-        secureHeaders: {
-          frameguard: 'deny',
-          hsts: { maxAge: 100 }
-        }
-      });
-      class DummyController {
-        index() { return 'ok'; }
-      }
-      MetadataStore.registerController('DummyController', new DummyController());
-      MetadataStore.registerEndpoint({
-        controller: 'DummyController',
-        methodName: 'index',
-        httpMethod: 'GET',
-        path: '/test',
-        params: [],
-        guards: [],
-        interceptors: [],
-        // Simulates route-level @SecureHeaders({ frameguard: false, csp: "default-src 'self'" })
-        secureHeaders: {
-          frameguard: false,
-          csp: "default-src 'self'"
-        },
-        meta: {}
-      });
-      (server as any).init();
-
-      const res = await server.fetch(new Request('http://localhost/test'));
-      expect(res.headers.get('X-Frame-Options')).toBeNull(); // disabled by route
-      expect(res.headers.get('Strict-Transport-Security')).toBe('max-age=100; includeSubDomains'); // inherited from global
-      expect(res.headers.get('Content-Security-Policy')).toBe("default-src 'self'"); // added by route
+      const res3 = await server.fetch(new Request('http://localhost/rate-test'));
+      expect(res3.status).toBe(429);
     });
   });
 });

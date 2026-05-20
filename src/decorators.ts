@@ -64,7 +64,14 @@ export interface CorsOptions {
 
 export function Cors(config?: CorsOptions | string): any { return () => {}; }
 
-export interface SecureHeadersOptions {
+export interface SecurityOptions {
+  /** Request Protection */
+  maxBodySize?: string | number;
+  timeout?: number;
+  rateLimit?: { max: number; window?: string | number };
+  allowedContentTypes?: string[];
+
+  /** Response Headers */
   frameguard?: boolean | 'deny' | 'sameorigin' | { action: 'deny' | 'sameorigin' };
   noSniff?: boolean;
   hsts?: boolean | { maxAge?: number; includeSubDomains?: boolean; preload?: boolean };
@@ -78,7 +85,7 @@ export interface SecureHeadersOptions {
   corp?: boolean | 'same-origin' | 'same-site' | 'cross-origin';
 }
 
-export function SecureHeaders(config?: SecureHeadersOptions | boolean): any { return () => {}; }
+export function Security(config?: SecurityOptions | boolean): any { return () => {}; }
 
 /**
  * Guard Interface

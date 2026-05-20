@@ -1,7 +1,21 @@
-import { SecureHeadersOptions } from '../decorators.js';
+import { SecurityOptions } from '../decorators.js';
 
-export function mergeSecureHeadersConfigs(configs: (SecureHeadersOptions | boolean | undefined)[]): SecureHeadersOptions | undefined {
-  let merged: SecureHeadersOptions | undefined = undefined;
+const SIZE_UNITS: Record<string, number> = {
+  b: 1,
+  kb: 1024,
+  mb: 1024 * 1024,
+  gb: 1024 * 1024 * 1024,
+};
+
+export function parseSize(size: string | number): number {
+  if (typeof size === 'number') return size;
+  const match = size.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)$/);
+  if (!match) throw new Error(`Invalid size format: "${size}". Use formats like "2mb", "500kb", "1gb".`);
+  return Math.floor(parseFloat(match[1]) * SIZE_UNITS[match[2]]);
+}
+
+export function mergeSecurityConfigs(configs: (SecurityOptions | boolean | undefined)[]): SecurityOptions | undefined {
+  let merged: SecurityOptions | undefined = undefined;
 
   for (const config of configs) {
     if (config === undefined) continue;
@@ -31,13 +45,12 @@ export function mergeSecureHeadersConfigs(configs: (SecureHeadersOptions | boole
   return merged;
 }
 
-export function generateSecureHeaders(config: SecureHeadersOptions | boolean | undefined): Record<string, string> {
+export function generateSecurityHeaders(config: SecurityOptions | boolean | undefined): Record<string, string> {
   if (config === undefined) return {};
 
   const headers: Record<string, string> = {};
   
-  // If config is simply true, treat it as an empty object so all defaults apply
-  const options: SecureHeadersOptions = config === true ? {} : (config === false ? {
+  const options: SecurityOptions = config === true ? {} : (config === false ? {
     frameguard: false,
     noSniff: false,
     hsts: false,
@@ -51,8 +64,7 @@ export function generateSecureHeaders(config: SecureHeadersOptions | boolean | u
     corp: false
   } : config);
 
-  // Helper to check if a policy is enabled/defaulted
-  const isEnabled = (prop: keyof SecureHeadersOptions): boolean => {
+  const isEnabled = (prop: keyof SecurityOptions): boolean => {
     return options[prop] !== false;
   };
 

@@ -4,10 +4,10 @@ import { QueryParser } from './helpers/parsers.js';
 import { MetadataStore } from './core/metadata.js';
 import { EndpointMetadata, ParamMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
 import { RequestContext, Context } from './core/context.js';
-import { CorsOptions, SecureHeadersOptions } from './decorators.js';
+import { CorsOptions, SecurityOptions } from './decorators.js';
 import { loadAutoMetadata } from './config.js';
 import { handleCors } from './helpers/cors.js';
-import { mergeSecureHeadersConfigs, generateSecureHeaders } from './helpers/secure-headers.js';
+import { mergeSecurityConfigs, generateSecurityHeaders, parseSize } from './helpers/security.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -29,7 +29,7 @@ export class ConsoleLogger implements Logger {
 export interface ServerOptions {
   port: number;
   cors?: CorsOptions;
-  secureHeaders?: SecureHeadersOptions | boolean;
+  security?: SecurityOptions | boolean;
   shutdownTimeout?: number;
   controllers?: any[];
   interceptors?: any[];
@@ -51,6 +51,7 @@ export class Server extends EventEmitter {
   private activeRequests = 0;
   private isShuttingDown = false;
   private nodeServer?: any;
+  private rateLimitStore = new Map<string, { count: number; resetTime: number }>();
   private events: { [K in keyof ServerEvents]?: Set<any> } = {};
   public logger: Logger;
 
@@ -161,22 +162,37 @@ export class Server extends EventEmitter {
     else if ((globalThis as any).Deno) (globalThis as any).Deno.exit(0);
   }
 
-  private async getBody(req: AugmentedRequest) {
+  private async getBody(req: AugmentedRequest, securityConfig?: SecurityOptions) {
     if (req._json !== undefined) return req._json;
-    const raw = await this.getRawBody(req);
+    const raw = await this.getRawBody(req, securityConfig);
     return req._json = JSON.parse(new TextDecoder().decode(raw));
   }
 
-  private async getRawBody(req: AugmentedRequest) {
+  private async getRawBody(req: AugmentedRequest, securityConfig?: SecurityOptions) {
     if (req._raw !== undefined) return req._raw;
-    return req._raw = await req.arrayBuffer();
+    const maxSize = securityConfig?.maxBodySize;
+    if (maxSize !== undefined) {
+      const limit = parseSize(maxSize);
+      const contentLength = req.headers.get('content-length');
+      if (contentLength && parseInt(contentLength, 10) > limit) {
+        throw Object.assign(new Error(`Payload Too Large (limit: ${maxSize})`), { status: 413 });
+      }
+    }
+    const buffer = await req.arrayBuffer();
+    if (maxSize !== undefined) {
+      const limit = parseSize(maxSize);
+      if (buffer.byteLength > limit) {
+        throw Object.assign(new Error(`Payload Too Large (limit: ${maxSize})`), { status: 413 });
+      }
+    }
+    return req._raw = buffer;
   }
 
-  private async resolveParam(p: ParamMetadata, req: AugmentedRequest, ctx: any) {
+  private async resolveParam(p: ParamMetadata, req: AugmentedRequest, ctx: any, securityConfig?: SecurityOptions) {
     let val: any;
     switch (p.source) {
       case 'Param': val = req.params[p.name!]; break;
-      case 'Body': val = await this.getBody(req); break;
+      case 'Body': val = await this.getBody(req, securityConfig); break;
       case 'Query': val = p.name ? req.query[p.name] : req.query; break;
       case 'Header': val = req.headers.get(p.name!); break;
       case 'Headers': val = Object.fromEntries(req.headers.entries()); break;
@@ -234,9 +250,9 @@ export class Server extends EventEmitter {
       return res;
     };
 
-    const applySecureHeaders = (res: Response, config: any): Response => {
+    const applySecurityHeaders = (res: Response, config: any): Response => {
       if (config === undefined) return res;
-      const headers = generateSecureHeaders(config);
+      const headers = generateSecurityHeaders(config);
       try {
         for (const [key, value] of Object.entries(headers)) {
           res.headers.set(key, value);
@@ -258,7 +274,7 @@ export class Server extends EventEmitter {
     if (this.isShuttingDown) {
       let res = new Response('Service Unavailable (Shutting Down)', { status: 503 });
       res = applyCors(res, this.options.cors);
-      res = applySecureHeaders(res, mergeSecureHeadersConfigs([this.options.secureHeaders]));
+      res = applySecurityHeaders(res, mergeSecurityConfigs([this.options.security]));
       return res;
     }
 
@@ -290,8 +306,8 @@ export class Server extends EventEmitter {
       }
 
       const corsConfig = finalMatch ? (finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors) : this.options.cors;
-      const routeSecureHeaders = finalMatch ? finalMatch.metadata.secureHeaders : undefined;
-      const secureHeadersConfig = mergeSecureHeadersConfigs([this.options.secureHeaders, routeSecureHeaders]);
+      const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
+      const securityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
 
       if (method === 'OPTIONS' && corsConfig) {
         const corsRes = handleCors(request, corsConfig);
@@ -306,7 +322,7 @@ export class Server extends EventEmitter {
               duration
             });
           }
-          return applySecureHeaders(corsRes, secureHeadersConfig);
+          return applySecurityHeaders(corsRes, securityConfig);
         }
       }
 
@@ -323,7 +339,7 @@ export class Server extends EventEmitter {
         }
         let res = new Response('Not Found', { status: 404 });
         res = applyCors(res, this.options.cors);
-        res = applySecureHeaders(res, mergeSecureHeadersConfigs([this.options.secureHeaders]));
+        res = applySecurityHeaders(res, mergeSecurityConfigs([this.options.security]));
         return res;
       }
 
@@ -332,13 +348,76 @@ export class Server extends EventEmitter {
       req.query = QueryParser.parse(url.search.startsWith('?') ? url.search.slice(1) : url.search);
       req.globalCors = this.options.cors;
       req.cors = finalMatch.metadata.cors;
-      req.globalSecureHeaders = this.options.secureHeaders;
-      req.secureHeaders = finalMatch.metadata.secureHeaders;
+      req.globalSecurity = this.options.security;
+      req.security = finalMatch.metadata.security;
       req.meta = finalMatch.metadata.meta;
 
-      let response = await this.execute(finalMatch.metadata, req);
+      // Enforce allowedContentTypes
+      if (securityConfig?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+        const contentType = request.headers.get('content-type')?.split(';')[0]?.trim()?.toLowerCase();
+        if (contentType && !securityConfig.allowedContentTypes.some(t => t.toLowerCase() === contentType)) {
+          throw Object.assign(new Error(`Unsupported Media Type: ${contentType}`), { status: 415 });
+        }
+      }
+
+      // Enforce rateLimit
+      if (securityConfig?.rateLimit) {
+        const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+        const limitConfig = securityConfig.rateLimit;
+        const max = limitConfig.max;
+        const windowOption = limitConfig.window || '1m';
+        let windowMs = 60000;
+        if (typeof windowOption === 'number') {
+          windowMs = windowOption;
+        } else if (typeof windowOption === 'string') {
+          const match = windowOption.trim().toLowerCase().match(/^(\d+)(s|m|h)$/);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            const unit = match[2];
+            if (unit === 's') windowMs = val * 1000;
+            else if (unit === 'm') windowMs = val * 60000;
+            else if (unit === 'h') windowMs = val * 3600000;
+          }
+        }
+        
+        const now = Date.now();
+        const storeKey = `${path}:${ip}`;
+        let clientRecord = this.rateLimitStore.get(storeKey);
+        if (!clientRecord || now > clientRecord.resetTime) {
+          clientRecord = { count: 0, resetTime: now + windowMs };
+        }
+        clientRecord.count++;
+        this.rateLimitStore.set(storeKey, clientRecord);
+
+        if (clientRecord.count > max) {
+          throw Object.assign(new Error('Too Many Requests'), { status: 429 });
+        }
+      }
+
+      // Enforce timeout
+      let response: Response;
+      if (securityConfig?.timeout) {
+        const timeoutMs = securityConfig.timeout;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          response = await Promise.race([
+            this.execute(finalMatch.metadata, req, securityConfig),
+            new Promise<never>((_, reject) => {
+              controller.signal.addEventListener('abort', () => {
+                reject(Object.assign(new Error(`Request Timeout (${timeoutMs}ms)`), { status: 408 }));
+              });
+            })
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      } else {
+        response = await this.execute(finalMatch.metadata, req, securityConfig);
+      }
+
       response = applyCors(response, corsConfig);
-      response = applySecureHeaders(response, secureHeadersConfig);
+      response = applySecurityHeaders(response, securityConfig);
       
       if (this.options.logs) {
         const duration = Date.now() - startTime;
@@ -369,15 +448,16 @@ export class Server extends EventEmitter {
       }
       
       const corsConfig = finalMatch ? (finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors) : this.options.cors;
-      const routeSecureHeaders = finalMatch ? finalMatch.metadata.secureHeaders : undefined;
-      const secureHeadersConfig = mergeSecureHeadersConfigs([this.options.secureHeaders, routeSecureHeaders]);
+      const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
+      const errSecurityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
+      const statusCode = err.status || 500;
       
       let res = new Response(JSON.stringify({ success: false, error: err.message }), {
-        status: 500,
+        status: statusCode,
         headers: { 'Content-Type': 'application/json' }
       });
       res = applyCors(res, corsConfig);
-      res = applySecureHeaders(res, secureHeadersConfig);
+      res = applySecurityHeaders(res, errSecurityConfig);
       return res;
     } finally {
       this.activeRequests--;
@@ -385,7 +465,7 @@ export class Server extends EventEmitter {
   };
 
 
-  private async execute(metadata: EndpointMetadata, req: AugmentedRequest): Promise<Response> {
+  private async execute(metadata: EndpointMetadata, req: AugmentedRequest, securityConfig?: SecurityOptions): Promise<Response> {
     return Context.run({ request: req, metadata }, async () => {
       const controller = MetadataStore.getController(metadata.controller);
     if (!controller) throw new Error(`Controller ${metadata.controller} not registered`);
@@ -405,9 +485,9 @@ export class Server extends EventEmitter {
           if (p.source === 'Request' && !p.name && !p.validator) {
             // Special case for backward compat or if it's a positional static arg?
             // Actually, if we have params metadata, we use it.
-            guardArgs.push(await this.resolveParam(p, req, ctx));
+            guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig));
           } else if (p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context') {
-             guardArgs.push(await this.resolveParam(p, req, ctx));
+             guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig));
           } else {
             // Positional static arg from CallExpression (resolver)
             guardArgs.push(g.resolvers[resolverIdx++]);
@@ -423,7 +503,7 @@ export class Server extends EventEmitter {
       // 2. Resolve parameters (Parsing & Validation)
       const args: any[] = [];
       for (const p of metadata.params) {
-        args.push(await this.resolveParam(p, req, ctx));
+        args.push(await this.resolveParam(p, req, ctx, securityConfig));
       }
 
       if (!ctx.success) {
@@ -449,7 +529,7 @@ export class Server extends EventEmitter {
     try {
       return await chain();
     } catch (err: any) {
-      const status = err.code || 500;
+      const status = err.status || err.code || 500;
       return new Response(JSON.stringify(err.data || { success: false, error: err.message }), { 
         status, 
         headers: { "Content-Type": "application/json" } 
