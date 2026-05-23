@@ -101,11 +101,7 @@ describe('Actual Server & Controllers Integration', () => {
     let server: Server;
 
     beforeEach(() => {
-        const store = (globalThis as any)['__WEBERGENCY_SERVER_METADATA_STORE__'];
-        if (store) {
-            store.endpoints = [];
-            store.controllers.clear();
-        }
+        MetadataStore.clear();
         server = new Server({ port: 3000 });
     });
 

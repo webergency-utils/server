@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
   "author": "radixxko",
@@ -38,16 +38,16 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.0.26"
+    "@webergency-utils/typechecker": "file:../typechecker"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "^4.1.6",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.6"
   }
 }

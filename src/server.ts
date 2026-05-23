@@ -36,6 +36,7 @@ export interface ServerOptions {
   guards?: any[];
   logs?: boolean;
   logger?: Logger;
+  module?: any | any[];
 }
 
 export type ServerEvents = {
@@ -61,8 +62,132 @@ export class Server extends EventEmitter {
     this.setupSignals();
   }
 
+  private collectModuleElements(moduleClass: any, activeControllers: Set<string>, visitedModules = new Set<any>()): any {
+    if (!moduleClass) return null;
+
+    let actualModuleClass = moduleClass;
+    let metadata: any = {};
+
+    if (moduleClass && typeof moduleClass === 'object' && 'module' in moduleClass) {
+      actualModuleClass = moduleClass.module;
+      metadata = moduleClass;
+    } else if (moduleClass && typeof moduleClass === 'object' && '__moduleMetadata__' in moduleClass) {
+      metadata = moduleClass.__moduleMetadata__;
+    } else if (moduleClass && typeof moduleClass === 'function') {
+      metadata = moduleClass.__moduleMetadata__ || moduleClass.prototype?.__moduleMetadata__ || {};
+    }
+
+    const moduleName = (actualModuleClass.name && actualModuleClass.name !== 'Object') 
+      ? actualModuleClass.name 
+      : (actualModuleClass.constructor?.name && actualModuleClass.constructor.name !== 'Object' 
+        ? actualModuleClass.constructor.name 
+        : 'DynamicModule');
+
+    let moduleInstance = MetadataStore.getModuleInstance(actualModuleClass);
+    if (!moduleInstance) {
+      moduleInstance = MetadataStore.createModuleInstance(moduleName, actualModuleClass);
+    }
+
+    if (actualModuleClass && (actualModuleClass.__isGlobal__ || moduleClass.__isGlobal__)) {
+      MetadataStore.registerGlobalModule(moduleInstance);
+    }
+
+    if (visitedModules.has(actualModuleClass)) {
+      return moduleInstance;
+    }
+    visitedModules.add(actualModuleClass);
+
+    if (actualModuleClass && actualModuleClass.name) {
+      MetadataStore.registerModule(actualModuleClass.name, actualModuleClass);
+      MetadataStore.registerProvider(actualModuleClass.name, actualModuleClass);
+      moduleInstance.providers.set(actualModuleClass.name, actualModuleClass);
+      MetadataStore.mapClassToModule(actualModuleClass, moduleInstance);
+      MetadataStore.mapTokenToModule(actualModuleClass.name, moduleInstance);
+    }
+
+    // 1. Process providers
+    if (metadata.providers) {
+      for (const provider of metadata.providers) {
+        let token: string;
+        let providerClass: any;
+        if (typeof provider === 'function') {
+          token = provider.name;
+          providerClass = provider;
+        } else if (provider && typeof provider === 'object') {
+          if ('provide' in provider) {
+            token = typeof provider.provide === 'function' ? provider.provide.name : provider.provide;
+            providerClass = provider;
+          } else {
+            token = provider.constructor?.name || 'UnknownProvider';
+            providerClass = provider;
+          }
+        } else {
+          continue;
+        }
+
+        moduleInstance.providers.set(token, providerClass);
+        const actualClass = typeof provider === 'function' ? provider : (provider && typeof provider === 'object' && 'useClass' in provider ? provider.useClass : null);
+        if (actualClass) {
+          MetadataStore.mapClassToModule(actualClass, moduleInstance);
+        }
+        MetadataStore.mapTokenToModule(token, moduleInstance);
+        MetadataStore.registerProvider(token, provider);
+      }
+    }
+
+    // 2. Process controllers
+    if (metadata.controllers) {
+      for (const ctrl of metadata.controllers) {
+        const ctrlName = ctrl.name || ctrl;
+        activeControllers.add(ctrlName);
+        
+        moduleInstance.controllers.set(ctrlName, ctrl);
+        MetadataStore.mapClassToModule(ctrl, moduleInstance);
+        MetadataStore.mapTokenToModule(ctrlName, moduleInstance);
+        MetadataStore.registerController(ctrlName, ctrl);
+      }
+    }
+
+    // 3. Process exports
+    if (metadata.exports) {
+      for (const exp of metadata.exports) {
+        const expName = exp.name || exp;
+        moduleInstance.exports.add(expName);
+      }
+    }
+
+    // 4. Process imports
+    if (metadata.imports) {
+      for (const imp of metadata.imports) {
+        const impInstance = this.collectModuleElements(imp, activeControllers, visitedModules);
+        if (impInstance) {
+          moduleInstance.imports.add(impInstance);
+        }
+      }
+    }
+
+    return moduleInstance;
+  }
+
   private init() {
+    const activeControllers = new Set<string>();
+
+    if (this.options.module) {
+      const modules = Array.isArray(this.options.module) ? this.options.module : [this.options.module];
+      for (const mod of modules) {
+        this.collectModuleElements(mod, activeControllers);
+      }
+    } else if (this.options.controllers) {
+      for (const ctrl of this.options.controllers) {
+        activeControllers.add(ctrl.name || ctrl);
+      }
+    }
+
+    MetadataStore.resolveAll();
     for (const endpoint of MetadataStore.getEndpoints()) {
+      if (activeControllers.size > 0 && !activeControllers.has(endpoint.controller)) {
+        continue;
+      }
       this.router.add(endpoint);
       if (this.options.logs) {
         this.logger.info(
@@ -101,7 +226,7 @@ export class Server extends EventEmitter {
         type: 'server_shutdown',
         reason: signal
       });
-      this.shutdown();
+      this.shutdown(signal);
     };
 
     if (typeof process !== 'undefined') {
@@ -114,10 +239,13 @@ export class Server extends EventEmitter {
     }
   }
 
-  public async shutdown() {
+  public async shutdown(signal?: string) {
     if (this.isShuttingDown) return;
     this.isShuttingDown = true;
     this.internalEmit('beforeShutdown');
+
+    await MetadataStore.invokeHook('onModuleDestroy');
+    await MetadataStore.invokeHook('beforeApplicationShutdown', signal);
 
     if (this.nodeServer) {
       this.nodeServer.close(() => {
@@ -152,6 +280,8 @@ export class Server extends EventEmitter {
     };
 
     await checkActive();
+    await MetadataStore.invokeHook('onApplicationShutdown', signal);
+
     this.logger.info('Shutdown complete. Goodbye!', {
       type: 'server_shutdown',
       reason: 'complete'
@@ -188,7 +318,7 @@ export class Server extends EventEmitter {
     return req._raw = buffer;
   }
 
-  private async resolveParam(p: ParamMetadata, req: AugmentedRequest, ctx: any, securityConfig?: SecurityOptions) {
+  private async resolveParam(p: ParamMetadata, req: AugmentedRequest, ctx: any, securityConfig?: SecurityOptions, contextModule?: any) {
     let val: any;
     switch (p.source) {
       case 'Param': val = req.params[p.name!]; break;
@@ -203,6 +333,7 @@ export class Server extends EventEmitter {
       case 'Hostname': val = new URL(req.url).hostname; break;
       case 'Path': val = new URL(req.url).pathname; break;
       case 'Context': val = Context.get(); break;
+      case 'Inject': val = MetadataStore.getInjectable(p.name!, contextModule); break;
     }
 
     if (p.validator && typeof p.validator === 'function') {
@@ -466,8 +597,9 @@ export class Server extends EventEmitter {
 
 
   private async execute(metadata: EndpointMetadata, req: AugmentedRequest, securityConfig?: SecurityOptions): Promise<Response> {
-    return Context.run({ request: req, metadata }, async () => {
-      const controller = MetadataStore.getController(metadata.controller);
+    return Context.run({ request: req, metadata, requestInstances: new Map<string, any>() }, async () => {
+      const controllerModule = MetadataStore.getTokenModule(metadata.controller);
+      const controller = MetadataStore.getController(metadata.controller, controllerModule);
     if (!controller) throw new Error(`Controller ${metadata.controller} not registered`);
 
     const ctx = { success: true, errors: [], mode: "strict" };
@@ -475,7 +607,8 @@ export class Server extends EventEmitter {
     const finalHandler = async () => {
       // 1. Run Guards FIRST (Security gate)
       for (const g of metadata.guards) {
-        const guardInstance = g.type === 'class' ? MetadataStore.getGuard(g.name) : controller;
+        const guardModule = g.type === 'class' ? MetadataStore.getTokenModule(g.name) : controllerModule;
+        const guardInstance = g.type === 'class' ? MetadataStore.getGuard(g.name, guardModule) : controller;
         const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
         
         // Resolve Guard Parameters
@@ -485,9 +618,9 @@ export class Server extends EventEmitter {
           if (p.source === 'Request' && !p.name && !p.validator) {
             // Special case for backward compat or if it's a positional static arg?
             // Actually, if we have params metadata, we use it.
-            guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig));
-          } else if (p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context') {
-             guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig));
+            guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig, guardModule));
+          } else if (p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject') {
+             guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig, guardModule));
           } else {
             // Positional static arg from CallExpression (resolver)
             guardArgs.push(g.resolvers[resolverIdx++]);
@@ -503,7 +636,7 @@ export class Server extends EventEmitter {
       // 2. Resolve parameters (Parsing & Validation)
       const args: any[] = [];
       for (const p of metadata.params) {
-        args.push(await this.resolveParam(p, req, ctx, securityConfig));
+        args.push(await this.resolveParam(p, req, ctx, securityConfig, controllerModule));
       }
 
       if (!ctx.success) {
@@ -543,6 +676,7 @@ export class Server extends EventEmitter {
       await loadAutoMetadata();
     }
     this.init();
+    await MetadataStore.invokeHook('onModuleInit');
 
     const { port } = this.options;
     const runtime = this.detectRuntime();
@@ -559,6 +693,7 @@ export class Server extends EventEmitter {
         runtime: 'Bun',
         port
       });
+      await MetadataStore.invokeHook('onApplicationBootstrap');
       this.internalEmit('start', port);
     } 
     else if (runtime === 'Deno') {
@@ -568,10 +703,12 @@ export class Server extends EventEmitter {
         runtime: 'Deno',
         port
       });
+      await MetadataStore.invokeHook('onApplicationBootstrap');
       this.internalEmit('start', port);
     } 
     else {
       await this.startNode(port);
+      await MetadataStore.invokeHook('onApplicationBootstrap');
       this.internalEmit('start', port);
     }
   }
@@ -582,7 +719,7 @@ export class Server extends EventEmitter {
     return 'Node';
   }
 
-  private async startNode(port: number) {
+  private async startNode(port: number): Promise<void> {
     const { createServer } = await import('http');
     this.nodeServer = createServer(async (req, res) => {
       const protocol = (req.socket as any).encrypted ? 'https' : 'http';
@@ -603,11 +740,14 @@ export class Server extends EventEmitter {
         Readable.fromWeb(response.body).pipe(res);
       } else res.end();
     });
-    this.nodeServer.listen(port, () => {
-      this.logger.info(`Node.js bridge server running at http://localhost:${port}`, {
-        type: 'server_start',
-        runtime: 'Node',
-        port
+    return new Promise<void>((resolve) => {
+      this.nodeServer.listen(port, () => {
+        this.logger.info(`Node.js bridge server running at http://localhost:${port}`, {
+          type: 'server_start',
+          runtime: 'Node',
+          port
+        });
+        resolve();
       });
     });
   }

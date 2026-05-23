@@ -4,14 +4,7 @@ import { MetadataStore } from '../core/metadata.js';
 
 describe('CORS Integration & Runtime Tests', () => {
   beforeEach(() => {
-    // Reset MetadataStore for each test
-    const store = (globalThis as any)['__WEBERGENCY_SERVER_METADATA_STORE__'];
-    if (store) {
-      store.endpoints = [];
-      store.controllers.clear();
-      store.guards.clear();
-      store.interceptors.clear();
-    }
+    MetadataStore.clear();
   });
 
   it('should support global server-level CORS options', async () => {

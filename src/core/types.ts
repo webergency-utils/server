@@ -3,7 +3,7 @@ export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 export type ValidationMode = 'strict' | 'relaxed' | 'strip';
 
 export interface ParamMetadata {
-  source: 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context';
+  source: 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject';
   name?: string;
   validator?: string | Validator;
   mode?: ValidationMode;

@@ -66,7 +66,8 @@ describe('TypeScript Compiler Plugin Transformer', () => {
     expect(compiled).toContain("const __val_");
 
     // Should register controller
-    expect(compiled).toContain('__server_metadata_store.controllers.set("UserController", new UserController())');
+    expect(compiled).toContain('__server_metadata_store.providers.set("UserController", UserController)');
+    expect(compiled).toContain('__server_metadata_store.controllerClasses.add("UserController")');
 
     // Should register GET /users/:id endpoint
     expect(compiled).toContain('httpMethod: "GET"');

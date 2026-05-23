@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { Server } from '../../server.js';
+import { MetadataStore } from '../../core/metadata.js';
 import { runAot } from './build.js';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,11 +13,7 @@ describe('Actual AOT Integration Test', () => {
 
     beforeAll(async () => {
         const manifestPath = runAot();
-        const store = (globalThis as any)['__WEBERGENCY_SERVER_METADATA_STORE__'];
-        if (store) {
-            store.endpoints = [];
-            store.controllers.clear();
-        }
+        MetadataStore.clear();
         await import(`file://${manifestPath}?t=${Date.now()}`);
         server = new Server({ port: 3000 });
         (server as any).init();
@@ -43,8 +40,9 @@ describe('Actual AOT Integration Test', () => {
             body: JSON.stringify({ name: 'John', age: 30, unknown: 'prop' }),
             headers: { 'Content-Type': 'application/json' }
         }));
-        expect(res.status).toBe(200);
-        const data = await res.json();
+        const bodyText = await res.text();
+        expect(res.status, bodyText).toBe(200);
+        const data = JSON.parse(bodyText);
         expect(data.data.unknown).toBeUndefined();
     });
 
@@ -362,6 +360,63 @@ describe('Actual AOT Integration Test', () => {
             const res2 = await server.fetch(new Request('http://localhost/inherited/override'));
             expect(res2.status).toBe(200);
             expect(res2.headers.get('X-Frame-Options')).toBeNull();
+        });
+
+        describe('Dependency Injection (DI) system', () => {
+            it('should resolve deep nested constructor, property, and inherited injections', async () => {
+                const res = await server.fetch(new Request('http://localhost/di/test'));
+                const bodyText = await res.text();
+                expect(res.status, `Response error: ${bodyText}`).toBe(200);
+                const data = JSON.parse(bodyText);
+                expect(data.msg).toBe('[LOG] DB URL is mongodb://localhost:27017');
+                expect(data.dbUrl).toBe('mongodb://localhost:27017');
+                expect(data.logged).toBe('[LOG] hello');
+            });
+
+            it('should resolve parameter injection in endpoint handler method', async () => {
+                const res = await server.fetch(new Request('http://localhost/di/param-inject'));
+                const bodyText = await res.text();
+                expect(res.status, `Response error: ${bodyText}`).toBe(200);
+                const data = JSON.parse(bodyText);
+                expect(data.dbUrl).toBe('mongodb://localhost:27017');
+            });
+
+            it('should resolve DI constructor, property, and parameter injection in Guard', async () => {
+                const res = await server.fetch(new Request('http://localhost/di/guarded'));
+                const bodyText = await res.text();
+                expect(res.status, `Response error: ${bodyText}`).toBe(200);
+                const data = JSON.parse(bodyText);
+                expect(data.success).toBe(true);
+            });
+
+            it('should resolve circular dependency using lazy proxies', () => {
+                // Register CircA and CircB which depend on each other
+                const CircA = class CircA {
+                    static __injections__ = {
+                        constructorDeps: ['CircB'],
+                        propertyDeps: {}
+                    };
+                    constructor(public b: any) {}
+                    getValue() { return 'A'; }
+                };
+                const CircB = class CircB {
+                    static __injections__ = {
+                        constructorDeps: ['CircA'],
+                        propertyDeps: {}
+                    };
+                    constructor(public a: any) {}
+                    getValue() { return 'B'; }
+                };
+
+                MetadataStore.registerProvider('CircA', CircA);
+                MetadataStore.registerProvider('CircB', CircB);
+
+                const circA = MetadataStore.resolve('CircA');
+                expect(circA).toBeDefined();
+                expect(circA.b).toBeDefined();
+                expect(circA.b.a).toBeDefined();
+                expect(circA.b.a.getValue()).toBe('A');
+            });
         });
     });
 });

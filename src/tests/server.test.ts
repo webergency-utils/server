@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Server } from '../server.js';
+import { Scope } from '../decorators.js';
 import { MetadataStore } from '../core/metadata.js';
 import { validators } from '@webergency-utils/typechecker';
 import { Context } from '../core/context.js';
@@ -11,14 +12,7 @@ vi.mock('http', () => ({
 
 describe('Server & Metadata', () => {
     beforeEach(() => {
-        // Reset MetadataStore for each test
-        const store = (globalThis as any)['__WEBERGENCY_SERVER_METADATA_STORE__'];
-        if (store) {
-            store.endpoints = [];
-            store.controllers.clear();
-            store.guards.clear();
-            store.interceptors.clear();
-        }
+        MetadataStore.clear();
     });
 
     describe('MetadataStore', () => {
@@ -573,6 +567,545 @@ describe('Server & Metadata', () => {
             expect(endLog.ctx.duration).toBeGreaterThanOrEqual(0);
         });
     });
+
+    describe('Module System', () => {
+        it('should traverse a module tree, register controllers/providers, and map routes', async () => {
+            const logs: any[] = [];
+            const logger = {
+                info: (msg: any, ctx: any) => logs.push({ msg, ctx }),
+                warn: (msg: any, ctx: any) => {},
+                error: (msg: any, ctx: any) => {},
+                debug: (msg: any, ctx: any) => {},
+            };
+
+            class ServiceA {
+                getValue() { return 'A'; }
+            }
+
+            class ServiceB {
+                constructor(public a: ServiceA) {}
+                getValue() { return this.a.getValue() + 'B'; }
+            }
+
+            class ServiceC {
+                getValue() { return 'C'; }
+            }
+
+            class ChildController {
+                constructor(public b: ServiceB) {}
+                async hello() {
+                    return this.b.getValue();
+                }
+            }
+
+            class ParentController {
+                constructor(public c: ServiceC) {}
+                async greet() {
+                    return this.c.getValue();
+                }
+            }
+
+            // Set up injections metadata manually as if compile-time AOT generated them
+            (ServiceB as any).__injections__ = { constructorDeps: ['ServiceA'] };
+            (ChildController as any).__injections__ = { constructorDeps: ['ServiceB'] };
+            (ParentController as any).__injections__ = { constructorDeps: ['ServiceC'] };
+
+            // Define modules
+            const SubModule = {
+                __moduleMetadata__: {
+                    providers: [ServiceA, ServiceB],
+                    controllers: [ChildController]
+                }
+            };
+
+            const RootModule = {
+                __moduleMetadata__: {
+                    imports: [SubModule],
+                    providers: [ServiceC],
+                    controllers: [ParentController]
+                }
+            };
+
+            // Register endpoints as if AOT did it
+            MetadataStore.registerEndpoint({
+                controller: 'ChildController', methodName: 'hello', httpMethod: 'GET', path: '/child', params: [], guards: [], interceptors: [], meta: {}
+            });
+            MetadataStore.registerEndpoint({
+                controller: 'ParentController', methodName: 'greet', httpMethod: 'GET', path: '/parent', params: [], guards: [], interceptors: [], meta: {}
+            });
+            MetadataStore.registerEndpoint({
+                controller: 'OtherController', methodName: 'ignored', httpMethod: 'GET', path: '/ignored', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3006, module: RootModule, logger, logs: false });
+            (server as any).init();
+
+            // Verify DI containers resolved correctly
+            const parentInst = MetadataStore.getController('ParentController');
+            const childInst = MetadataStore.getController('ChildController');
+
+            expect(parentInst).toBeDefined();
+            expect(parentInst.c.getValue()).toBe('C');
+
+            expect(childInst).toBeDefined();
+            expect(childInst.b.getValue()).toBe('AB');
+
+            // Verify routes are registered
+            const res1 = await server.fetch(new Request('http://localhost/parent'));
+            expect(await res1.text()).toBe('C');
+
+            const res2 = await server.fetch(new Request('http://localhost/child'));
+            expect(await res2.text()).toBe('AB');
+
+            // Route from OtherController should not be registered (route filtering)
+            const res3 = await server.fetch(new Request('http://localhost/ignored'));
+            expect(res3.status).toBe(404);
+        });
+
+        it('should support dynamic modules', async () => {
+            class ConfigService {
+                constructor() {}
+                get() { return 'dynamic-config'; }
+            }
+
+            class DynamicController {
+                constructor(public config: ConfigService) {}
+                async handle() { return this.config.get(); }
+            }
+            (DynamicController as any).__injections__ = { constructorDeps: ['ConfigService'] };
+
+            // Dynamic module mimicking NestJS DynamicModule
+            const DynamicModule = {
+                module: class DynamicModule {},
+                providers: [ConfigService],
+                controllers: [DynamicController]
+            };
+
+            const RootModule = {
+                __moduleMetadata__: {
+                    imports: [DynamicModule]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'DynamicController', methodName: 'handle', httpMethod: 'GET', path: '/dynamic', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3007, module: RootModule });
+            (server as any).init();
+
+            const ctrl = MetadataStore.getController('DynamicController');
+            expect(ctrl).toBeDefined();
+            expect(ctrl.config.get()).toBe('dynamic-config');
+
+            const res = await server.fetch(new Request('http://localhost/dynamic'));
+            expect(await res.text()).toBe('dynamic-config');
+        });
+
+        it('should handle circular module dependencies gracefully', async () => {
+            const ModuleA: any = {
+                __moduleMetadata__: {}
+            };
+            const ModuleB: any = {
+                __moduleMetadata__: {
+                    imports: [ModuleA]
+                }
+            };
+            ModuleA.__moduleMetadata__.imports = [ModuleB];
+
+            const server = new Server({ port: 3008, module: ModuleA });
+            expect(() => (server as any).init()).not.toThrow();
+        });
+
+        it('should support multiple root modules', async () => {
+            class ServiceX {
+                getValue() { return 'X'; }
+            }
+            class ServiceY {
+                getValue() { return 'Y'; }
+            }
+            class ControllerX {
+                constructor(public x: ServiceX) {}
+                async hello() { return this.x.getValue(); }
+            }
+            class ControllerY {
+                constructor(public y: ServiceY) {}
+                async hello() { return this.y.getValue(); }
+            }
+            (ControllerX as any).__injections__ = { constructorDeps: ['ServiceX'] };
+            (ControllerY as any).__injections__ = { constructorDeps: ['ServiceY'] };
+
+            const ModuleX = {
+                __moduleMetadata__: {
+                    providers: [ServiceX],
+                    controllers: [ControllerX]
+                }
+            };
+            const ModuleY = {
+                __moduleMetadata__: {
+                    providers: [ServiceY],
+                    controllers: [ControllerY]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'ControllerX', methodName: 'hello', httpMethod: 'GET', path: '/x', params: [], guards: [], interceptors: [], meta: {}
+            });
+            MetadataStore.registerEndpoint({
+                controller: 'ControllerY', methodName: 'hello', httpMethod: 'GET', path: '/y', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3009, module: [ModuleX, ModuleY] });
+            (server as any).init();
+
+            const resX = await server.fetch(new Request('http://localhost/x'));
+            expect(await resX.text()).toBe('X');
+
+            const resY = await server.fetch(new Request('http://localhost/y'));
+            expect(await resY.text()).toBe('Y');
+        });
+
+        it('should enforce module encapsulation (fail if provider is not exported)', async () => {
+            class HiddenService {
+                getValue() { return 'hidden'; }
+            }
+            class ConsumerController {
+                constructor(public hidden: HiddenService) {}
+                async hello() { return this.hidden.getValue(); }
+            }
+            (ConsumerController as any).__injections__ = { constructorDeps: ['HiddenService'] };
+
+            const ModuleA = {
+                __moduleMetadata__: {
+                    providers: [HiddenService]
+                }
+            };
+            const RootModule = {
+                __moduleMetadata__: {
+                    imports: [ModuleA],
+                    controllers: [ConsumerController]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'ConsumerController', methodName: 'hello', httpMethod: 'GET', path: '/consume', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3010, module: RootModule });
+            expect(() => (server as any).init()).toThrow(
+                /No provider registered for token: HiddenService in module DynamicModule/
+            );
+        });
+
+        it('should support module re-exports', async () => {
+            class SharedService {
+                getValue() { return 'shared'; }
+            }
+            class ConsumerController {
+                constructor(public shared: SharedService) {}
+                async hello() { return this.shared.getValue(); }
+            }
+            (ConsumerController as any).__injections__ = { constructorDeps: ['SharedService'] };
+
+            const ModuleC = {
+                __moduleMetadata__: {
+                    providers: [SharedService],
+                    exports: [SharedService]
+                }
+            };
+            const ModuleB = {
+                __moduleMetadata__: {
+                    imports: [ModuleC],
+                    exports: [ModuleC]
+                }
+            };
+            const RootModule = {
+                __moduleMetadata__: {
+                    imports: [ModuleB],
+                    controllers: [ConsumerController]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'ConsumerController', methodName: 'hello', httpMethod: 'GET', path: '/reexport', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3011, module: RootModule });
+            (server as any).init();
+
+            const res = await server.fetch(new Request('http://localhost/reexport'));
+            expect(await res.text()).toBe('shared');
+        });
+
+        it('should support circular dependency injection in modules', async () => {
+            class ServiceA {
+                static __injections__ = { constructorDeps: ['ServiceB'], propertyDeps: {} };
+                constructor(public b: any) {}
+                hello() { return 'A' + this.b.getValue(); }
+                getValue() { return 'A'; }
+            }
+            class ServiceB {
+                static __injections__ = { constructorDeps: ['ServiceA'], propertyDeps: {} };
+                constructor(public a: any) {}
+                hello() { return 'B' + this.a.getValue(); }
+                getValue() { return 'B'; }
+            }
+            class CircularController {
+                constructor(public a: ServiceA) {}
+                async hello() { return this.a.hello(); }
+            }
+            (CircularController as any).__injections__ = { constructorDeps: ['ServiceA'] };
+
+            const CircularModule = {
+                __moduleMetadata__: {
+                    providers: [ServiceA, ServiceB],
+                    controllers: [CircularController]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'CircularController', methodName: 'hello', httpMethod: 'GET', path: '/circ', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3012, module: CircularModule });
+            (server as any).init();
+
+            const res = await server.fetch(new Request('http://localhost/circ'));
+            expect(await res.text()).toBe('AB');
+
+            const ctrl = MetadataStore.getController('CircularController');
+            expect(ctrl.a.b.hello()).toBe('BA');
+        });
+
+        it('should support @Global() modules', async () => {
+            class GlobalService {
+                getValue() { return 'global'; }
+            }
+            class ConsumerController {
+                constructor(public glob: GlobalService) {}
+                async hello() { return this.glob.getValue(); }
+            }
+            (ConsumerController as any).__injections__ = { constructorDeps: ['GlobalService'] };
+
+            const GlobalModule = {
+                __isGlobal__: true,
+                __moduleMetadata__: {
+                    providers: [GlobalService],
+                    exports: [GlobalService]
+                }
+            };
+            const RootModule = {
+                __moduleMetadata__: {
+                    imports: [GlobalModule],
+                    controllers: []
+                }
+            };
+            const ConsumerModule = {
+                __moduleMetadata__: {
+                    controllers: [ConsumerController]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'ConsumerController', methodName: 'hello', httpMethod: 'GET', path: '/consume-global', params: [], guards: [], interceptors: [], meta: {}
+            });
+
+            const server = new Server({ port: 3013, module: [RootModule, ConsumerModule] });
+            (server as any).init();
+
+            const res = await server.fetch(new Request('http://localhost/consume-global'));
+            expect(await res.text()).toBe('global');
+        });
+    });
+
+    describe('Injection Scopes', () => {
+        beforeEach(() => {
+            MetadataStore.clear();
+        });
+
+        it('should resolve TRANSIENT provider with new instance every time', () => {
+            let instanceCount = 0;
+            class TransientService {
+                static __scope__ = Scope.TRANSIENT;
+                public id: number;
+                constructor() {
+                    instanceCount++;
+                    this.id = instanceCount;
+                }
+            }
+            MetadataStore.registerProvider('TransientService', TransientService);
+
+            const inst1 = MetadataStore.resolve('TransientService');
+            const inst2 = MetadataStore.resolve('TransientService');
+
+            expect(inst1).toBeInstanceOf(TransientService);
+            expect(inst2).toBeInstanceOf(TransientService);
+            expect(inst1.id).toBe(1);
+            expect(inst2.id).toBe(2);
+            expect(inst1).not.toBe(inst2);
+        });
+
+        it('should propagate REQUEST scope to dependent classes and resolve per-request', async () => {
+            let reqServiceInstCount = 0;
+            class RequestService {
+                static __scope__ = Scope.REQUEST;
+                public id: number;
+                constructor() {
+                    reqServiceInstCount++;
+                    this.id = reqServiceInstCount;
+                }
+            }
+
+            class DependentService {
+                static __injections__ = { constructorDeps: ['RequestService'], propertyDeps: {} };
+                constructor(public reqService: RequestService) {}
+            }
+
+            class RequestController {
+                static __injections__ = { constructorDeps: ['DependentService'], propertyDeps: {} };
+                constructor(public depService: DependentService) {}
+                async hello() {
+                    return {
+                        reqId: this.depService.reqService.id,
+                        depServiceType: typeof this.depService
+                    };
+                }
+            }
+
+            const ScopeModule = {
+                __moduleMetadata__: {
+                    providers: [RequestService, DependentService],
+                    controllers: [RequestController]
+                }
+            };
+
+            MetadataStore.registerEndpoint({
+                controller: 'RequestController',
+                methodName: 'hello',
+                httpMethod: 'GET',
+                path: '/scope-test',
+                params: [],
+                guards: [],
+                interceptors: [],
+                meta: {}
+            });
+
+            const server = new Server({ port: 3014, module: ScopeModule });
+            (server as any).init();
+
+            // Resolve outside request context should throw
+            expect(() => MetadataStore.resolve('RequestService')).toThrow(/Cannot resolve request-scoped provider/);
+
+            // Fetch request 1
+            const res1 = await server.fetch(new Request('http://localhost/scope-test'));
+            const data1 = (await res1.json()) as any;
+            expect(data1.reqId).toBe(1);
+
+            // Fetch request 2
+            const res2 = await server.fetch(new Request('http://localhost/scope-test'));
+            const data2 = (await res2.json()) as any;
+            expect(data2.reqId).toBe(2);
+        });
+    });
+
+    describe('Lifecycle Hooks', () => {
+        beforeEach(() => {
+            MetadataStore.clear();
+        });
+
+        it('should call all lifecycle hooks in sequence during start and shutdown', async () => {
+            const sequence: string[] = [];
+
+            class HookService {
+                async onModuleInit() {
+                    sequence.push('provider:onModuleInit');
+                }
+                async onApplicationBootstrap() {
+                    sequence.push('provider:onApplicationBootstrap');
+                }
+                async onModuleDestroy() {
+                    sequence.push('provider:onModuleDestroy');
+                }
+                async beforeApplicationShutdown(signal?: string) {
+                    sequence.push(`provider:beforeApplicationShutdown:${signal}`);
+                }
+                async onApplicationShutdown(signal?: string) {
+                    sequence.push(`provider:onApplicationShutdown:${signal}`);
+                }
+            }
+
+            class HookController {
+                async onModuleInit() {
+                    sequence.push('controller:onModuleInit');
+                }
+                async onApplicationBootstrap() {
+                    sequence.push('controller:onApplicationBootstrap');
+                }
+                async onModuleDestroy() {
+                    sequence.push('controller:onModuleDestroy');
+                }
+                async beforeApplicationShutdown(signal?: string) {
+                    sequence.push(`controller:beforeApplicationShutdown:${signal}`);
+                }
+                async onApplicationShutdown(signal?: string) {
+                    sequence.push(`controller:onApplicationShutdown:${signal}`);
+                }
+            }
+
+            class HookModule {
+                static __moduleMetadata__ = {
+                    providers: [HookService],
+                    controllers: [HookController]
+                };
+                async onModuleInit() {
+                    sequence.push('module:onModuleInit');
+                }
+                async onApplicationBootstrap() {
+                    sequence.push('module:onApplicationBootstrap');
+                }
+                async onModuleDestroy() {
+                    sequence.push('module:onModuleDestroy');
+                }
+                async beforeApplicationShutdown(signal?: string) {
+                    sequence.push(`module:beforeApplicationShutdown:${signal}`);
+                }
+                async onApplicationShutdown(signal?: string) {
+                    sequence.push(`module:onApplicationShutdown:${signal}`);
+                }
+            }
+
+            const server = new Server({ port: 3015, module: HookModule });
+            
+            // Mock exit to prevent process from dying
+            const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { return undefined as never; });
+
+            // Start the server
+            await server.start();
+
+            expect(sequence).toContain('provider:onModuleInit');
+            expect(sequence).toContain('controller:onModuleInit');
+            expect(sequence).toContain('module:onModuleInit');
+            expect(sequence).toContain('provider:onApplicationBootstrap');
+            expect(sequence).toContain('controller:onApplicationBootstrap');
+            expect(sequence).toContain('module:onApplicationBootstrap');
+
+            // Shutdown the server
+            await server.shutdown('SIGINT');
+
+            expect(sequence).toContain('provider:onModuleDestroy');
+            expect(sequence).toContain('controller:onModuleDestroy');
+            expect(sequence).toContain('module:onModuleDestroy');
+            expect(sequence).toContain('provider:beforeApplicationShutdown:SIGINT');
+            expect(sequence).toContain('controller:beforeApplicationShutdown:SIGINT');
+            expect(sequence).toContain('module:beforeApplicationShutdown:SIGINT');
+            expect(sequence).toContain('provider:onApplicationShutdown:SIGINT');
+            expect(sequence).toContain('controller:onApplicationShutdown:SIGINT');
+            expect(sequence).toContain('module:onApplicationShutdown:SIGINT');
+
+            exitSpy.mockRestore();
+        });
+    });
 });
+
 
 

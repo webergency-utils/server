@@ -1,25 +1,34 @@
 import { MetadataStore } from '@webergency-utils/server';
 import { validators } from '@webergency-utils/typechecker';
 import { isEvenNumber } from './controllers.js';
-import { TypeSafetyController } from './controllers.js';
-import { TagParityController } from './controllers.js';
-import { SecureController } from './controllers.js';
-import { BaseController } from './controllers.js';
-import { InheritedController } from './controllers.js';
+import { DiGuard } from './controllers.compiled.js';
+import { TypeSafetyController } from './controllers.compiled.js';
+import { TagParityController } from './controllers.compiled.js';
+import { SecureController } from './controllers.compiled.js';
+import { BaseController } from './controllers.compiled.js';
+import { InheritedController } from './controllers.compiled.js';
+import { DiTestController } from './controllers.compiled.js';
+import { ConfigService } from './controllers.compiled.js';
+import { DatabaseService } from './controllers.compiled.js';
+import { LoggerService } from './controllers.compiled.js';
+import { BaseService } from './controllers.compiled.js';
+import { ChildService } from './controllers.compiled.js';
 
 // --- EXTERNAL MANIFESTS ---
 
 // --- SINGLETONS ---
-const _instance_TypeSafetyController = new TypeSafetyController();
-MetadataStore.registerController('TypeSafetyController', _instance_TypeSafetyController);
-const _instance_TagParityController = new TagParityController();
-MetadataStore.registerController('TagParityController', _instance_TagParityController);
-const _instance_SecureController = new SecureController();
-MetadataStore.registerController('SecureController', _instance_SecureController);
-const _instance_BaseController = new BaseController();
-MetadataStore.registerController('BaseController', _instance_BaseController);
-const _instance_InheritedController = new InheritedController();
-MetadataStore.registerController('InheritedController', _instance_InheritedController);
+MetadataStore.registerGuard('DiGuard', DiGuard);
+MetadataStore.registerController('TypeSafetyController', TypeSafetyController);
+MetadataStore.registerController('TagParityController', TagParityController);
+MetadataStore.registerController('SecureController', SecureController);
+MetadataStore.registerController('BaseController', BaseController);
+MetadataStore.registerController('InheritedController', InheritedController);
+MetadataStore.registerController('DiTestController', DiTestController);
+MetadataStore.registerProvider('ConfigService', ConfigService);
+MetadataStore.registerProvider('DatabaseService', DatabaseService);
+MetadataStore.registerProvider('LoggerService', LoggerService);
+MetadataStore.registerProvider('BaseService', BaseService);
+MetadataStore.registerProvider('ChildService', ChildService);
 
 // --- VALIDATORS ---
 var __val_473287f8298dba71 = validators.string;
@@ -148,11 +157,7 @@ var __val_5c5ed695091ba342 = (v, path, ctx) => {
     return data;
 };
 
-var __val_3822c46f03d891bb = (v, path, ctx) => validators.union(v, path, ctx, [__val_2258654cc0f69d37, __val_5c5ed695091ba342]);
-
-var __val_2d1db52869bf4329 = (v, path, ctx) => validators.literal(v, path, ctx, "active");
-
-var __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, "inactive");
+var __val_a41824426b6b1ede = (v, path, ctx) => validators.union(v, path, ctx, [__val_2258654cc0f69d37, __val_5c5ed695091ba342]);
 
 var __val_55e3fcb8d722f805 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["reason"], "{ reason: string; }"))
@@ -182,13 +187,21 @@ var __val_55e3fcb8d722f805 = (v, path, ctx) => {
     return data;
 };
 
-var __val_857204a536cb022c = (v, path, ctx) => validators.union(v, path, ctx, [__val_2d1db52869bf4329, __val_88e643147651d549, __val_55e3fcb8d722f805]);
+var __val_2d1db52869bf4329 = (v, path, ctx) => validators.literal(v, path, ctx, "active");
+
+var __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, "inactive");
+
+var __val_857204a536cb022c = (v, path, ctx) => validators.union(v, path, ctx, [__val_55e3fcb8d722f805, __val_2d1db52869bf4329, __val_88e643147651d549]);
 
 var __val_affb28566d707e35 = (v, path, ctx) => validators.union(v, path, ctx, [__val_473287f8298dba71, __val_12886f9d00055adf]);
 
 var __val_8c1c1b2d325f9de6 = (v, path, ctx) => validators.array(v, path, ctx, __val_affb28566d707e35);
 
-var __val_ee0036d6218e9d04 = (v, path, ctx) => {
+var __val_eb045d78d2731073 = validators.undefined;
+
+var __val_ca383f8818520f0b = (v, path, ctx) => validators.union(v, path, ctx, [__val_eb045d78d2731073, __val_04c78f82f98a8cf4]);
+
+var __val_68aecd6fa646cade = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["id", "user", "tags"], "Nested"))
         return v;
     let data = v;
@@ -212,7 +225,7 @@ var __val_ee0036d6218e9d04 = (v, path, ctx) => {
     }
     validators.props(v, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
-        ["user", true, __val_04c78f82f98a8cf4],
+        ["user", true, __val_ca383f8818520f0b],
         ["tags", false, __val_e5da2f9fabafe20e]
     ]);
     return data;
@@ -293,9 +306,9 @@ var __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, 
 
 var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
 
-var __val_f9834a172fd7d90a = validators.date;
+var __val_913d6d1b0acb38ac = validators.date;
 
-var __val_5951b2b17cbc4b1f = validators.regexp;
+var __val_3ab6837d7d6b0179 = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -578,7 +591,7 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Body',
 			name: '',
-			validator: __val_3822c46f03d891bb,
+			validator: __val_a41824426b6b1ede,
 			mode: 'strip'
 		}
 	],
@@ -632,7 +645,7 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Body',
 			name: '',
-			validator: __val_ee0036d6218e9d04,
+			validator: __val_68aecd6fa646cade,
 			mode: 'strip'
 		}
 	],
@@ -713,12 +726,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_f9834a172fd7d90a
+			validator: __val_913d6d1b0acb38ac
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_5951b2b17cbc4b1f
+			validator: __val_3ab6837d7d6b0179
 		},
 		{
 			source: 'Query',
@@ -965,5 +978,58 @@ MetadataStore.registerEndpoint({
 	security: {
 		frameguard: false
 	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'DiTestController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/di/test',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'DiTestController',
+	methodName: 'paramInject',
+	httpMethod: 'GET',
+	path: '/di/param-inject',
+	params: [
+		{
+			source: 'Inject',
+			name: 'DatabaseService',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'DiTestController',
+	methodName: 'guarded',
+	httpMethod: 'GET',
+	path: '/di/guarded',
+	params: [],
+	guards: [
+		{
+			type: 'class',
+			name: 'DiGuard',
+			resolvers: [],
+			params: [
+				{
+					source: 'Inject',
+					name: 'DatabaseService',
+					validator: ''
+				}
+			],
+			isAsync: false
+		}
+	],
+	interceptors: [],
+	meta: {}
 });
 

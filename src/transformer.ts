@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import * as path from 'path';
 import * as fs from 'fs';
-import { buildValidator, generateHash } from '../../typechecker/src/engine/resolver.js';
+import { buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
 
 const HTTP_METHOD_DECORATORS = ['Get', 'Post', 'Put', 'Delete', 'Patch'];
 
@@ -23,23 +23,27 @@ const PARAM_DECORATORS: Record<string, string> = {
 };
 
 export interface ProjectRegistry {
+  controllers: Map<string, { path: string; injections: Map<string, string> }>;
+  providers: Map<string, { path: string }>;
+  modules: Map<string, { path: string }>;
+  guards: Map<string, { path: string; params?: any[] }>;
+  interceptors: Map<string, { path: string }>;
   endpoints: any[];
   validators: Map<string, ts.Expression>;
   requiredUtils: Set<string>;
-  controllers: Map<string, { path: string, injections: Map<string, string> }>;
-  guards: Map<string, { path: string, params: any[] }>;
-  interceptors: Map<string, { path: string }>;
   externalManifests: Set<string>;
 }
 
 export function createRegistry(): ProjectRegistry {
   return {
+    controllers: new Map(),
+    providers: new Map(),
+    modules: new Map(),
+    guards: new Map(),
+    interceptors: new Map(),
     endpoints: [],
     validators: new Map(),
     requiredUtils: new Set(),
-    controllers: new Map(),
-    guards: new Map(),
-    interceptors: new Map(),
     externalManifests: new Set()
   };
 }
@@ -152,8 +156,8 @@ export function discoverFromEntryPoint(program: ts.Program, entryFile: string, r
           for (const dec of decorators) {
             const decText = dec.expression.getText();
             const isController = decText.includes('Controller');
-            const isGuard = decText.includes('Guard') || decText.includes('Protect'); // Basic heuristic
-            const isInterceptor = decText.includes('Intercept');
+            const isInjectable = decText.includes('Injectable');
+            const isModule = decText.includes('Module');
 
             // Better check using symbol if possible
             const decSymbol = checker.getSymbolAtLocation(ts.isCallExpression(dec.expression) ? dec.expression.expression : dec.expression);
@@ -165,10 +169,19 @@ export function discoverFromEntryPoint(program: ts.Program, entryFile: string, r
               registry.controllers.set(className, { path: filePath, injections: new Map() });
               discoveredFiles.add(filePath);
               console.log(`- Discovered controller: ${className} in ${path.basename(filePath)}`);
+            } else if (decName === 'Injectable' || isInjectable) {
+              const className = node.name.text;
+              const filePath = sourceFile.fileName;
+              registry.providers.set(className, { path: filePath });
+              discoveredFiles.add(filePath);
+              console.log(`- Discovered provider: ${className} in ${path.basename(filePath)}`);
+            } else if (decName === 'Module' || isModule) {
+              const className = node.name.text;
+              const filePath = sourceFile.fileName;
+              registry.modules.set(className, { path: filePath });
+              discoveredFiles.add(filePath);
+              console.log(`- Discovered module: ${className} in ${path.basename(filePath)}`);
             }
-            // Note: Guards and Interceptors are usually discovered via @Protect/@Intercept on controllers
-            // but we can also find them if they are classes. 
-            // For now, let's focus on controllers as the entry point for analysis.
           }
         }
       }
@@ -179,6 +192,109 @@ export function discoverFromEntryPoint(program: ts.Program, entryFile: string, r
   }
 
   return Array.from(discoveredFiles);
+}
+
+function getBaseClass(classDecl: ts.ClassDeclaration, checker: ts.TypeChecker): ts.ClassDeclaration | null {
+  if (!classDecl.heritageClauses) return null;
+  for (const clause of classDecl.heritageClauses) {
+    if (clause.token === ts.SyntaxKind.ExtendsKeyword) {
+      const typeNode = clause.types[0];
+      if (typeNode) {
+        const type = checker.getTypeAtLocation(typeNode);
+        const symbol = type.getSymbol() || type.aliasSymbol;
+        const decl = symbol?.valueDeclaration || symbol?.declarations?.[0];
+        if (decl && ts.isClassDeclaration(decl)) {
+          return decl;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function resolveParamInjectionToken(param: ts.ParameterDeclaration, checker: ts.TypeChecker): string {
+  const decorators = ts.getDecorators(param);
+  if (decorators) {
+    for (const dec of decorators) {
+      const expr = dec.expression;
+      const ident = ts.isCallExpression(expr) ? expr.expression : expr;
+      if (ts.isIdentifier(ident) && ident.text === 'Inject') {
+        if (ts.isCallExpression(expr) && expr.arguments.length > 0) {
+          const arg = expr.arguments[0];
+          if (ts.isStringLiteral(arg)) return arg.text;
+          if (ts.isIdentifier(arg)) return arg.text;
+          return arg.getText();
+        }
+      }
+    }
+  }
+
+  // Fallback to type
+  if (param.type) {
+    const type = checker.getTypeAtLocation(param);
+    const symbol = type.getSymbol() || type.aliasSymbol;
+    if (symbol) {
+      const name = symbol.getName();
+      const primitives = ['Object', 'Function', 'String', 'Number', 'Boolean', 'any', 'unknown', 'never'];
+      if (!primitives.includes(name)) {
+        return name;
+      }
+    }
+  }
+
+  return 'any';
+}
+
+function resolveConstructorDeps(constructorDecl: ts.ConstructorDeclaration, checker: ts.TypeChecker): string[] {
+  return constructorDecl.parameters.map(param => resolveParamInjectionToken(param, checker));
+}
+
+function findConstructorDeps(classDecl: ts.ClassDeclaration, checker: ts.TypeChecker): string[] | undefined {
+  const constructorDecl = classDecl.members.find(ts.isConstructorDeclaration);
+  if (constructorDecl) {
+    return resolveConstructorDeps(constructorDecl, checker);
+  }
+  const baseClass = getBaseClass(classDecl, checker);
+  if (baseClass) {
+    return findConstructorDeps(baseClass, checker);
+  }
+  return undefined;
+}
+
+function resolvePropertyDeps(classDecl: ts.ClassDeclaration, checker: ts.TypeChecker): Record<string, string> {
+  const deps: Record<string, string> = {};
+  for (const member of classDecl.members) {
+    if (ts.isPropertyDeclaration(member) && member.name) {
+      const propName = member.name.getText();
+      const decorators = ts.getDecorators(member);
+      if (decorators) {
+        for (const dec of decorators) {
+          const expr = dec.expression;
+          const ident = ts.isCallExpression(expr) ? expr.expression : expr;
+          if (ts.isIdentifier(ident) && ident.text === 'Inject') {
+            let token: string | undefined;
+            if (ts.isCallExpression(expr) && expr.arguments.length > 0) {
+              const arg = expr.arguments[0];
+              if (ts.isStringLiteral(arg)) token = arg.text;
+              else if (ts.isIdentifier(arg)) token = arg.text;
+              else token = arg.getText();
+            }
+            if (!token && member.type) {
+              const type = checker.getTypeAtLocation(member);
+              const symbol = type.getSymbol() || type.aliasSymbol;
+              if (symbol) {
+                token = symbol.getName();
+              }
+            }
+            if (token) {
+              deps[propName] = token;
+            }
+          }
+        }
+      }
+    }
+  }
+  return deps;
 }
 
 export function transformer(program: ts.Program, registry: ProjectRegistry) {
@@ -195,6 +311,43 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
           const p = pArray[i];
           const decs = ts.getDecorators(p);
           let dName = '', pName = '', vHash = '', vMode: any = undefined;
+
+          let isInject = false;
+          let injectToken = '';
+          if (decs) {
+            for (const dec of decs) {
+              const e = dec.expression;
+              const ident = ts.isCallExpression(e) ? e.expression : e;
+              if (ts.isIdentifier(ident) && ident.text === 'Inject') {
+                isInject = true;
+                if (ts.isCallExpression(e) && e.arguments.length > 0) {
+                  const arg = e.arguments[0];
+                  if (ts.isStringLiteral(arg)) injectToken = arg.text;
+                  else if (ts.isIdentifier(arg)) injectToken = arg.text;
+                  else injectToken = arg.getText();
+                }
+                break;
+              }
+            }
+          }
+
+          if (isInject && !injectToken && p.type) {
+            const type = checker.getTypeAtLocation(p);
+            const symbol = type.getSymbol() || type.aliasSymbol;
+            if (symbol) {
+              injectToken = symbol.getName();
+            }
+          } else if (!isInject && p.type) {
+            const type = checker.getTypeAtLocation(p);
+            const symbol = type.getSymbol() || type.aliasSymbol;
+            if (symbol) {
+              const typeName = symbol.getName();
+              if (registry.providers.has(typeName)) {
+                isInject = true;
+                injectToken = typeName;
+              }
+            }
+          }
 
           if (decs) {
             for (const dec of decs) {
@@ -221,6 +374,11 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                 break;
               }
             }
+          }
+
+          if (!dName && isInject) {
+            dName = 'Inject';
+            pName = injectToken || 'any';
           }
 
           if (dName) {
@@ -252,7 +410,14 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
           if (decl && ts.isClassDeclaration(decl)) {
             const name = ident.text;
             if (!map.has(name)) {
-              map.set(name, { path: decl.getSourceFile().fileName, params: [] });
+              let params: any[] = [];
+              if (map === registry.guards) {
+                const useMethod = decl.members.find(m => ts.isMethodDeclaration(m) && m.name.getText() === 'use') as ts.MethodDeclaration;
+                if (useMethod) {
+                  params = resolveParamsMetadata(useMethod.parameters);
+                }
+              }
+              map.set(name, { path: decl.getSourceFile().fileName, params });
             }
             return name;
           }
@@ -395,6 +560,24 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
           let controllerDec: ts.Decorator | null = null;
           if (decorators) for (const d of decorators) if (ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) && d.expression.expression.text === 'Controller') { controllerDec = d; break; }
 
+          let injectableDec: ts.Decorator | null = null;
+          if (decorators) {
+            for (const d of decorators) {
+              const ident = ts.isCallExpression(d.expression) ? d.expression.expression : d.expression;
+              if (ts.isIdentifier(ident) && ident.text === 'Injectable') {
+                injectableDec = d;
+                break;
+              }
+            }
+          }
+
+          if (injectableDec && statement.name) {
+            const providerName = statement.name.text;
+            if (!registry.providers.has(providerName)) {
+              registry.providers.set(providerName, { path: sourceFile.fileName });
+            }
+          }
+
           if (controllerDec) {
             const controllerName = statement.name?.text || 'Anonymous';
             if (!registry.controllers.has(controllerName)) registry.controllers.set(controllerName, { path: sourceFile.fileName, injections: new Map() });
@@ -501,6 +684,80 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
         }
       }
 
+      if (context && typeof context.factory !== 'undefined') {
+        const visit = (node: ts.Node): ts.Node => {
+          if (ts.isClassDeclaration(node)) {
+            const className = node.name?.text || 'Anonymous';
+            const isController = registry.controllers.has(className);
+            const isProvider = registry.providers.has(className);
+            const isModule = registry.modules.has(className);
+            const isGuard = registry.guards.has(className);
+            const isInterceptor = registry.interceptors.has(className);
+
+            const decorators = ts.getDecorators(node);
+            let hasInjectableDec = false;
+            let hasControllerDec = false;
+            let hasModuleDec = false;
+            if (decorators) {
+              for (const d of decorators) {
+                const text = d.expression.getText();
+                if (text.includes('Injectable')) hasInjectableDec = true;
+                if (text.includes('Controller')) hasControllerDec = true;
+                if (text.includes('Module')) hasModuleDec = true;
+              }
+            }
+
+            if (isController || isProvider || isModule || isGuard || isInterceptor || hasInjectableDec || hasControllerDec || hasModuleDec) {
+              const constructorDeps = findConstructorDeps(node, checker) || [];
+              const propertyDeps = resolvePropertyDeps(node, checker) || {};
+
+              const injectionsObj = ts.factory.createObjectLiteralExpression([
+                ts.factory.createPropertyAssignment(
+                  'constructorDeps',
+                  ts.factory.createArrayLiteralExpression(
+                    constructorDeps.map(dep => ts.factory.createStringLiteral(dep))
+                  )
+                ),
+                ts.factory.createPropertyAssignment(
+                  'propertyDeps',
+                  ts.factory.createObjectLiteralExpression(
+                    Object.entries(propertyDeps).map(([propName, depToken]) =>
+                      ts.factory.createPropertyAssignment(
+                        ts.factory.createIdentifier(propName),
+                        ts.factory.createStringLiteral(depToken)
+                      )
+                    ),
+                    true
+                  )
+                )
+              ], true);
+
+              const injectionsProperty = ts.factory.createPropertyDeclaration(
+                [
+                  ts.factory.createModifier(ts.SyntaxKind.StaticKeyword)
+                ],
+                ts.factory.createIdentifier('__injections__'),
+                undefined,
+                undefined,
+                injectionsObj
+              );
+
+              return ts.factory.updateClassDeclaration(
+                node,
+                node.modifiers,
+                node.name,
+                node.typeParameters,
+                node.heritageClauses,
+                ts.factory.createNodeArray([injectionsProperty, ...node.members])
+              );
+            }
+          }
+          return ts.visitEachChild(node, visit, context);
+        };
+
+        return ts.visitNode(sourceFile, visit) as ts.SourceFile;
+      }
+
       return sourceFile;
     };
   };
@@ -542,40 +799,66 @@ export function generateManifestCode(registry: ProjectRegistry, controllerMap: M
   }
 
   let logic = `\n// --- SINGLETONS ---\n`;
+  const importedAndRegistered = new Set<string>();
 
-  // Collect Guards and Interceptors
+  // Collect Guards
   for (const [name, info] of registry.guards.entries()) {
-    const rel = path.relative(manifestDir, info.path).replace(/\.ts$/, '.js');
-    imports += `import { ${name} } from './${rel}';\n`;
-    logic += `MetadataStore.registerGuard('${name}', new ${name}());\n`;
+    if (importedAndRegistered.has(name)) continue;
+    let rel = path.relative(manifestDir, info.path).replace(/\.ts$/, '.js');
+    if (!rel.startsWith('.') && !rel.startsWith('/')) {
+      rel = './' + rel;
+    }
+    imports += `import { ${name} } from '${rel}';\n`;
+    logic += `MetadataStore.registerGuard('${name}', ${name});\n`;
+    importedAndRegistered.add(name);
   }
+
+  // Collect Interceptors
   for (const [name, info] of registry.interceptors.entries()) {
-    const rel = path.relative(manifestDir, info.path).replace(/\.ts$/, '.js');
-    imports += `import { ${name} } from './${rel}';\n`;
-    logic += `MetadataStore.registerInterceptor('${name}', new ${name}());\n`;
+    if (importedAndRegistered.has(name)) continue;
+    let rel = path.relative(manifestDir, info.path).replace(/\.ts$/, '.js');
+    if (!rel.startsWith('.') && !rel.startsWith('/')) {
+      rel = './' + rel;
+    }
+    imports += `import { ${name} } from '${rel}';\n`;
+    logic += `MetadataStore.registerInterceptor('${name}', ${name});\n`;
+    importedAndRegistered.add(name);
   }
 
   // Collect Controllers
   for (const [name, fullPath] of finalControllerMap.entries()) {
-    const rel = path.relative(manifestDir, fullPath).replace(/\.ts$/, '.js');
-    imports += `import { ${name} } from './${rel}';\n`;
+    if (importedAndRegistered.has(name)) continue;
+    let rel = path.relative(manifestDir, fullPath).replace(/\.ts$/, '.js');
+    if (!rel.startsWith('.') && !rel.startsWith('/')) {
+      rel = './' + rel;
+    }
+    imports += `import { ${name} } from '${rel}';\n`;
+    logic += `MetadataStore.registerController('${name}', ${name});\n`;
+    importedAndRegistered.add(name);
   }
 
-  for (const name of registry.controllers.keys()) {
-    const info = registry.controllers.get(name)!;
-    if (info.injections.size > 0) {
-      for (const [propName, typeName] of info.injections.entries()) {
-        if (registry.guards.has(typeName)) {
-          logic += `_instance_${name}.${propName} = MetadataStore.getGuard('${typeName}');\n`;
-        } else if (registry.interceptors.has(typeName)) {
-          logic += `_instance_${name}.${propName} = MetadataStore.getInterceptor('${typeName}');\n`;
-        } else if (registry.controllers.has(typeName)) {
-          logic += `_instance_${name}.${propName} = MetadataStore.getController('${typeName}');\n`;
-        }
-      }
+  // Collect Providers
+  for (const [name, info] of registry.providers.entries()) {
+    if (importedAndRegistered.has(name)) continue;
+    let rel = path.relative(manifestDir, info.path).replace(/\.ts$/, '.js');
+    if (!rel.startsWith('.') && !rel.startsWith('/')) {
+      rel = './' + rel;
     }
-    logic += `const _instance_${name} = new ${name}();\n`;
-    logic += `MetadataStore.registerController('${name}', _instance_${name});\n`;
+    imports += `import { ${name} } from '${rel}';\n`;
+    logic += `MetadataStore.registerProvider('${name}', ${name});\n`;
+    importedAndRegistered.add(name);
+  }
+
+  // Collect Modules
+  for (const [name, info] of registry.modules.entries()) {
+    if (importedAndRegistered.has(name)) continue;
+    let rel = path.relative(manifestDir, info.path).replace(/\.ts$/, '.js');
+    if (!rel.startsWith('.') && !rel.startsWith('/')) {
+      rel = './' + rel;
+    }
+    imports += `import { ${name} } from '${rel}';\n`;
+    logic += `MetadataStore.registerModule('${name}', ${name});\n`;
+    importedAndRegistered.add(name);
   }
 
   // External Manifests (using dynamic import for top-level await)
@@ -682,25 +965,28 @@ export default function compilerPlugin(program: ts.Program) {
 
   return (context: ts.TransformationContext) => {
     return (sourceFile: ts.SourceFile) => {
-      // 1. Check if the file has any class with a @Controller decorator
-      let hasController = false;
+      // 1. Check if the file has any class with a @Controller or @Injectable decorator
+      let shouldProcess = false;
       const checkNode = (node: ts.Node) => {
         if (ts.isClassDeclaration(node)) {
           const decorators = ts.getDecorators(node);
           if (decorators) {
             for (const d of decorators) {
-              if (ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) && d.expression.expression.text === 'Controller') {
-                hasController = true;
+              const text = d.expression.getText();
+              if (text.includes('Controller') || text.includes('Injectable') || text.includes('Module')) {
+                shouldProcess = true;
                 break;
               }
             }
           }
         }
-        ts.forEachChild(node, checkNode);
+        if (!shouldProcess) {
+          ts.forEachChild(node, checkNode);
+        }
       };
       checkNode(sourceFile);
 
-      if (!hasController) {
+      if (!shouldProcess) {
         return sourceFile;
       }
 
@@ -742,7 +1028,14 @@ export default function compilerPlugin(program: ts.Program) {
                       ts.factory.createPropertyAssignment('endpoints', ts.factory.createArrayLiteralExpression([])),
                       ts.factory.createPropertyAssignment('controllers', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
                       ts.factory.createPropertyAssignment('guards', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
-                      ts.factory.createPropertyAssignment('interceptors', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, []))
+                      ts.factory.createPropertyAssignment('interceptors', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
+                      ts.factory.createPropertyAssignment('providers', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
+                      ts.factory.createPropertyAssignment('modules', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
+                      ts.factory.createPropertyAssignment('instances', ts.factory.createNewExpression(ts.factory.createIdentifier('Map'), undefined, [])),
+                      ts.factory.createPropertyAssignment('resolving', ts.factory.createNewExpression(ts.factory.createIdentifier('Set'), undefined, [])),
+                      ts.factory.createPropertyAssignment('controllerClasses', ts.factory.createNewExpression(ts.factory.createIdentifier('Set'), undefined, [])),
+                      ts.factory.createPropertyAssignment('guardClasses', ts.factory.createNewExpression(ts.factory.createIdentifier('Set'), undefined, [])),
+                      ts.factory.createPropertyAssignment('interceptorClasses', ts.factory.createNewExpression(ts.factory.createIdentifier('Set'), undefined, []))
                     ], true)
                   )
                 )
@@ -812,19 +1105,30 @@ export default function compilerPlugin(program: ts.Program) {
               ts.factory.createPropertyAccessExpression(
                 ts.factory.createPropertyAccessExpression(
                   ts.factory.createIdentifier('__server_metadata_store'),
-                  'guards'
+                  'providers'
                 ),
                 'set'
               ),
               undefined,
               [
                 ts.factory.createStringLiteral(name),
-                ts.factory.createNewExpression(
-                  ts.factory.createIdentifier(name),
-                  undefined,
-                  []
-                )
+                ts.factory.createIdentifier(name)
               ]
+            )
+          )
+        );
+        appends.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'guardClasses'
+                ),
+                'add'
+              ),
+              undefined,
+              [ts.factory.createStringLiteral(name)]
             )
           )
         );
@@ -838,19 +1142,30 @@ export default function compilerPlugin(program: ts.Program) {
               ts.factory.createPropertyAccessExpression(
                 ts.factory.createPropertyAccessExpression(
                   ts.factory.createIdentifier('__server_metadata_store'),
-                  'interceptors'
+                  'providers'
                 ),
                 'set'
               ),
               undefined,
               [
                 ts.factory.createStringLiteral(name),
-                ts.factory.createNewExpression(
-                  ts.factory.createIdentifier(name),
-                  undefined,
-                  []
-                )
+                ts.factory.createIdentifier(name)
               ]
+            )
+          )
+        );
+        appends.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'interceptorClasses'
+                ),
+                'add'
+              ),
+              undefined,
+              [ts.factory.createStringLiteral(name)]
             )
           )
         );
@@ -875,103 +1190,85 @@ export default function compilerPlugin(program: ts.Program) {
         );
       }
 
-      // Register Controllers (instantiate and handle injections)
-      for (const controllerName of registry.controllers.keys()) {
-        const controllerInfo = registry.controllers.get(controllerName);
-        if (controllerInfo && controllerInfo.injections.size > 0) {
-          // const _instance_Name = new Name();
-          appends.push(
-            ts.factory.createVariableStatement(
+      // Register Controllers
+      for (const name of registry.controllers.keys()) {
+        appends.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'providers'
+                ),
+                'set'
+              ),
               undefined,
-              ts.factory.createVariableDeclarationList([
-                ts.factory.createVariableDeclaration(
-                  ts.factory.createIdentifier(`_instance_${controllerName}`),
-                  undefined,
-                  undefined,
-                  ts.factory.createNewExpression(
-                    ts.factory.createIdentifier(controllerName),
-                    undefined,
-                    []
-                  )
-                )
-              ], ts.NodeFlags.Const)
+              [
+                ts.factory.createStringLiteral(name),
+                ts.factory.createIdentifier(name)
+              ]
             )
-          );
-
-          // Inject properties
-          for (const [propName, typeName] of controllerInfo.injections.entries()) {
-            let storeMap = 'controllers';
-            if (registry.guards.has(typeName)) storeMap = 'guards';
-            else if (registry.interceptors.has(typeName)) storeMap = 'interceptors';
-
-            appends.push(
-              ts.factory.createExpressionStatement(
-                ts.factory.createBinaryExpression(
-                  ts.factory.createPropertyAccessExpression(
-                    ts.factory.createIdentifier(`_instance_${controllerName}`),
-                    propName
-                  ),
-                  ts.SyntaxKind.EqualsToken,
-                  ts.factory.createCallExpression(
-                    ts.factory.createPropertyAccessExpression(
-                      ts.factory.createPropertyAccessExpression(
-                        ts.factory.createIdentifier('__server_metadata_store'),
-                        storeMap
-                      ),
-                      'get'
-                    ),
-                    undefined,
-                    [ts.factory.createStringLiteral(typeName)]
-                  )
-                )
-              )
-            );
-          }
-
-          // Register populated instance
-          appends.push(
-            ts.factory.createExpressionStatement(
-              ts.factory.createCallExpression(
+          )
+        );
+        appends.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
                 ts.factory.createPropertyAccessExpression(
-                  ts.factory.createPropertyAccessExpression(
-                    ts.factory.createIdentifier('__server_metadata_store'),
-                    'controllers'
-                  ),
-                  'set'
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'controllerClasses'
                 ),
-                undefined,
-                [
-                  ts.factory.createStringLiteral(controllerName),
-                  ts.factory.createIdentifier(`_instance_${controllerName}`)
-                ]
-              )
+                'add'
+              ),
+              undefined,
+              [ts.factory.createStringLiteral(name)]
             )
-          );
-        } else {
-          // No injections: direct registration
-          appends.push(
-            ts.factory.createExpressionStatement(
-              ts.factory.createCallExpression(
+          )
+        );
+      }
+
+      // Register Providers
+      for (const name of registry.providers.keys()) {
+        appends.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
                 ts.factory.createPropertyAccessExpression(
-                  ts.factory.createPropertyAccessExpression(
-                    ts.factory.createIdentifier('__server_metadata_store'),
-                    'controllers'
-                  ),
-                  'set'
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'providers'
                 ),
-                undefined,
-                [
-                  ts.factory.createStringLiteral(controllerName),
-                  ts.factory.createNewExpression(
-                    ts.factory.createIdentifier(controllerName),
-                    undefined,
-                    []
-                  )
-                ]
-              )
+                'set'
+              ),
+              undefined,
+              [
+                ts.factory.createStringLiteral(name),
+                ts.factory.createIdentifier(name)
+              ]
             )
-          );
-        }
+          )
+        );
+      }
+
+      // Register Modules
+      for (const name of registry.modules.keys()) {
+        appends.push(
+          ts.factory.createExpressionStatement(
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier('__server_metadata_store'),
+                  'modules'
+                ),
+                'set'
+              ),
+              undefined,
+              [
+                ts.factory.createStringLiteral(name),
+                ts.factory.createIdentifier(name)
+              ]
+            )
+          )
+        );
       }
 
 

@@ -87,7 +87,7 @@ function runBuild() {
       analyzer(source);
       analyzedFiles.add(file);
       
-      for (const info of [...registry.guards.values(), ...registry.interceptors.values(), ...registry.controllers.values()]) {
+      for (const info of [...registry.guards.values(), ...registry.interceptors.values(), ...registry.controllers.values(), ...registry.providers.values()]) {
         if (!analyzedFiles.has(info.path)) {
           queue.push(info.path);
         }

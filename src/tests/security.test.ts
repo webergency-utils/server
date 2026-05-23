@@ -5,14 +5,7 @@ import { mergeSecurityConfigs, generateSecurityHeaders } from '../helpers/securi
 
 describe('Security Helper & Integration Tests', () => {
   beforeEach(() => {
-    // Reset MetadataStore for each test
-    const store = (globalThis as any)['__WEBERGENCY_SERVER_METADATA_STORE__'];
-    if (store) {
-      store.endpoints = [];
-      store.controllers.clear();
-      store.guards.clear();
-      store.interceptors.clear();
-    }
+    MetadataStore.clear();
   });
 
   describe('mergeSecurityConfigs helper', () => {

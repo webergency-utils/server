@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard } from '../../index.js';
 
 import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems, constraint } from '@webergency-utils/typechecker';
 
@@ -190,5 +190,96 @@ export class InheritedController extends BaseController {
     @Security({ frameguard: false })
     getOverride() {
         return 'ok';
+    }
+}
+
+// --- Dependency Injection (DI) Tests ---
+
+@Injectable()
+export class ConfigService {
+    get(key: string): string {
+        if (key === 'db.url') return 'mongodb://localhost:27017';
+        if (key === 'api.secret') return 'super-secret-key';
+        return '';
+    }
+}
+
+@Injectable()
+export class DatabaseService {
+    constructor(public configService: ConfigService) {}
+    
+    getUrl() {
+        return this.configService.get('db.url');
+    }
+}
+
+@Injectable()
+export class LoggerService {
+    log(msg: string) {
+        return `[LOG] ${msg}`;
+    }
+}
+
+@Injectable()
+export class BaseService {
+    @Inject(LoggerService)
+    public logger!: LoggerService;
+}
+
+@Injectable()
+export class ChildService extends BaseService {
+    constructor(public dbService: DatabaseService) {
+        super();
+    }
+
+    getMessage() {
+        return this.logger.log(`DB URL is ${this.dbService.getUrl()}`);
+    }
+}
+
+@Injectable()
+export class DiGuard implements Guard {
+    @Inject(LoggerService)
+    public logger!: LoggerService;
+
+    constructor(public configService: ConfigService) {}
+
+    use(@Inject(DatabaseService) db: DatabaseService) {
+        const url = db.getUrl();
+        if (url !== 'mongodb://localhost:27017') {
+            throw { code: 403, message: 'Forbidden by Guard' };
+        }
+        this.logger.log(`Guard checked URL: ${url}`);
+    }
+}
+
+@Controller('/di')
+export class DiTestController {
+    @Inject(LoggerService)
+    public logger!: LoggerService;
+
+    constructor(
+        public childService: ChildService,
+        public configService: ConfigService
+    ) {}
+
+    @Get('/test')
+    test() {
+        return {
+            msg: this.childService.getMessage(),
+            dbUrl: this.configService.get('db.url'),
+            logged: this.logger.log('hello')
+        };
+    }
+
+    @Get('/param-inject')
+    paramInject(@Inject(DatabaseService) db: DatabaseService) {
+        return { dbUrl: db.getUrl() };
+    }
+
+    @Get('/guarded')
+    @Protect(DiGuard)
+    guarded() {
+        return { success: true };
     }
 }

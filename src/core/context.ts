@@ -4,6 +4,7 @@ import { AugmentedRequest, EndpointMetadata } from './types.js';
 export interface RequestContext {
   request: AugmentedRequest;
   metadata: EndpointMetadata;
+  requestInstances?: Map<string, any>;
   // We can add more here later, like target class/method
 }
 

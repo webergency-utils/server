@@ -37,6 +37,7 @@ describe('AOT Interceptor Error Sanitization', () => {
     beforeAll(async () => {
         // Build AOT
         const manifestPath = runAot();
+        MetadataStore.clear();
         
         // Register the global interceptor
         MetadataStore.registerInterceptor('GlobalErrorSanitizer', new GlobalErrorSanitizer());

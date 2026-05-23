@@ -34,12 +34,31 @@ export function Public(target: any): void;
 export function Public(target: any, key: string | symbol, descriptor: any): void; 
 export function Public(arg1: any, arg2?: any, arg3?: any): void {}
 
-/**
- * FRAMEWORK DECORATORS
- */
-export function Controller(prefix: string = ''): ClassDecorator {
+export enum Scope {
+  DEFAULT = 0,
+  TRANSIENT = 1,
+  REQUEST = 2
+}
+
+export interface ControllerOptions {
+  path?: string;
+  scope?: Scope;
+}
+
+export function Controller(prefixOrOptions?: string | ControllerOptions): ClassDecorator {
   return (target: any) => {
+    let prefix = '';
+    let scope: Scope | undefined;
+    if (typeof prefixOrOptions === 'string') {
+      prefix = prefixOrOptions;
+    } else if (prefixOrOptions && typeof prefixOrOptions === 'object') {
+      prefix = prefixOrOptions.path || '';
+      scope = prefixOrOptions.scope;
+    }
     target.prototype.prefix = prefix;
+    if (scope !== undefined) {
+      target.__scope__ = scope;
+    }
   };
 }
 
@@ -102,3 +121,72 @@ export interface Guard {
 export interface Interceptor {
   intercept(request: any, next: () => Promise<any>): Promise<any>;
 }
+
+/**
+ * Dependency Injection Decorators
+ */
+export interface InjectableOptions {
+  scope?: Scope;
+}
+
+export function Injectable(options?: InjectableOptions): ClassDecorator {
+  return (target: any) => {
+    if (options && options.scope !== undefined) {
+      target.__scope__ = options.scope;
+    }
+  };
+}
+
+export function Inject(token?: any): any {
+  return (target: any, key?: string | symbol, index?: number) => {};
+}
+
+/**
+ * Module Decorator
+ */
+export interface ModuleMetadata {
+  imports?: any[];
+  controllers?: any[];
+  providers?: any[];
+  exports?: any[];
+}
+
+export function Module(metadata: ModuleMetadata): ClassDecorator {
+  return (target: any) => {
+    target.__moduleMetadata__ = metadata;
+  };
+}
+
+/**
+ * Global Module Decorator
+ */
+export function Global(): ClassDecorator {
+  return (target: any) => {
+    target.__isGlobal__ = true;
+  };
+}
+
+/**
+ * Lifecycle Hook Interfaces
+ */
+export interface OnModuleInit {
+  onModuleInit(): void | Promise<void>;
+}
+
+export interface OnApplicationBootstrap {
+  onApplicationBootstrap(): void | Promise<void>;
+}
+
+export interface OnModuleDestroy {
+  onModuleDestroy(): void | Promise<void>;
+}
+
+export interface BeforeApplicationShutdown {
+  beforeApplicationShutdown(signal?: string): void | Promise<void>;
+}
+
+export interface OnApplicationShutdown {
+  onApplicationShutdown(signal?: string): void | Promise<void>;
+}
+
+
