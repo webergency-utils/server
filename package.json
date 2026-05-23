@@ -1,17 +1,17 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.0.27",
+  "version": "0.0.28",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
   "author": "radixxko",
   "main": "dist/server/src/index.js",
   "types": "dist/server/src/index.d.ts",
   "bin": {
-    "webergency-server-build": "./dist/server/src/cli.js"
+    "webergency-server-build": "./dist/server/src/compiler/cli.js"
   },
   "exports": {
     ".": "./dist/server/src/index.js",
-    "./transformer": "./dist/server/src/transformer.js"
+    "./transformer": "./dist/server/src/compiler/transformer.js"
   },
   "files": [
     "dist",

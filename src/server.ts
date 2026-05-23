@@ -2,14 +2,21 @@ import { EventEmitter } from 'node:events';
 import { Router } from './core/router.js';
 import { QueryParser } from './helpers/parsers.js';
 import { MetadataStore } from './core/metadata.js';
-import { EndpointMetadata, ParamMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
-import { RequestContext, Context } from './core/context.js';
+import { EndpointMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
 import { CorsOptions, SecurityOptions } from './decorators.js';
 import { loadAutoMetadata } from './config.js';
 import { handleCors } from './helpers/cors.js';
-import { mergeSecurityConfigs, generateSecurityHeaders, parseSize } from './helpers/security.js';
-import * as path from 'path';
-import * as fs from 'fs';
+import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
+
+// Decoupled architectural imports
+import { ShutdownManager } from './core/shutdown-manager.js';
+import { RequestProcessor } from './core/request-processor.js';
+import { RateLimiter } from './helpers/rate-limiter.js';
+import { ServerAdapter } from './adapters/adapter.js';
+import { NodeAdapter } from './adapters/node-adapter.js';
+import { BunAdapter } from './adapters/bun-adapter.js';
+import { DenoAdapter } from './adapters/deno-adapter.js';
+import { RequestReader } from './helpers/request-reader.js';
 
 export class ConsoleLogger implements Logger {
   info(message: any, context?: LogContext) {
@@ -50,16 +57,54 @@ export type ServerEvents = {
 export class Server extends EventEmitter {
   private router = new Router();
   private activeRequests = 0;
-  private isShuttingDown = false;
-  private nodeServer?: any;
-  private rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+  private serverAdapter?: ServerAdapter;
+  private shutdownManager: ShutdownManager;
+  private rateLimiter = new RateLimiter();
   private events: { [K in keyof ServerEvents]?: Set<any> } = {};
   public logger: Logger;
+
+  public get isShuttingDown(): boolean {
+    return this.shutdownManager.getShuttingDown();
+  }
+  public set isShuttingDown(val: boolean) {
+    this.shutdownManager.setShuttingDown(val);
+  }
+
+  public get nodeServer(): any {
+    return (this.serverAdapter as any)?.nodeServer;
+  }
+  public set nodeServer(val: any) {
+    if (!this.serverAdapter) {
+      this.serverAdapter = this.selectAdapter('Node');
+    }
+    (this.serverAdapter as any).nodeServer = val;
+  }
+
+  public async getBody(req: AugmentedRequest, securityConfig?: SecurityOptions): Promise<any> {
+    const sec = securityConfig || (typeof this.options.security === 'object' ? this.options.security : undefined);
+    return RequestReader.getBody(req, sec);
+  }
+
+  public async getRawBody(req: AugmentedRequest, securityConfig?: SecurityOptions): Promise<ArrayBuffer> {
+    const sec = securityConfig || (typeof this.options.security === 'object' ? this.options.security : undefined);
+    return RequestReader.getRawBody(req, sec);
+  }
 
   constructor(private options: ServerOptions) {
     super();
     this.logger = options.logger || new ConsoleLogger();
-    this.setupSignals();
+    this.shutdownManager = new ShutdownManager({
+      shutdownTimeout: options.shutdownTimeout,
+      logger: this.logger,
+      nodeServerClose: async () => {
+        if (this.serverAdapter) {
+          await this.serverAdapter.close();
+        }
+      },
+      beforeShutdownEmit: () => this.internalEmit('beforeShutdown'),
+      shutdownEmit: () => this.internalEmit('shutdown')
+    });
+    this.shutdownManager.setupSignals((sig) => this.shutdown(sig));
   }
 
   private collectModuleElements(moduleClass: any, activeControllers: Set<string>, visitedModules = new Set<any>()): any {
@@ -204,7 +249,6 @@ export class Server extends EventEmitter {
     }
   }
 
-
   public on<K extends keyof ServerEvents>(event: K, handler: ServerEvents[K]) {
     if (!this.events[event]) this.events[event] = new Set();
     this.events[event]!.add(handler);
@@ -220,138 +264,48 @@ export class Server extends EventEmitter {
     this.events[event]?.forEach(h => h(...args));
   }
 
-  private setupSignals() {
-    const handleSignal = (signal: string) => {
-      this.logger.warn(`\nReceived ${signal}. Starting graceful shutdown...`, {
-        type: 'server_shutdown',
-        reason: signal
-      });
-      this.shutdown(signal);
-    };
-
-    if (typeof process !== 'undefined') {
-      process.on('SIGTERM', () => handleSignal('SIGTERM'));
-      process.on('SIGINT', () => handleSignal('SIGINT'));
-    } 
-    else if ((globalThis as any).Deno) {
-      (globalThis as any).Deno.addSignalListener('SIGTERM', () => handleSignal('SIGTERM'));
-      (globalThis as any).Deno.addSignalListener('SIGINT', () => handleSignal('SIGINT'));
-    }
-  }
-
   public async shutdown(signal?: string) {
-    if (this.isShuttingDown) return;
-    this.isShuttingDown = true;
-    this.internalEmit('beforeShutdown');
+    await this.shutdownManager.shutdown(signal, () => this.activeRequests);
+  }
 
-    await MetadataStore.invokeHook('onModuleDestroy');
-    await MetadataStore.invokeHook('beforeApplicationShutdown', signal);
+  private detectRuntime(): 'Bun' | 'Deno' | 'Node' {
+    if ((globalThis as any).Bun) return 'Bun';
+    if ((globalThis as any).Deno) return 'Deno';
+    return 'Node';
+  }
 
-    if (this.nodeServer) {
-      this.nodeServer.close(() => {
-        this.logger.info('Node.js server stopped accepting new connections.', {
-          type: 'server_shutdown',
-          reason: 'connections_closed'
-        });
-      });
+  private selectAdapter(runtime: 'Bun' | 'Deno' | 'Node'): ServerAdapter {
+    if (runtime === 'Bun') return new BunAdapter();
+    if (runtime === 'Deno') return new DenoAdapter();
+    return new NodeAdapter();
+  }
+
+  public async start() {
+    if (MetadataStore.getEndpoints().length === 0) {
+      await loadAutoMetadata();
     }
+    this.init();
+    await MetadataStore.invokeHook('onModuleInit');
 
-    const timeout = this.options.shutdownTimeout || 10000;
-    const startTime = Date.now();
+    const { port } = this.options;
+    const runtime = this.detectRuntime();
 
-    this.logger.info(`Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
-      type: 'server_shutdown',
-      activeRequests: this.activeRequests,
-      timeout
+    this.logger.info(`📡 Runtime Detected: ${runtime}`, {
+      type: 'server_start',
+      runtime
     });
 
-    const checkActive = async () => {
-      while (this.activeRequests > 0) {
-        if (Date.now() - startTime > timeout) {
-          this.logger.warn(`Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
-            type: 'server_shutdown',
-            reason: 'timeout',
-            activeRequests: this.activeRequests
-          });
-          break;
-        }
-        await new Promise(r => setTimeout(r, 100));
-      }
-    };
+    this.serverAdapter = this.selectAdapter(runtime);
+    await this.serverAdapter.listen(port, this.fetch);
 
-    await checkActive();
-    await MetadataStore.invokeHook('onApplicationShutdown', signal);
-
-    this.logger.info('Shutdown complete. Goodbye!', {
-      type: 'server_shutdown',
-      reason: 'complete'
+    this.logger.info(`${runtime} server running at http://localhost:${port}`, {
+      type: 'server_start',
+      runtime,
+      port
     });
-    this.internalEmit('shutdown');
-    
-    if (typeof process !== 'undefined') process.exit(0);
-    else if ((globalThis as any).Deno) (globalThis as any).Deno.exit(0);
-  }
 
-  private async getBody(req: AugmentedRequest, securityConfig?: SecurityOptions) {
-    if (req._json !== undefined) return req._json;
-    const raw = await this.getRawBody(req, securityConfig);
-    return req._json = JSON.parse(new TextDecoder().decode(raw));
-  }
-
-  private async getRawBody(req: AugmentedRequest, securityConfig?: SecurityOptions) {
-    if (req._raw !== undefined) return req._raw;
-    const maxSize = securityConfig?.maxBodySize;
-    if (maxSize !== undefined) {
-      const limit = parseSize(maxSize);
-      const contentLength = req.headers.get('content-length');
-      if (contentLength && parseInt(contentLength, 10) > limit) {
-        throw Object.assign(new Error(`Payload Too Large (limit: ${maxSize})`), { status: 413 });
-      }
-    }
-    const buffer = await req.arrayBuffer();
-    if (maxSize !== undefined) {
-      const limit = parseSize(maxSize);
-      if (buffer.byteLength > limit) {
-        throw Object.assign(new Error(`Payload Too Large (limit: ${maxSize})`), { status: 413 });
-      }
-    }
-    return req._raw = buffer;
-  }
-
-  private async resolveParam(p: ParamMetadata, req: AugmentedRequest, ctx: any, securityConfig?: SecurityOptions, contextModule?: any) {
-    let val: any;
-    switch (p.source) {
-      case 'Param': val = req.params[p.name!]; break;
-      case 'Body': val = await this.getBody(req, securityConfig); break;
-      case 'Query': val = p.name ? req.query[p.name] : req.query; break;
-      case 'Header': val = req.headers.get(p.name!); break;
-      case 'Headers': val = Object.fromEntries(req.headers.entries()); break;
-      case 'Request': val = req; break;
-      case 'Response': val = undefined; break;
-      case 'Ip': val = req.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1"; break;
-      case 'Url': val = req.url; break;
-      case 'Hostname': val = new URL(req.url).hostname; break;
-      case 'Path': val = new URL(req.url).pathname; break;
-      case 'Context': val = Context.get(); break;
-      case 'Inject': val = MetadataStore.getInjectable(p.name!, contextModule); break;
-    }
-
-    if (p.validator && typeof p.validator === 'function') {
-      const oldMode = ctx.mode;
-      const oldTryConvert = ctx.tryConvert;
-      
-      if (p.mode) ctx.mode = p.mode;
-      if (p.source === 'Query' || p.source === 'Param') {
-        ctx.tryConvert = true;
-        ctx.wrapArrays = true;
-      }
-      
-      val = p.validator(val, p.name || p.source.toLowerCase(), ctx);
-      
-      ctx.mode = oldMode;
-      ctx.tryConvert = oldTryConvert;
-    }
-    return val;
+    await MetadataStore.invokeHook('onApplicationBootstrap');
+    this.internalEmit('start', port);
   }
 
   public fetch = async (request: Request): Promise<Response> => {
@@ -402,7 +356,7 @@ export class Server extends EventEmitter {
       }
     };
 
-    if (this.isShuttingDown) {
+    if (this.shutdownManager.getShuttingDown()) {
       let res = new Response('Service Unavailable (Shutting Down)', { status: 503 });
       res = applyCors(res, this.options.cors);
       res = applySecurityHeaders(res, mergeSecurityConfigs([this.options.security]));
@@ -494,33 +448,8 @@ export class Server extends EventEmitter {
       // Enforce rateLimit
       if (securityConfig?.rateLimit) {
         const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
-        const limitConfig = securityConfig.rateLimit;
-        const max = limitConfig.max;
-        const windowOption = limitConfig.window || '1m';
-        let windowMs = 60000;
-        if (typeof windowOption === 'number') {
-          windowMs = windowOption;
-        } else if (typeof windowOption === 'string') {
-          const match = windowOption.trim().toLowerCase().match(/^(\d+)(s|m|h)$/);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            const unit = match[2];
-            if (unit === 's') windowMs = val * 1000;
-            else if (unit === 'm') windowMs = val * 60000;
-            else if (unit === 'h') windowMs = val * 3600000;
-          }
-        }
-        
-        const now = Date.now();
-        const storeKey = `${path}:${ip}`;
-        let clientRecord = this.rateLimitStore.get(storeKey);
-        if (!clientRecord || now > clientRecord.resetTime) {
-          clientRecord = { count: 0, resetTime: now + windowMs };
-        }
-        clientRecord.count++;
-        this.rateLimitStore.set(storeKey, clientRecord);
-
-        if (clientRecord.count > max) {
+        const allowed = this.rateLimiter.checkLimit(ip, path, securityConfig.rateLimit);
+        if (!allowed) {
           throw Object.assign(new Error('Too Many Requests'), { status: 429 });
         }
       }
@@ -533,7 +462,7 @@ export class Server extends EventEmitter {
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
           response = await Promise.race([
-            this.execute(finalMatch.metadata, req, securityConfig),
+            RequestProcessor.execute(finalMatch.metadata, req, securityConfig),
             new Promise<never>((_, reject) => {
               controller.signal.addEventListener('abort', () => {
                 reject(Object.assign(new Error(`Request Timeout (${timeoutMs}ms)`), { status: 408 }));
@@ -544,7 +473,7 @@ export class Server extends EventEmitter {
           clearTimeout(timer);
         }
       } else {
-        response = await this.execute(finalMatch.metadata, req, securityConfig);
+        response = await RequestProcessor.execute(finalMatch.metadata, req, securityConfig);
       }
 
       response = applyCors(response, corsConfig);
@@ -594,161 +523,4 @@ export class Server extends EventEmitter {
       this.activeRequests--;
     }
   };
-
-
-  private async execute(metadata: EndpointMetadata, req: AugmentedRequest, securityConfig?: SecurityOptions): Promise<Response> {
-    return Context.run({ request: req, metadata, requestInstances: new Map<string, any>() }, async () => {
-      const controllerModule = MetadataStore.getTokenModule(metadata.controller);
-      const controller = MetadataStore.getController(metadata.controller, controllerModule);
-    if (!controller) throw new Error(`Controller ${metadata.controller} not registered`);
-
-    const ctx = { success: true, errors: [], mode: "strict" };
-
-    const finalHandler = async () => {
-      // 1. Run Guards FIRST (Security gate)
-      for (const g of metadata.guards) {
-        const guardModule = g.type === 'class' ? MetadataStore.getTokenModule(g.name) : controllerModule;
-        const guardInstance = g.type === 'class' ? MetadataStore.getGuard(g.name, guardModule) : controller;
-        const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
-        
-        // Resolve Guard Parameters
-        const guardArgs: any[] = [];
-        let resolverIdx = 0;
-        for (const p of g.params) {
-          if (p.source === 'Request' && !p.name && !p.validator) {
-            // Special case for backward compat or if it's a positional static arg?
-            // Actually, if we have params metadata, we use it.
-            guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig, guardModule));
-          } else if (p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject') {
-             guardArgs.push(await this.resolveParam(p, req, ctx, securityConfig, guardModule));
-          } else {
-            // Positional static arg from CallExpression (resolver)
-            guardArgs.push(g.resolvers[resolverIdx++]);
-          }
-        }
-
-        // If no params metadata (legacy or method-based without decorators), fallback to resolvers
-        const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
-        
-        await guardMethod.apply(guardInstance, finalArgs);
-      }
-
-      // 2. Resolve parameters (Parsing & Validation)
-      const args: any[] = [];
-      for (const p of metadata.params) {
-        args.push(await this.resolveParam(p, req, ctx, securityConfig, controllerModule));
-      }
-
-      if (!ctx.success) {
-        return new Response(JSON.stringify({ success: false, errors: ctx.errors }), { 
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      // 3. Execute Method
-      const result = await controller[metadata.methodName](...args);
-      return (result instanceof Response) ? result : (typeof result === "object" ? new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } }) : new Response(String(result || "")));
-    };
-
-    // 4. Wrap in Interceptor Chain
-    let chain = finalHandler;
-    for (const iName of [...metadata.interceptors].reverse()) {
-      const interceptor = MetadataStore.getInterceptor(iName);
-      const next = chain;
-      chain = () => interceptor.intercept(req, next);
-    }
-
-    try {
-      return await chain();
-    } catch (err: any) {
-      const status = err.status || err.code || 500;
-      return new Response(JSON.stringify(err.data || { success: false, error: err.message }), { 
-        status, 
-        headers: { "Content-Type": "application/json" } 
-      });
-    }
-    });
-  }
-
-  public async start() {
-    if (MetadataStore.getEndpoints().length === 0) {
-      await loadAutoMetadata();
-    }
-    this.init();
-    await MetadataStore.invokeHook('onModuleInit');
-
-    const { port } = this.options;
-    const runtime = this.detectRuntime();
-
-    this.logger.info(`📡 Runtime Detected: ${runtime}`, {
-      type: 'server_start',
-      runtime
-    });
-
-    if (runtime === 'Bun') {
-      (globalThis as any).Bun.serve({ port, fetch: this.fetch });
-      this.logger.info(`Bun server running at http://localhost:${port}`, {
-        type: 'server_start',
-        runtime: 'Bun',
-        port
-      });
-      await MetadataStore.invokeHook('onApplicationBootstrap');
-      this.internalEmit('start', port);
-    } 
-    else if (runtime === 'Deno') {
-      (globalThis as any).Deno.serve({ port }, this.fetch);
-      this.logger.info(`Deno server running at http://localhost:${port}`, {
-        type: 'server_start',
-        runtime: 'Deno',
-        port
-      });
-      await MetadataStore.invokeHook('onApplicationBootstrap');
-      this.internalEmit('start', port);
-    } 
-    else {
-      await this.startNode(port);
-      await MetadataStore.invokeHook('onApplicationBootstrap');
-      this.internalEmit('start', port);
-    }
-  }
-
-  private detectRuntime(): 'Bun' | 'Deno' | 'Node' {
-    if ((globalThis as any).Bun) return 'Bun';
-    if ((globalThis as any).Deno) return 'Deno';
-    return 'Node';
-  }
-
-  private async startNode(port: number): Promise<void> {
-    const { createServer } = await import('http');
-    this.nodeServer = createServer(async (req, res) => {
-      const protocol = (req.socket as any).encrypted ? 'https' : 'http';
-      const url = `${protocol}://${req.headers.host}${req.url}`;
-      const fetchReq = new Request(url, {
-        method: req.method,
-        headers: req.headers as any,
-        body: ['GET', 'HEAD'].includes(req.method || '') ? undefined : (req as any),
-        // @ts-ignore
-        duplex: 'half'
-      });
-      const response = await this.fetch(fetchReq);
-      res.statusCode = response.status;
-      response.headers.forEach((value, key) => res.setHeader(key, value));
-      if (response.body) {
-        const { Readable } = await import('stream');
-        // @ts-ignore
-        Readable.fromWeb(response.body).pipe(res);
-      } else res.end();
-    });
-    return new Promise<void>((resolve) => {
-      this.nodeServer.listen(port, () => {
-        this.logger.info(`Node.js bridge server running at http://localhost:${port}`, {
-          type: 'server_start',
-          runtime: 'Node',
-          port
-        });
-        resolve();
-      });
-    });
-  }
 }

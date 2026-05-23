@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
-import compilerPlugin, { transformer, createRegistry, generateManifestCode } from '../../transformer.js';
+import compilerPlugin, { transformer, createRegistry, generateManifestCode } from '../../compiler/transformer.js';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
-import compilerPlugin from '../transformer.js';
+import compilerPlugin from '../compiler/transformer.js';
 
 describe('TypeScript Compiler Plugin Transformer', () => {
   function compileAndTransform(sourceCode: string): string {
