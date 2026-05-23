@@ -1,4 +1,4 @@
-import { store } from './registry.js';
+import { store } from './metadata.js';
 import { Scope } from '../decorators.js';
 import { Context } from './context.js';
 

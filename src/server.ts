@@ -9,7 +9,6 @@ import { handleCors } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
 
 // Decoupled architectural imports
-import { ShutdownManager } from './core/shutdown-manager.js';
 import { RequestProcessor } from './core/request-processor.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
 import { ServerAdapter } from './adapters/adapter.js';
@@ -58,16 +57,16 @@ export class Server extends EventEmitter {
   private router = new Router();
   private activeRequests = 0;
   private serverAdapter?: ServerAdapter;
-  private shutdownManager: ShutdownManager;
+  private _isShuttingDown = false;
   private rateLimiter = new RateLimiter();
   private events: { [K in keyof ServerEvents]?: Set<any> } = {};
   public logger: Logger;
 
   public get isShuttingDown(): boolean {
-    return this.shutdownManager.getShuttingDown();
+    return this._isShuttingDown;
   }
   public set isShuttingDown(val: boolean) {
-    this.shutdownManager.setShuttingDown(val);
+    this._isShuttingDown = val;
   }
 
   public get nodeServer(): any {
@@ -93,18 +92,7 @@ export class Server extends EventEmitter {
   constructor(private options: ServerOptions) {
     super();
     this.logger = options.logger || new ConsoleLogger();
-    this.shutdownManager = new ShutdownManager({
-      shutdownTimeout: options.shutdownTimeout,
-      logger: this.logger,
-      nodeServerClose: async () => {
-        if (this.serverAdapter) {
-          await this.serverAdapter.close();
-        }
-      },
-      beforeShutdownEmit: () => this.internalEmit('beforeShutdown'),
-      shutdownEmit: () => this.internalEmit('shutdown')
-    });
-    this.shutdownManager.setupSignals((sig) => this.shutdown(sig));
+    this.setupSignals();
   }
 
   private collectModuleElements(moduleClass: any, activeControllers: Set<string>, visitedModules = new Set<any>()): any {
@@ -264,8 +252,73 @@ export class Server extends EventEmitter {
     this.events[event]?.forEach(h => h(...args));
   }
 
+  private setupSignals() {
+    const handleSignal = (signal: string) => {
+      this.logger.warn(`\nReceived ${signal}. Starting graceful shutdown...`, {
+        type: 'server_shutdown',
+        reason: signal
+      });
+      this.shutdown(signal);
+    };
+
+    if (typeof process !== 'undefined') {
+      process.on('SIGTERM', () => handleSignal('SIGTERM'));
+      process.on('SIGINT', () => handleSignal('SIGINT'));
+    } 
+    else if ((globalThis as any).Deno) {
+      (globalThis as any).Deno.addSignalListener('SIGTERM', () => handleSignal('SIGTERM'));
+      (globalThis as any).Deno.addSignalListener('SIGINT', () => handleSignal('SIGINT'));
+    }
+  }
+
   public async shutdown(signal?: string) {
-    await this.shutdownManager.shutdown(signal, () => this.activeRequests);
+    if (this._isShuttingDown) return;
+    this._isShuttingDown = true;
+
+    this.internalEmit('beforeShutdown');
+
+    await MetadataStore.invokeHook('onModuleDestroy');
+    await MetadataStore.invokeHook('beforeApplicationShutdown', signal);
+
+    if (this.serverAdapter) {
+      await this.serverAdapter.close();
+    }
+
+    const timeout = this.options.shutdownTimeout || 10000;
+    const startTime = Date.now();
+
+    this.logger.info(`Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
+      type: 'server_shutdown',
+      activeRequests: this.activeRequests,
+      timeout
+    });
+
+    const checkActive = async () => {
+      while (this.activeRequests > 0) {
+        if (Date.now() - startTime > timeout) {
+          this.logger.warn(`Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
+            type: 'server_shutdown',
+            reason: 'timeout',
+            activeRequests: this.activeRequests
+          });
+          break;
+        }
+        await new Promise(r => setTimeout(r, 100));
+      }
+    };
+
+    await checkActive();
+    await MetadataStore.invokeHook('onApplicationShutdown', signal);
+
+    this.logger.info('Shutdown complete. Goodbye!', {
+      type: 'server_shutdown',
+      reason: 'complete'
+    });
+
+    this.internalEmit('shutdown');
+    
+    if (typeof process !== 'undefined') process.exit(0);
+    else if ((globalThis as any).Deno) (globalThis as any).Deno.exit(0);
   }
 
   private detectRuntime(): 'Bun' | 'Deno' | 'Node' {
@@ -356,7 +409,7 @@ export class Server extends EventEmitter {
       }
     };
 
-    if (this.shutdownManager.getShuttingDown()) {
+    if (this.isShuttingDown) {
       let res = new Response('Service Unavailable (Shutting Down)', { status: 503 });
       res = applyCors(res, this.options.cors);
       res = applySecurityHeaders(res, mergeSecurityConfigs([this.options.security]));
