@@ -271,8 +271,8 @@ const __val_85a41b63d9a32b8b = (v, path, ctx) => validators.union(v, path, ctx, 
 const __val_d31fde334b3f24e2 = (v, path, ctx) => validators.literal(v, path, ctx, false);
 const __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, true);
 const __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
-const __val_913d6d1b0acb38ac = validators.date;
-const __val_3ab6837d7d6b0179 = validators.regexp;
+const __val_1b07349e25c26601 = validators.date;
+const __val_925fde611c826103 = validators.regexp;
 const __val_75d012fe28656e0a = validators.bigint;
 const __val_91d782a2d0de1354 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["name", "active"], "{ name: string; active: boolean; }"))
@@ -453,7 +453,35 @@ const __val_8eb9a2d0e4390fe9 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect } from '../../index.js';
+const __val_ccb10958b6aa7739 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["a", "b"], "SumPayload"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["a", "b"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["a", false, __val_12886f9d00055adf],
+        ["b", false, __val_12886f9d00055adf]
+    ]);
+    return data;
+};
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, All } from '../../index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
 let TypeSafetyController = class TypeSafetyController {
     static __injections__ = {
@@ -510,6 +538,15 @@ let TypeSafetyController = class TypeSafetyController {
     }
     customValidator(data) {
         return { success: true, data };
+    }
+    headExplicit() {
+        // void return
+    }
+    getFallback() {
+        return { message: 'hello from get fallback' };
+    }
+    allVerbs() {
+        return { message: 'hello from all verbs' };
     }
 };
 __decorate([
@@ -586,6 +623,15 @@ __decorate([
     Post('/custom-validator'),
     __param(0, Body('strip'))
 ], TypeSafetyController.prototype, "customValidator", null);
+__decorate([
+    Head('/head-explicit')
+], TypeSafetyController.prototype, "headExplicit", null);
+__decorate([
+    Get('/get-fallback')
+], TypeSafetyController.prototype, "getFallback", null);
+__decorate([
+    All('/all-verbs')
+], TypeSafetyController.prototype, "allVerbs", null);
 TypeSafetyController = __decorate([
     Controller('/type-safety')
 ], TypeSafetyController);
@@ -848,6 +894,87 @@ DiTestController = __decorate([
     Controller('/di')
 ], DiTestController);
 export { DiTestController };
+let RealtimeController = class RealtimeController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    handleWs(ws) {
+        ws.on('message', (msg) => {
+            ws.send(`Echo: ${msg}`);
+        });
+    }
+    handleWsParams(ws, room, token) {
+        ws.send(`Room: ${room}, Token: ${token}`);
+        ws.on('message', (msg) => {
+            ws.send(msg);
+        });
+    }
+    handleWsLimited(ws) {
+        ws.on('message', (msg) => {
+            ws.send(msg);
+        });
+    }
+    handleWsHeartbeat(ws) {
+        // Heartbeat verification endpoint
+    }
+    async *handleSse() {
+        yield { event: 'update', data: { val: 1 } };
+        yield { event: 'update', data: { val: 2 } };
+    }
+};
+__decorate([
+    Ws('/ws')
+], RealtimeController.prototype, "handleWs", null);
+__decorate([
+    Ws('/ws-params/:room'),
+    __param(1, Param('room')),
+    __param(2, Query('token'))
+], RealtimeController.prototype, "handleWsParams", null);
+__decorate([
+    Ws('/ws-limited', { maxPayload: 10 })
+], RealtimeController.prototype, "handleWsLimited", null);
+__decorate([
+    Ws('/ws-heartbeat', { pingInterval: 100, pingTimeout: 50 })
+], RealtimeController.prototype, "handleWsHeartbeat", null);
+__decorate([
+    Sse('/sse')
+], RealtimeController.prototype, "handleSse", null);
+RealtimeController = __decorate([
+    Controller('/realtime')
+], RealtimeController);
+export { RealtimeController };
+let MathMicroserviceController = class MathMicroserviceController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    sum(data) {
+        return data.a + data.b;
+    }
+    greet(name) {
+        return `Hello, ${name}!`;
+    }
+    notify(msg) {
+        // Event listener
+    }
+};
+__decorate([
+    MessagePattern('math.sum'),
+    __param(0, Payload())
+], MathMicroserviceController.prototype, "sum", null);
+__decorate([
+    MessagePattern('math.greet'),
+    __param(0, Payload())
+], MathMicroserviceController.prototype, "greet", null);
+__decorate([
+    EventPattern('logs.notify'),
+    __param(0, Payload())
+], MathMicroserviceController.prototype, "notify", null);
+MathMicroserviceController = __decorate([
+    Controller()
+], MathMicroserviceController);
+export { MathMicroserviceController };
 __server_metadata_store.providers.set("DiGuard", DiGuard);
 __server_metadata_store.guardClasses.add("DiGuard");
 __server_metadata_store.endpoints.push({
@@ -1033,12 +1160,12 @@ __server_metadata_store.endpoints.push({
         }, {
             source: "Query",
             name: "date",
-            validator: __val_913d6d1b0acb38ac,
+            validator: __val_1b07349e25c26601,
             mode: undefined
         }, {
             source: "Query",
             name: "pattern",
-            validator: __val_3ab6837d7d6b0179,
+            validator: __val_925fde611c826103,
             mode: undefined
         }, {
             source: "Query",
@@ -1126,6 +1253,36 @@ __server_metadata_store.endpoints.push({
             validator: __val_e07351f5c6fe82e2,
             mode: "strip"
         }],
+    guards: [],
+    interceptors: [],
+    meta: {}
+});
+__server_metadata_store.endpoints.push({
+    controller: "TypeSafetyController",
+    methodName: "headExplicit",
+    httpMethod: "HEAD",
+    path: "/type-safety/head-explicit",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {}
+});
+__server_metadata_store.endpoints.push({
+    controller: "TypeSafetyController",
+    methodName: "getFallback",
+    httpMethod: "GET",
+    path: "/type-safety/get-fallback",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {}
+});
+__server_metadata_store.endpoints.push({
+    controller: "TypeSafetyController",
+    methodName: "allVerbs",
+    httpMethod: "ALL",
+    path: "/type-safety/all-verbs",
+    params: [],
     guards: [],
     interceptors: [],
     meta: {}
@@ -1309,6 +1466,155 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     meta: {}
 });
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleWs",
+    httpMethod: "WS",
+    path: "/realtime/ws",
+    params: [{
+            source: "WebSocket",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        ws: true
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleWsParams",
+    httpMethod: "WS",
+    path: "/realtime/ws-params/:room",
+    params: [{
+            source: "WebSocket",
+            name: "",
+            validator: "",
+            mode: undefined
+        }, {
+            source: "Param",
+            name: "room",
+            validator: __val_473287f8298dba71,
+            mode: undefined
+        }, {
+            source: "Query",
+            name: "token",
+            validator: __val_473287f8298dba71,
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        ws: true
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleWsLimited",
+    httpMethod: "WS",
+    path: "/realtime/ws-limited",
+    params: [{
+            source: "WebSocket",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        ws: true,
+        wsOptions: {
+            maxPayload: 10
+        }
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleWsHeartbeat",
+    httpMethod: "WS",
+    path: "/realtime/ws-heartbeat",
+    params: [{
+            source: "WebSocket",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        ws: true,
+        wsOptions: {
+            pingInterval: 100,
+            pingTimeout: 50
+        }
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleSse",
+    httpMethod: "GET",
+    path: "/realtime/sse",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {
+        sse: true
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "MathMicroserviceController",
+    methodName: "sum",
+    httpMethod: "RPC",
+    path: "math.sum",
+    params: [{
+            source: "Body",
+            name: "",
+            validator: __val_ccb10958b6aa7739,
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        rpc: true
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "MathMicroserviceController",
+    methodName: "greet",
+    httpMethod: "RPC",
+    path: "math.greet",
+    params: [{
+            source: "Body",
+            name: "",
+            validator: __val_473287f8298dba71,
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        rpc: true
+    }
+});
+__server_metadata_store.endpoints.push({
+    controller: "MathMicroserviceController",
+    methodName: "notify",
+    httpMethod: "RPC",
+    path: "logs.notify",
+    params: [{
+            source: "Body",
+            name: "",
+            validator: __val_473287f8298dba71,
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {
+        rpc: true,
+        event: true
+    }
+});
 __server_metadata_store.providers.set("TypeSafetyController", TypeSafetyController);
 __server_metadata_store.controllerClasses.add("TypeSafetyController");
 __server_metadata_store.providers.set("TagParityController", TagParityController);
@@ -1321,6 +1627,10 @@ __server_metadata_store.providers.set("InheritedController", InheritedController
 __server_metadata_store.controllerClasses.add("InheritedController");
 __server_metadata_store.providers.set("DiTestController", DiTestController);
 __server_metadata_store.controllerClasses.add("DiTestController");
+__server_metadata_store.providers.set("RealtimeController", RealtimeController);
+__server_metadata_store.controllerClasses.add("RealtimeController");
+__server_metadata_store.providers.set("MathMicroserviceController", MathMicroserviceController);
+__server_metadata_store.controllerClasses.add("MathMicroserviceController");
 __server_metadata_store.providers.set("ConfigService", ConfigService);
 __server_metadata_store.providers.set("DatabaseService", DatabaseService);
 __server_metadata_store.providers.set("LoggerService", LoggerService);

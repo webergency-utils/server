@@ -26,6 +26,7 @@ export function Query(arg1: any, arg2?: any, arg3?: any): any {
 
 export const Param = (name: string): ParameterDecorator => (target: any, key: string | symbol | undefined, idx: number) => {};
 export const Header = (name: string): ParameterDecorator => (target: any, key: string | symbol | undefined, idx: number) => {};
+export const ConnectedSocket = (): ParameterDecorator => (target: any, key: string | symbol | undefined, idx: number) => {};
 
 /**
  * CLASS/METHOD DECORATORS (Strict Paren-free)
@@ -62,13 +63,74 @@ export function Controller(prefixOrOptions?: string | ControllerOptions): ClassD
   };
 }
 
+export interface WsOptions {
+  pingInterval?: number;
+  pingTimeout?: number;
+  maxPayload?: number;
+}
+
 export function Get(path: string = ''): MethodDecorator { return () => {}; }
 export function Post(path: string = ''): MethodDecorator { return () => {}; }
 export function Put(path: string = ''): MethodDecorator { return () => {}; }
 export function Delete(path: string = ''): MethodDecorator { return () => {}; }
 export function Patch(path: string = ''): MethodDecorator { return () => {}; }
+export function Head(path: string = ''): MethodDecorator { return () => {}; }
+export function All(path: string = ''): MethodDecorator { return () => {}; }
+export function Ws(path: string = '', options?: WsOptions): MethodDecorator { return () => {}; }
+export function Sse(path: string = ''): MethodDecorator { return () => {}; }
 
-export function Meta(...metas: Record<string, any>[]): any { return () => {}; }
+export function MessagePattern(pattern: string): MethodDecorator { return () => {}; }
+export function EventPattern(pattern: string): MethodDecorator { return () => {}; }
+
+export function Payload(target: any, key: string | symbol, idx: number): void;
+export function Payload(name?: string): ParameterDecorator;
+export function Payload(arg1?: any, arg2?: any, arg3?: any): any {
+  if (arg3 !== undefined) return; // Direct decorator usage
+  return (target: any, key: string | symbol, idx: number) => {}; 
+}
+
+export function Meta(...metas: Record<string, any>[]): any {
+  return (target: any, propertyKey?: string | symbol, descriptor?: TypedPropertyDescriptor<any>) => {
+    const mergedMeta = Object.assign({}, ...metas);
+
+    // Class decorator
+    if (propertyKey === undefined) {
+      if (!target.__metadata__) {
+        target.__metadata__ = {};
+      }
+      Object.assign(target.__metadata__, mergedMeta);
+      return target;
+    }
+
+    // Method decorator
+    let targetMethod = descriptor?.value;
+    if (!targetMethod && propertyKey !== undefined) {
+      targetMethod = target[propertyKey];
+    }
+
+    if (targetMethod && typeof targetMethod === 'function') {
+      if (!targetMethod.__metadata__) {
+        targetMethod.__metadata__ = {};
+      }
+      Object.assign(targetMethod.__metadata__, mergedMeta);
+    } else {
+      if (!target.__metadata__) {
+        target.__metadata__ = {};
+      }
+      if (!target.__metadata__[propertyKey]) {
+        target.__metadata__[propertyKey] = {};
+      }
+      Object.assign(target.__metadata__[propertyKey], mergedMeta);
+    }
+
+    return descriptor;
+  };
+}
+
+export function SetMetadata<K = any, V = any>(key: K, value: V): any {
+  return Meta({ [key as any]: value });
+}
+
 export function Protect(guard: string | Function, ...guards: (string | Function)[]): any { return () => {}; }
 export function Intercept(...interceptors: any[]): any { return () => {}; }
 

@@ -1,0 +1,2180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webergency Server - Ahead-of-Time (AOT) Web & RPC Engine Docs</title>
+  
+  <!-- Google Fonts Outfit, Inter, and Fira Code for code blocks -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Premium Design System with curated Dark Palette */
+    :root {
+      --bg-dark: #070a13;
+      --bg-card: rgba(15, 23, 42, 0.65);
+      --bg-code: #0b0f19;
+      --border-color: rgba(255, 255, 255, 0.06);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary: #6366f1; /* Indigo */
+      --primary-hover: #4f46e5;
+      --secondary: #d946ef; /* Magenta/Pink */
+      --success: #10b981; /* Emerald */
+      --warning: #f59e0b; /* Amber */
+      --error: #f43f5e; /* Rose */
+      
+      --font-title: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      line-height: 1.625;
+      overflow-x: hidden;
+    }
+
+    /* Ambient Background Glows */
+    .glow-1 {
+      position: fixed;
+      top: -15%;
+      left: -10%;
+      width: 55vw;
+      height: 55vh;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0,0,0,0) 70%);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .glow-2 {
+      position: fixed;
+      bottom: -15%;
+      right: -10%;
+      width: 55vw;
+      height: 55vh;
+      background: radial-gradient(circle, rgba(217, 70, 239, 0.1) 0%, rgba(0,0,0,0) 70%);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    /* Responsive Layout */
+    .app-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Glassmorphic Sidebar */
+    .sidebar {
+      width: 320px;
+      background: rgba(7, 10, 19, 0.85);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border-color);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 100;
+      overflow-y: auto;
+      padding: 2.5rem 1.75rem;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.05) transparent;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 3rem;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #fff;
+      font-family: var(--font-title);
+      font-size: 1.4rem;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .logo-text {
+      font-family: var(--font-title);
+      font-size: 1.5rem;
+      font-weight: 800;
+      background: linear-gradient(to right, #ffffff, #e2e8f0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-group {
+      margin-bottom: 2.25rem;
+    }
+
+    .nav-title {
+      font-family: var(--font-title);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+      padding-left: 0.5rem;
+      font-weight: 700;
+    }
+
+    .nav-links {
+      list-style: none;
+    }
+
+    .nav-links li {
+      margin-bottom: 0.4rem;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      display: block;
+      transition: all 0.2s ease-in-out;
+      border-left: 2px solid transparent;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.03);
+      padding-left: 1rem;
+    }
+
+    .nav-links li.active a {
+      color: #fff;
+      background: rgba(99, 102, 241, 0.08);
+      border-left-color: var(--primary);
+      font-weight: 500;
+    }
+
+    /* Content Area */
+    .main-content {
+      flex: 1;
+      margin-left: 320px;
+      padding: 3.5rem 5rem;
+      max-width: 1240px;
+    }
+
+    .content-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1.5rem;
+    }
+
+    .badge {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(217, 70, 239, 0.08) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      color: #f472b6;
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    /* Sections styling */
+    section {
+      margin-bottom: 6rem;
+      scroll-margin-top: 3.5rem;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-title);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #fff 40%, #e879f9 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      font-size: 1.95rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    h2::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 1.35rem;
+      background: linear-gradient(to bottom, var(--primary), var(--secondary));
+      border-radius: 2px;
+    }
+
+    h3 {
+      font-size: 1.35rem;
+      margin: 1.75rem 0 0.85rem 0;
+      color: #f3f4f6;
+    }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+      line-height: 1.75;
+    }
+
+    strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* Cards (Glassmorphism) */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2.25rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      transition: all 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: rgba(99, 102, 241, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    /* Feature indicators */
+    .feature-indicator {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+    }
+
+    .feature-icon {
+      background: rgba(99, 102, 241, 0.12);
+      color: #818cf8;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+      flex-shrink: 0;
+    }
+
+    /* Code Block Containers */
+    .code-container {
+      position: relative;
+      background-color: var(--bg-code);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      margin: 1.5rem 0;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+
+    .code-header {
+      background-color: rgba(255, 255, 255, 0.015);
+      padding: 0.85rem 1.35rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .code-title {
+      font-family: var(--font-mono);
+      font-size: 0.825rem;
+      color: var(--text-muted);
+    }
+
+    .btn-copy {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-muted);
+      padding: 0.3rem 0.65rem;
+      font-size: 0.725rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: all 0.2s;
+    }
+
+    .btn-copy:hover {
+      color: #fff;
+      border-color: var(--primary);
+      background-color: rgba(99, 102, 241, 0.1);
+    }
+
+    pre {
+      padding: 1.5rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    code {
+      color: #e2e8f0;
+    }
+
+    /* Syntax Highlighting */
+    .keyword { color: #f43f5e; font-weight: 500; }
+    .type { color: #22d3ee; }
+    .string { color: #34d399; }
+    .comment { color: #57606a; font-style: italic; }
+    .decorator { color: #d946ef; font-weight: 600; }
+    .function { color: #38bdf8; }
+    .number { color: #fbbf24; }
+    .boolean { color: #fbbf24; }
+
+    /* Interactive Tab Panels */
+    .tabs-wrapper {
+      margin: 1.75rem 0;
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      background: var(--bg-card);
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+
+    .tabs-nav {
+      display: flex;
+      background-color: rgba(0, 0, 0, 0.25);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .tab-btn {
+      padding: 0.95rem 1.65rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: var(--font-title);
+      font-size: 0.925rem;
+      font-weight: 600;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: #fff;
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      border-bottom-color: var(--primary);
+      background-color: rgba(99, 102, 241, 0.06);
+    }
+
+    .tab-panel {
+      display: none;
+      padding: 1.5rem;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Alerts */
+    .alert {
+      background: rgba(99, 102, 241, 0.04);
+      border-left: 4px solid var(--primary);
+      padding: 1.35rem 1.75rem;
+      border-radius: 0 12px 12px 0;
+      margin: 1.75rem 0;
+      border-top: 1px solid rgba(255,255,255,0.02);
+      border-right: 1px solid rgba(255,255,255,0.02);
+      border-bottom: 1px solid rgba(255,255,255,0.02);
+    }
+
+    .alert-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 1rem;
+      color: #818cf8;
+      margin-bottom: 0.35rem;
+    }
+
+    /* Architectural Diagram Box */
+    .diagram-container {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px dashed var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .diagram-step {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      width: 100%;
+      max-width: 600px;
+      text-align: center;
+      position: relative;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    .diagram-step::after {
+      content: '↓';
+      position: absolute;
+      bottom: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.2rem;
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    .diagram-step:last-child::after {
+      display: none;
+    }
+
+    .diagram-step strong {
+      color: var(--primary);
+      font-family: var(--font-title);
+      font-size: 0.95rem;
+    }
+
+    /* Decorators Directory Reference Styling */
+    .ref-header-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      background: rgba(0,0,0,0.15);
+      padding: 1.25rem;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+    }
+
+    .search-input {
+      background: rgba(7, 10, 19, 0.5);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 0.65rem 1.25rem;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.925rem;
+      width: 320px;
+      transition: all 0.2s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 15px rgba(99,102,241,0.25);
+    }
+
+    .filter-btn-group {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .filter-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: var(--font-title);
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      color: #fff;
+      background-color: rgba(255, 255, 255, 0.06);
+    }
+
+    .filter-btn.active {
+      background-color: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.25);
+    }
+
+    .decorator-card {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+      background: rgba(15, 23, 42, 0.35);
+      transition: all 0.25s;
+    }
+
+    .decorator-card:hover {
+      border-color: rgba(99, 102, 241, 0.25);
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .decorator-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .decorator-signature {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .decorator-badges {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .dec-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .dec-badge-class {
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .dec-badge-method {
+      background: rgba(217, 70, 239, 0.1);
+      color: #f472b6;
+      border: 1px solid rgba(217, 70, 239, 0.2);
+    }
+
+    .dec-badge-param {
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .decorator-desc {
+      color: var(--text-muted);
+      font-size: 0.925rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .decorator-meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .decorator-meta-table th, .decorator-meta-table td {
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+
+    .decorator-meta-table th {
+      background: rgba(255,255,255,0.015);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .decorator-meta-table td {
+      color: var(--text-muted);
+    }
+
+    .decorator-meta-table td code {
+      font-size: 0.8rem;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 3rem 0;
+      margin-top: 6rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="logo-container">
+        <div class="logo-icon">W</div>
+        <div class="logo-text">webergency</div>
+      </div>
+      
+      <nav>
+        <div class="nav-group">
+          <div class="nav-title">Overview</div>
+          <ul class="nav-links">
+            <li class="active"><a href="#introduction">Introduction</a></li>
+            <li><a href="#core-concepts">Core Concepts</a></li>
+            <li><a href="#getting-started">Getting Started</a></li>
+            <li><a href="#multiruntime-adapters">Multi-Runtime Adapters</a></li>
+            <li><a href="#bootstrap-server">Bootstrapping Server</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-title">HTTP & REST</div>
+          <ul class="nav-links">
+            <li><a href="#routing">Controllers & Routing</a></li>
+            <li><a href="#parameter-binding">Parameters Binding</a></li>
+            <li><a href="#validation-errors">Validation Errors Format</a></li>
+            <li><a href="#di">Dependency Injection</a></li>
+            <li><a href="#lifecycle-hooks">Lifecycle Hooks</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-title">Middlewares & Security</div>
+          <ul class="nav-links">
+            <li><a href="#guards-interceptors">Guards & Interceptors</a></li>
+            <li><a href="#exception-filters">Exception Filters</a></li>
+            <li><a href="#security-cors">CORS & Security</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-title">Realtime & RPC</div>
+          <ul class="nav-links">
+            <li><a href="#websockets">WebSockets</a></li>
+            <li><a href="#sse">Server-Sent Events</a></li>
+            <li><a href="#microservices">Microservices (RPC)</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-title">Tooling</div>
+          <ul class="nav-links">
+            <li><a href="#aot-cli">AOT Build CLI</a></li>
+            <li><a href="#swagger">Swagger Documentation</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-title">Reference</div>
+          <ul class="nav-links">
+            <li><a href="#decorators-reference">Decorators API Directory</a></li>
+          </ul>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top header -->
+      <header class="content-header">
+        <div>
+          <span class="badge">v0.0.28</span>
+        </div>
+        <div style="font-size: 0.9rem; color: var(--text-muted);">
+          Ahead-Of-Time (AOT) Zero-Reflection Server Core
+        </div>
+      </header>
+
+      <!-- Section: Introduction -->
+      <section id="introduction">
+        <h1>Webergency Server</h1>
+        <p>
+          Webergency Server is an industrial-grade, <strong>zero-reflection Ahead-Of-Time (AOT) compiled</strong> web server engine. It completely eliminates runtime class annotations reflection (`reflect-metadata`), dynamic parameter parsing, and runtime dependency-injection graph construction. 
+        </p>
+        <p>
+          By offloading AST mapping and validation compilation to a pre-build compilation step, the server boasts near-instantaneous startup times, minimizes heap allocations, and executes routing and request validation with extreme microsecond-level speed.
+        </p>
+
+        <div class="grid-2">
+          <div class="card feature-indicator">
+            <div class="feature-icon">⚡</div>
+            <div>
+              <h3 style="margin-top:0;">Pure AOT Routing</h3>
+              <p style="margin-bottom:0; font-size:0.9rem;">Routes are mapped at build-time directly to an instructions array, removing path-regex resolution structures and string matching layers during request pipelines.</p>
+            </div>
+          </div>
+          <div class="card feature-indicator">
+            <div class="feature-icon">🛡️</div>
+            <div>
+              <h3 style="margin-top:0;">Compiled Type Safety</h3>
+              <p style="margin-bottom:0; font-size:0.9rem;">Integrates with `@webergency-utils/typechecker` to extract native TypeScript interfaces and compile them directly into highly optimized JSON validators.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Core Concepts -->
+      <section id="core-concepts">
+        <h2>Core Concepts</h2>
+        <p>
+          In traditional frameworks, decorators like `@Injectable()` and `@Post()` are inspected at runtime via reflection. The server must walk class trees, parse parameter design-types, and hook up routes. This introduces boot latency and overhead.
+        </p>
+        <p>
+          Webergency utilizes a compiler transformer that resolves these constructs at build time:
+        </p>
+
+        <div class="diagram-container">
+          <div class="diagram-step">
+            <strong>1. TS Compilation & Transform</strong>: Compiler traverses TS files, parsing decorators and generating validator manifests.
+          </div>
+          <div class="diagram-step">
+            <strong>2. AOT Manifest Emitted</strong>: Writes <code>_metadata.webergency-server.js</code> with routes, DI scopes, and validator functions.
+          </div>
+          <div class="diagram-step">
+            <strong>3. Startup Engine Init</strong>: Core server loads the manifest. Boots instantly with no reflections.
+          </div>
+          <div class="diagram-step">
+            <strong>4. Execution Pipeline</strong>: incoming requests pass directly through compiled validators, guards, and handlers.
+          </div>
+        </div>
+
+        <div class="alert">
+          <div class="alert-title">Benefits of AOT compilation</div>
+          <p style="margin-bottom:0; font-size:0.925rem;">
+            Since validations are compiled to direct, branch-free inline JavaScript checks, the parser handles request payloads up to 10x faster than traditional library validators. In addition, memory usage is drastically reduced because no AST trees or runtime metadata caches are held in the V8 heap.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section: Getting Started -->
+      <section id="getting-started">
+        <h2>Getting Started</h2>
+        <p>
+          Install the server package along with the companion compiler plugins using `ts-patch`:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">Terminal</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>npm install @webergency-utils/server
+npm install --save-dev @webergency-utils/typechecker ts-patch typescript
+npx ts-patch install</code></pre>
+        </div>
+
+        <p>Configure `tsconfig.json` to load the transformers in order:</p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">tsconfig.json</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>{
+  <span class="keyword">"compilerOptions"</span>: {
+    <span class="keyword">"target"</span>: <span class="string">"ES2022"</span>,
+    <span class="keyword">"module"</span>: <span class="string">"NodeNext"</span>,
+    <span class="keyword">"moduleResolution"</span>: <span class="string">"NodeNext"</span>,
+    <span class="keyword">"plugins"</span>: [
+      { <span class="keyword">"transform"</span>: <span class="string">"@webergency-utils/typechecker/transformer"</span> },
+      { <span class="keyword">"transform"</span>: <span class="string">"@webergency-utils/server/transformer"</span> }
+    ],
+    <span class="keyword">"experimentalDecorators"</span>: <span class="boolean">true</span>
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Multi-Runtime Adapters -->
+      <section id="multiruntime-adapters">
+        <h2>Multi-Runtime Adapters</h2>
+        <p>
+          Webergency Server is engineered to be completely execution runtime-agnostic. The server detects the host runtime environment dynamically upon boot and binds standard request and upgrade pipelines onto native features:
+        </p>
+        <div class="card">
+          <h3 style="margin-top:0;">Available Adapters</h3>
+          <p>
+            - <strong>BunAdapter</strong>: Leverages Bun's native <code>Bun.serve()</code> HTTP server and native Bun WebSockets for maximum throughput.<br>
+            - <strong>DenoAdapter</strong>: Integrates with Deno's native <code>Deno.serve()</code> HTTP listener and WebSocket upgrade streams.<br>
+            - <strong>NodeAdapter</strong>: Uses Node's standard <code>http.createServer</code>, accompanied by a custom, zero-dependency lightweight WebSocket frame parser.
+          </p>
+        </div>
+        <p>
+          Because all controllers, validations, and routes are compiled Ahead-of-Time, you can package your server application into standalone executables (e.g. <code>bun build --compile</code> or <code>deno compile</code>) with ease.
+        </p>
+      </section>
+
+      <!-- Section: Bootstrapping Server -->
+      <section id="bootstrap-server">
+        <h2>Bootstrapping the Server</h2>
+        <p>
+          To boot your application, write a bootstrapping entry point file (usually <code>src/main.ts</code>) that imports the compiled AOT metadata manifest and runs the <code>Server</code> class:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/main.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Server</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+<span class="keyword">import</span> { <span class="type">AppModule</span> } <span class="keyword">from</span> <span class="string">'./modules/app.module.js'</span>;
+
+<span class="comment">// Instantiates the server runner</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> <span class="type">Server</span>({
+  port: <span class="number">3000</span>,
+  module: AppModule,
+  logs: <span class="boolean">true</span>
+});
+
+<span class="comment">// Starts listening and executes lifecycle initialization hooks</span>
+<span class="keyword">await</span> server.start();</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Routing -->
+      <section id="routing">
+        <h2>Controllers & Routing</h2>
+        <p>
+          Routing matches REST verbs mapped onto class structures annotated with `@Controller()`. Each request action points directly to a method with HTTP decorators:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/controllers/product.controller.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">Get</span>, <span class="type">Post</span>, <span class="type">Put</span>, <span class="type">Delete</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Controller</span>(<span class="string">'/products'</span>)
+<span class="keyword">export class</span> <span class="type">ProductController</span> {
+
+  <span class="decorator">@Get</span>(<span class="string">'/'</span>)
+  <span class="function">getAll</span>() {
+    <span class="keyword">return</span> { <span class="keyword">products</span>: [] };
+  }
+
+  <span class="decorator">@Post</span>(<span class="string">'/'</span>)
+  <span class="function">create</span>() {
+    <span class="keyword">return</span> { <span class="keyword">success</span>: <span class="boolean">true</span> };
+  }
+
+  <span class="decorator">@Put</span>(<span class="string">'/:id'</span>)
+  <span class="function">update</span>() {
+    <span class="keyword">return</span> { <span class="keyword">updated</span>: <span class="boolean">true</span> };
+  }
+
+  <span class="decorator">@Delete</span>(<span class="string">'/:id'</span>)
+  <span class="function">remove</span>() {
+    <span class="keyword">return</span> { <span class="keyword">deleted</span>: <span class="boolean">true</span> };
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Parameters Binding -->
+      <section id="parameter-binding">
+        <h2>Parameters Binding & Constraints Validation</h2>
+        <p>
+          Webergency compiler detects parameters type annotations and injects appropriate validation constraints at build time. Supported constraint tags from `@webergency-utils/typechecker` include:
+        </p>
+        <div class="card">
+          <table class="decorator-meta-table">
+            <thead>
+              <tr>
+                <th>Constraint Tag</th>
+                <th>Applies To</th>
+                <th>Description</th>
+                <th>Example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>MinLength&lt;N&gt;</code> / <code>MaxLength&lt;N&gt;</code></td>
+                <td><code>string</code></td>
+                <td>Restricts the string character length.</td>
+                <td><code>string & MinLength&lt;8&gt;</code></td>
+              </tr>
+              <tr>
+                <td><code>Minimum&lt;N&gt;</code> / <code>Maximum&lt;N&gt;</code></td>
+                <td><code>number</code></td>
+                <td>Imposes numeric boundaries (inclusive).</td>
+                <td><code>number & Minimum&lt;18&gt;</code></td>
+              </tr>
+              <tr>
+                <td><code>ExclusiveMinimum&lt;N&gt;</code> / <code>ExclusiveMaximum&lt;N&gt;</code></td>
+                <td><code>number</code></td>
+                <td>Numeric boundaries (exclusive).</td>
+                <td><code>number & ExclusiveMinimum&lt;0&gt;</code></td>
+              </tr>
+              <tr>
+                <td><code>MultipleOf&lt;N&gt;</code></td>
+                <td><code>number</code></td>
+                <td>Asserts value is divisible by N.</td>
+                <td><code>number & MultipleOf&lt;5&gt;</code></td>
+              </tr>
+              <tr>
+                <td><code>Format&lt;'email' | 'uuid' | 'date'&gt;</code></td>
+                <td><code>string</code></td>
+                <td>Enforces formatted validations.</td>
+                <td><code>string & Format&lt;'email'&gt;</code></td>
+              </tr>
+              <tr>
+                <td><code>MinItems&lt;N&gt;</code> / <code>MaxItems&lt;N&gt;</code></td>
+                <td><code>array</code></td>
+                <td>Validates arrays bounds.</td>
+                <td><code>string[] & MinItems&lt;2&gt;</code></td>
+              </tr>
+              <tr>
+                <td><code>UniqueItems</code></td>
+                <td><code>array</code></td>
+                <td>Requires unique items.</td>
+                <td><code>number[] & UniqueItems</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          Let's view a comprehensive controller mapping parameters bindings and validation:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/controllers/customer.controller.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">Post</span>, <span class="type">Get</span>, <span class="type">Body</span>, <span class="type">Param</span>, <span class="type">Query</span>, <span class="type">Header</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+<span class="keyword">import</span> { <span class="type">MinLength</span>, <span class="type">Format</span>, <span class="type">UniqueItems</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/typechecker'</span>;
+
+<span class="keyword">interface</span> <span class="type">Address</span> {
+  city: <span class="type">string</span>;
+  zip: <span class="type">string</span>;
+}
+
+<span class="keyword">interface</span> <span class="type">RegisterDto</span> {
+  email: <span class="type">string</span> & <span class="type">Format</span>&lt;<span class="string">'email'</span>&gt;;
+  password: <span class="type">string</span> & <span class="type">MinLength</span>&lt;<span class="number">8</span>&gt;;
+  tags: <span class="type">string</span>[] & <span class="type">UniqueItems</span>;
+  address?: <span class="type">Address</span>;
+}
+
+<span class="decorator">@Controller</span>(<span class="string">'/customers'</span>)
+<span class="keyword">export class</span> <span class="type">CustomerController</span> {
+
+  <span class="decorator">@Post</span>(<span class="string">'/register'</span>)
+  <span class="keyword">async</span> <span class="function">register</span>(<span class="decorator">@Body</span>(<span class="string">'strict'</span>) body: <span class="type">RegisterDto</span>) {
+    <span class="comment">// Binds and validates request body. Strict mode rejects extra keys.</span>
+    <span class="keyword">return</span> { <span class="keyword">registered</span>: <span class="boolean">true</span>, body };
+  }
+
+  <span class="decorator">@Get</span>(<span class="string">'/:id'</span>)
+  <span class="function">details</span>(
+    <span class="decorator">@Param</span>(<span class="string">'id'</span>) id: <span class="type">string</span> & <span class="type">Format</span>&lt;<span class="string">'uuid'</span>&gt;, 
+    <span class="decorator">@Query</span>(<span class="string">'fields'</span>) fields?: <span class="type">string</span>[],
+    <span class="decorator">@Header</span>(<span class="string">'x-api-key'</span>) apiKey?: <span class="type">string</span>
+  ) {
+    <span class="keyword">return</span> { id, fields, apiKey };
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Validation Errors Format -->
+      <section id="validation-errors">
+        <h2>Validation Errors Format</h2>
+        <p>
+          If an incoming client request fails parameter, header, or query validation checks, Webergency immediately aborts processing. It returns an HTTP <code>400 Bad Request</code> response with standard JSON detailing the failures:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">Response payload (HTTP 400)</span>
+          </div>
+          <pre><code>{
+  <span class="keyword">"success"</span>: <span class="boolean">false</span>,
+  <span class="keyword">"errors"</span>: [
+    {
+      <span class="keyword">"path"</span>: <span class="string">"body.email"</span>,
+      <span class="keyword">"expected"</span>: <span class="string">"Format&lt;email&gt;"</span>,
+      <span class="keyword">"value"</span>: <span class="string">"invalid-email-address"</span>
+    }
+  ]
+}</code></pre>
+        </div>
+        <p>
+          Each error object contains:
+        </p>
+        <ul style="list-style: inside circle; margin-bottom: 1.5rem; color: var(--text-muted); padding-left: 1rem;">
+          <li><strong>path</strong>: Identifies where the parameter check failed (e.g. <code>body.email</code>, <code>query.limit</code>, <code>params.customerId</code>).</li>
+          <li><strong>expected</strong>: The type checker validation constraint that was violated (e.g., <code>Format&lt;email&gt;</code>, <code>MinLength&lt;8&gt;</code>, <code>number</code>).</li>
+          <li><strong>value</strong>: The actual value received that failed to validate.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Dependency Injection -->
+      <section id="di">
+        <h2>Dependency Injection & Provider Scopes</h2>
+        <p>
+          Webergency supports standard injection using `@Injectable()` and `@Inject()`. You can specify three lifetime scopes:
+        </p>
+        <ul style="list-style: inside circle; margin-bottom: 1.5rem; color: var(--text-muted); padding-left: 1rem;">
+          <li><strong>Scope.DEFAULT (Singleton)</strong>: A single instance is instantiated at startup and shared application-wide.</li>
+          <li><strong>Scope.TRANSIENT</strong>: A new instance is created every time it is injected.</li>
+          <li><strong>Scope.REQUEST</strong>: A new instance is created for each incoming request, sharing it throughout the request execution context.</li>
+        </ul>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/services/transient.service.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Injectable</span>, <span class="type">Scope</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Injectable</span>({ <span class="keyword">scope</span>: <span class="type">Scope</span>.<span class="type">TRANSIENT</span> })
+<span class="keyword">export class</span> <span class="type">TransientService</span> {
+  <span class="keyword">public</span> id = Math.random().toString(<span class="number">36</span>).substr(<span class="number">2</span>, <span class="number">9</span>);
+}</code></pre>
+        </div>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/modules/app.module.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Module</span>, <span class="type">Global</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+<span class="keyword">import</span> { <span class="type">TransientService</span> } <span class="keyword">from</span> <span class="string">'../services/transient.service.js'</span>;
+<span class="keyword">import</span> { <span class="type">CustomerController</span> } <span class="keyword">from</span> <span class="string">'../controllers/customer.controller.js'</span>;
+
+<span class="decorator">@Global</span>() <span class="comment">// Makes the module's exported providers globally importable</span>
+<span class="decorator">@Module</span>({
+  <span class="keyword">controllers</span>: [<span class="type">CustomerController</span>],
+  <span class="keyword">providers</span>: [<span class="type">TransientService</span>],
+  <span class="keyword">exports</span>: [<span class="type">TransientService</span>]
+})
+<span class="keyword">export class</span> <span class="type">AppModule</span> {}</code></pre>
+        </div>
+
+        <h3>Custom Providers</h3>
+        <p>
+          Webergency supports standard custom providers definitions inside the <code>providers</code> array of modules. This allows you to override classes, supply configuration constants, or generate dynamic values dynamically:
+        </p>
+
+        <div class="tabs-wrapper">
+          <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab(this, 'prov-value')">Value Provider (useValue)</button>
+            <button class="tab-btn" onclick="switchTab(this, 'prov-class')">Class Provider (useClass)</button>
+            <button class="tab-btn" onclick="switchTab(this, 'prov-factory')">Factory Provider (useFactory)</button>
+          </div>
+
+          <!-- Tab: Value Provider -->
+          <div id="prov-value" class="tab-panel active">
+            <p>
+              Inject static constant values, configuration setups, or third-party instances using <code>useValue</code>:
+            </p>
+            <div class="code-container">
+              <pre><code><span class="decorator">@Module</span>({
+  <span class="keyword">providers</span>: [
+    {
+      <span class="keyword">provide</span>: <span class="string">'APP_CONFIG'</span>,
+      <span class="keyword">useValue</span>: { <span class="keyword">env</span>: <span class="string">'production'</span>, <span class="keyword">apiVersion</span>: <span class="string">'v1.2'</span> }
+    }
+  ]
+})
+<span class="keyword">export class</span> <span class="type">ConfigModule</span> {}</code></pre>
+            </div>
+          </div>
+
+          <!-- Tab: Class Provider -->
+          <div id="prov-class" class="tab-panel">
+            <p>
+              Swap the default provider class with an alternative implementation (e.g. testing mock logger) using <code>useClass</code>:
+            </p>
+            <div class="code-container">
+              <pre><code><span class="decorator">@Module</span>({
+  <span class="keyword">providers</span>: [
+    {
+      <span class="keyword">provide</span>: <span class="type">LoggerService</span>,
+      <span class="keyword">useClass</span>: <span class="type">VerboseLoggerService</span>
+    }
+  ]
+})
+<span class="keyword">export class</span> <span class="type">LoggerModule</span> {}</code></pre>
+            </div>
+          </div>
+
+          <!-- Tab: Factory Provider -->
+          <div id="prov-factory" class="tab-panel">
+            <p>
+              Generate dynamic configurations, async initializations, or conditional structures using <code>useFactory</code>:
+            </p>
+            <div class="code-container">
+              <pre><code><span class="decorator">@Module</span>({
+  <span class="keyword">providers</span>: [
+    {
+      <span class="keyword">provide</span>: <span class="string">'DATABASE_CONNECTION'</span>,
+      <span class="keyword">useFactory</span>: (logger: <span class="type">LoggerService</span>) =&gt; {
+        <span class="keyword">return</span> <span class="keyword">new</span> <span class="type">DatabaseConnection</span>({ <span class="keyword">debug</span>: <span class="boolean">true</span> }, logger);
+      },
+      <span class="keyword">inject</span>: [<span class="type">LoggerService</span>]
+    }
+  ]
+})
+<span class="keyword">export class</span> <span class="type">DatabaseModule</span> {}</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>Request-Scoped Injections</h3>
+        <p>
+          By specifying <code>Scope.REQUEST</code> inside provider options, Webergency will create a new instance of the provider for each incoming HTTP or RPC request context. These instances are stored in the active request memory context and garbage collected automatically when the request finishes.
+        </p>
+        <div class="alert">
+          <div class="alert-title">Bubble-Up Scope Enforcements</div>
+          <p style="margin-bottom:0; font-size:0.925rem;">
+            If a singleton provider injects a request-scoped provider, the container automatically bubbles up the scope of the parent provider to request-scoped as well. This prevents request-scoped data leaks across different active connections.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section: Lifecycle Hooks -->
+      <section id="lifecycle-hooks">
+        <h2>Lifecycle Hooks</h2>
+        <p>
+          Webergency provides structural lifecycle hooks to handle application bootstrap and graceful shutdowns. Injectable providers and modules can implement hook interfaces:
+        </p>
+        <div class="card">
+          <table class="decorator-meta-table">
+            <thead>
+              <tr>
+                <th>Lifecycle Interface</th>
+                <th>Method Signature</th>
+                <th>Execution Stage</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>OnModuleInit</code></td>
+                <td><code>onModuleInit(): void | Promise&lt;void&gt;</code></td>
+                <td>Called after modules are initialized, before the adapter starts listening. Perfect for database pool configurations.</td>
+              </tr>
+              <tr>
+                <td><code>OnApplicationBootstrap</code></td>
+                <td><code>onApplicationBootstrap(): void | Promise&lt;void&gt;</code></td>
+                <td>Called after the server adapter successfully listens on the port.</td>
+              </tr>
+              <tr>
+                <td><code>OnModuleDestroy</code></td>
+                <td><code>onModuleDestroy(): void | Promise&lt;void&gt;</code></td>
+                <td>Called when graceful shutdown is initiated.</td>
+              </tr>
+              <tr>
+                <td><code>BeforeApplicationShutdown</code></td>
+                <td><code>beforeApplicationShutdown(signal?: string): void | Promise&lt;void&gt;</code></td>
+                <td>Called during the shutdown flow. Receives system OS signal.</td>
+              </tr>
+              <tr>
+                <td><code>OnApplicationShutdown</code></td>
+                <td><code>onApplicationShutdown(signal?: string): void | Promise&lt;void&gt;</code></td>
+                <td>Called at the end of graceful shutdown. Used to safely close database connections and file channels.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          Here is a complete database service implementation implementing bootstrap and shutdown hooks:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/services/db.service.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Injectable</span>, <span class="type">OnModuleInit</span>, <span class="type">OnApplicationShutdown</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Injectable</span>()
+<span class="keyword">export class</span> <span class="type">DatabaseService</span> <span class="keyword">implements</span> <span class="type">OnModuleInit</span>, <span class="type">OnApplicationShutdown</span> {
+  <span class="keyword">private</span> connectionPool: <span class="type">any</span>;
+
+  <span class="keyword">async</span> <span class="function">onModuleInit</span>() {
+    <span class="type">console</span>.log(<span class="string">'🔌 Establishing database connection pool...'</span>);
+    <span class="keyword">this</span>.connectionPool = <span class="keyword">await</span> mockConnect(<span class="string">'mongodb://127.0.0.1:27017/app'</span>);
+    <span class="type">console</span>.log(<span class="string">'✅ Database connected.'</span>);
+  }
+
+  <span class="keyword">async</span> <span class="function">onApplicationShutdown</span>(signal?: <span class="type">string</span>) {
+    <span class="type">console</span>.log(<span class="string">`💤 Graceful shutdown initiated (Signal: ${signal}). Closing DB pool...`</span>);
+    <span class="keyword">await</span> <span class="keyword">this</span>.connectionPool.close();
+    <span class="type">console</span>.log(<span class="string">'🛑 Database pool closed safely.'</span>);
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Guards & Interceptors -->
+      <section id="guards-interceptors">
+        <h2>Guards & Interceptors</h2>
+        <p>
+          Protect and intercept flows at class or endpoint levels.
+        </p>
+
+        <div class="tabs-wrapper">
+          <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab(this, 'guard-example')">Guard Implementation</button>
+            <button class="tab-btn" onclick="switchTab(this, 'interceptor-example')">Interceptor Implementation</button>
+          </div>
+          
+          <div id="guard-example" class="tab-panel active">
+            <div class="code-container">
+              <pre><code><span class="keyword">import</span> { <span class="type">Guard</span>, <span class="type">Injectable</span>, <span class="type">Header</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Injectable</span>()
+<span class="keyword">export class</span> <span class="type">RoleGuard</span> <span class="keyword">implements</span> <span class="type">Guard</span> {
+  
+  <span class="comment">// Guards support parameter decorators to parse headers, queries, body, etc.</span>
+  <span class="function">use</span>(<span class="decorator">@Header</span>(<span class="string">'x-user-role'</span>) role: <span class="type">string</span>) {
+    <span class="keyword">if</span> (role !== <span class="string">'admin'</span>) {
+      <span class="keyword">throw</span> { <span class="keyword">code</span>: <span class="number">403</span>, <span class="keyword">message</span>: <span class="string">'Requires admin permissions'</span> };
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <div id="interceptor-example" class="tab-panel">
+            <div class="code-container">
+              <pre><code><span class="keyword">import</span> { <span class="type">Interceptor</span>, <span class="type">Injectable</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Injectable</span>()
+<span class="keyword">export class</span> <span class="type">MetricsInterceptor</span> <span class="keyword">implements</span> <span class="type">Interceptor</span> {
+  
+  <span class="keyword">async</span> <span class="function">intercept</span>(request: <span class="type">any</span>, next: () =&gt; <span class="type">Promise</span>&lt;<span class="type">any</span>&gt;) {
+    <span class="keyword">const</span> start = performance.now();
+    <span class="keyword">try</span> {
+      <span class="keyword">const</span> result = <span class="keyword">await</span> next(); <span class="comment">// Execute handler or next interceptor</span>
+      <span class="keyword">const</span> duration = performance.now() - start;
+      <span class="type">console</span>.log(<span class="string">`Request succeeded in ${duration.toFixed(2)}ms`</span>);
+      <span class="keyword">return</span> result;
+    } <span class="keyword">catch</span> (err) {
+      <span class="type">console</span>.error(<span class="string">'Request failed:'</span>, err);
+      <span class="keyword">throw</span> err;
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Exception Filters -->
+      <section id="exception-filters">
+        <h2>Exception Filters &amp; Custom Error Mapping</h2>
+        <p>
+          Webergency's zero-reflection compilation design keeps runtime overhead to a minimum. Instead of custom <code>@Catch()</code> decorators, exception filtering and custom error mappings are implemented using standard <strong>Interceptors</strong>.
+        </p>
+        <p>
+          Interceptors wrap the execution pipeline (including guards, parameter validation, and endpoint handlers). This gives you the ability to catch runtime exceptions, inspect returned responses (such as validation failures), and map them to unified API errors.
+        </p>
+
+        <h3>Default Exception Behavior</h3>
+        <p>
+          By default, any unhandled error thrown inside controllers, guards, or interceptors is caught by the request processor:
+        </p>
+        <ul>
+          <li>If the thrown object has a <code>status</code> or <code>code</code> property, it is used as the HTTP status (defaults to <code>500</code>).</li>
+          <li>The response payload is automatically formatted as JSON: <code>err.data</code> (if present) or <code>{ success: false, error: err.message }</code>.</li>
+          <li>For parameter and payload validation errors, the compiler-generated code directly returns an HTTP <code>400 Bad Request</code> response with details without throwing a runtime error.</li>
+        </ul>
+
+        <div class="tabs-wrapper">
+          <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab(this, 'runtime-exception-filter')">Catch Runtime Errors</button>
+            <button class="tab-btn" onclick="switchTab(this, 'validation-exception-filter')">Sanitize Validation Errors</button>
+          </div>
+
+          <div id="runtime-exception-filter" class="tab-panel active">
+            <div class="code-container">
+              <div class="code-header">
+                <span class="code-title">src/interceptors/exception.filter.ts</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code><span class="keyword">import</span> { <span class="type">Interceptor</span>, <span class="type">Injectable</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Injectable</span>()
+<span class="keyword">export class</span> <span class="type">HttpExceptionFilter</span> <span class="keyword">implements</span> <span class="type">Interceptor</span> {
+  <span class="keyword">async</span> <span class="function">intercept</span>(request: <span class="type">any</span>, next: () =&gt; <span class="type">Promise</span>&lt;<span class="type">any</span>&gt;) {
+    <span class="keyword">try</span> {
+      <span class="keyword">return await</span> <span class="function">next</span>();
+    } <span class="keyword">catch</span> (err: <span class="type">any</span>) {
+      <span class="keyword">const</span> status = err.status || err.code || <span class="number">500</span>;
+      <span class="keyword">const</span> message = err.message || <span class="string">'Internal server error'</span>;
+      
+      <span class="type">console</span>.<span class="function">error</span>(<span class="string">`[Error] ${request.method} ${request.url}:`</span>, err);
+
+      <span class="comment">// Return a formatted, sanitized error response</span>
+      <span class="keyword">return new</span> <span class="type">Response</span>(
+        <span class="type">JSON</span>.<span class="function">stringify</span>({
+          success: <span class="boolean">false</span>,
+          statusCode: status,
+          message: status === <span class="number">500</span> ? <span class="string">'Internal server error'</span> : message,
+          timestamp: <span class="keyword">new</span> <span class="type">Date</span>().<span class="function">toISOString</span>()
+        }),
+        {
+          status,
+          headers: { <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span> }
+        }
+      );
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <div id="validation-exception-filter" class="tab-panel">
+            <div class="code-container">
+              <div class="code-header">
+                <span class="code-title">src/interceptors/validation-sanitizer.filter.ts</span>
+                <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code><span class="keyword">import</span> { <span class="type">Interceptor</span>, <span class="type">Injectable</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Injectable</span>()
+<span class="keyword">export class</span> <span class="type">ValidationSanitizerFilter</span> <span class="keyword">implements</span> <span class="type">Interceptor</span> {
+  <span class="keyword">async</span> <span class="function">intercept</span>(request: <span class="type">any</span>, next: () =&gt; <span class="type">Promise</span>&lt;<span class="type">any</span>&gt;) {
+    <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="function">next</span>();
+
+    <span class="comment">// Intercept compiler-generated validation errors (HTTP 400)</span>
+    <span class="keyword">if</span> (response.status === <span class="number">400</span>) {
+      <span class="keyword">const</span> clone = response.clone();
+      <span class="keyword">try</span> {
+        <span class="keyword">const</span> data = <span class="keyword">await</span> clone.<span class="function">json</span>();
+        <span class="keyword">if</span> (data.success === <span class="boolean">false</span> && data.errors) {
+          <span class="comment">// Simplify compiler-generated validation formats for clients</span>
+          <span class="keyword">return new</span> <span class="type">Response</span>(
+            <span class="type">JSON</span>.<span class="function">stringify</span>({
+              success: <span class="boolean">false</span>,
+              message: <span class="string">'Validation failed'</span>,
+              details: data.errors
+            }),
+            {
+              status: <span class="number">400</span>,
+              headers: { <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span> }
+            }
+          );
+        }
+      } <span class="keyword">catch</span> (e) {
+        <span class="comment">// Response was not JSON, return as-is</span>
+      }
+    }
+
+    <span class="keyword">return</span> response;
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>Registering Filter Interceptors</h3>
+        <p>
+          Bind exception filtering interceptors locally to endpoints or controllers using the <code>@Intercept</code> decorator, or register them globally.
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/controllers/user.controller.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">Get</span>, <span class="type">Intercept</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+<span class="keyword">import</span> { <span class="type">HttpExceptionFilter</span> } <span class="keyword">from</span> <span class="string">'../interceptors/exception.filter.js'</span>;
+
+<span class="decorator">@Controller</span>(<span class="string">'/users'</span>)
+<span class="decorator">@Intercept</span>(<span class="type">HttpExceptionFilter</span>)
+<span class="keyword">export class</span> <span class="type">UserController</span> {
+  <span class="decorator">@Get</span>(<span class="string">'/:id'</span>)
+  <span class="keyword">async</span> <span class="function">getUser</span>() {
+    <span class="keyword">throw</span> { <span class="keyword">status</span>: <span class="number">404</span>, <span class="keyword">message</span>: <span class="string">'User not found'</span> };
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Security & CORS -->
+      <section id="security-cors">
+        <h2>CORS & Security Configuration</h2>
+        <p>
+          Configure endpoint security boundaries natively. Decorator `@Security()` enables headers mapping, rate limiting, and request timeouts in a single declaration:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/controllers/api.controller.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">Get</span>, <span class="type">Security</span>, <span class="type">Cors</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Controller</span>(<span class="string">'/secure-api'</span>)
+<span class="decorator">@Cors</span>({
+  <span class="keyword">origin</span>: [<span class="string">'https://app.webergency.org'</span>],
+  <span class="keyword">allowedHeaders</span>: [<span class="string">'Content-Type'</span>, <span class="string">'Authorization'</span>],
+  <span class="keyword">credentials</span>: <span class="boolean">true</span>
+})
+<span class="decorator">@Security</span>({
+  <span class="keyword">maxBodySize</span>: <span class="string">'1mb'</span>,          <span class="comment">// Maximum body limit</span>
+  <span class="keyword">timeout</span>: <span class="number">800</span>,                <span class="comment">// Abort request after 800ms</span>
+  <span class="keyword">allowedContentTypes</span>: [<span class="string">'application/json'</span>],
+  <span class="keyword">rateLimit</span>: {
+    <span class="keyword">max</span>: <span class="number">100</span>,
+    <span class="keyword">window</span>: <span class="number">60000</span>              <span class="comment">// 100 requests per minute</span>
+  },
+  <span class="keyword">frameguard</span>: <span class="string">'deny'</span>,          <span class="comment">// X-Frame-Options: DENY</span>
+  <span class="keyword">noSniff</span>: <span class="boolean">true</span>,               <span class="comment">// X-Content-Type-Options: nosniff</span>
+  <span class="keyword">referrerPolicy</span>: <span class="string">'no-referrer'</span>
+})
+<span class="keyword">export class</span> <span class="type">ApiController</span> {
+
+  <span class="decorator">@Get</span>(<span class="string">'/data'</span>)
+  <span class="function">loadData</span>() {
+    <span class="keyword">return</span> { <span class="keyword">confidential</span>: <span class="string">'highly'</span> };
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: WebSockets -->
+      <section id="websockets">
+        <h2>WebSockets & Heartbeats</h2>
+        <p>
+          Assign real-time events over bidirectional WebSockets using `@Ws()`. The decorator schedules heartbeats to automatically disconnect inactive connections:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/controllers/chat.controller.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">Ws</span>, <span class="type">ServerWebSocket</span>, <span class="type">Param</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Controller</span>(<span class="string">'/chat'</span>)
+<span class="keyword">export class</span> <span class="type">ChatController</span> {
+
+  <span class="decorator">@Ws</span>(<span class="string">'/connect/:channel'</span>, {
+    <span class="keyword">pingInterval</span>: <span class="number">20000</span>,  <span class="comment">// Send ping frame every 20s</span>
+    <span class="keyword">pingTimeout</span>: <span class="number">5000</span>,    <span class="comment">// Await pong response for 5s (disconnects on timeout with code 1002)</span>
+    <span class="keyword">maxPayload</span>: <span class="number">2048</span>      <span class="comment">// Closes connection with code 1009 if a message exceeds 2KB</span>
+  })
+  <span class="function">onConnect</span>(ws: <span class="type">ServerWebSocket</span>, <span class="decorator">@Param</span>(<span class="string">'channel'</span>) channel: <span class="type">string</span>) {
+    ws.send(<span class="string">`Welcome to channel #${channel}`</span>);
+
+    ws.on(<span class="string">'message'</span>, (msg) =&gt; {
+      ws.send(<span class="string">`Broadcast: ${msg}`</span>);
+    });
+
+    ws.on(<span class="string">'close'</span>, (code, reason) =&gt; {
+      <span class="type">console</span>.log(<span class="string">`WebSocket connection closed: ${code} - ${reason}`</span>);
+    });
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: SSE -->
+      <section id="sse">
+        <h2>Server-Sent Events (SSE)</h2>
+        <p>
+          Create server push events using HTTP GET channels using `@Sse()`.
+        </p>
+
+        <div class="tabs-wrapper">
+          <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab(this, 'sse-server')">SSE Endpoint</button>
+            <button class="tab-btn" onclick="switchTab(this, 'sse-client')">Browser Client</button>
+          </div>
+          
+          <div id="sse-server" class="tab-panel active">
+            <div class="code-container">
+              <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">Sse</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="decorator">@Controller</span>(<span class="string">'/metrics'</span>)
+<span class="keyword">export class</span> <span class="type">MetricsController</span> {
+
+  <span class="decorator">@Sse</span>(<span class="string">'/live'</span>)
+  <span class="keyword">async</span> *<span class="function">stream</span>() {
+    <span class="keyword">while</span> (<span class="boolean">true</span>) {
+      <span class="keyword">await</span> <span class="keyword">new</span> <span class="type">Promise</span>(resolve =&gt; setTimeout(resolve, <span class="number">1000</span>));
+      <span class="keyword">yield</span> {
+        <span class="keyword">event</span>: <span class="string">'stats'</span>,
+        <span class="keyword">data</span>: { <span class="keyword">cpu</span>: Math.random() * <span class="number">100</span>, <span class="keyword">memory</span>: process.memoryUsage().heapUsed }
+      };
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <div id="sse-client" class="tab-panel">
+            <div class="code-container">
+              <pre><code><span class="keyword">const</span> eventSource = <span class="keyword">new</span> <span class="type">EventSource</span>(<span class="string">'http://localhost:3000/metrics/live'</span>);
+
+eventSource.addEventListener(<span class="string">'stats'</span>, (event) =&gt; {
+  <span class="keyword">const</span> stats = JSON.parse(event.data);
+  <span class="type">console</span>.log(<span class="string">'Metrics update:'</span>, stats);
+});
+
+eventSource.onerror = (err) =&gt; {
+  <span class="type">console</span>.error(<span class="string">'SSE Stream error:'</span>, err);
+  eventSource.close();
+};</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Microservices -->
+      <section id="microservices">
+        <h2>Microservices (RPC) & TCP Messaging</h2>
+        <p>
+          Configure decoupled networks using built-in RPC listeners over TCP sockets. Intercept event envelopes and perform compiled schema payloads validation on incoming requests automatically:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/controllers/rpc-math.controller.ts</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Controller</span>, <span class="type">MessagePattern</span>, <span class="type">Payload</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+
+<span class="keyword">interface</span> <span class="type">MultiplyDto</span> {
+  x: <span class="type">number</span>;
+  y: <span class="type">number</span>;
+}
+
+<span class="decorator">@Controller</span>()
+<span class="keyword">export class</span> <span class="type">RpcMathController</span> {
+
+  <span class="decorator">@MessagePattern</span>(<span class="string">'math.multiply'</span>)
+  <span class="function">multiply</span>(<span class="decorator">@Payload</span>() payload: <span class="type">MultiplyDto</span>) {
+    <span class="keyword">return</span> payload.x * payload.y;
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: AOT Build CLI -->
+      <section id="aot-cli">
+        <h2>AOT Build CLI</h2>
+        <p>
+          Compile route registries, DI blueprints, and validators, into your metadata manifest using:
+        </p>
+        <div class="code-container">
+          <pre><code>npx webergency-server-build --entry src/main.ts --output ./dist/_metadata.webergency-server.js</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Swagger Documentation -->
+      <section id="swagger">
+        <h2>Swagger / OpenAPI 3.0.0 Spec Generation</h2>
+        <p>
+          A zero-dependency OpenAPI 3.0.0 documentation exporter runs automatically alongside compilation. The Swagger generator:
+        </p>
+        <ul style="list-style: inside circle; margin-bottom: 1.5rem; color: var(--text-muted); padding-left: 1rem;">
+          <li>Parses actual TypeScript typings of request body objects and query objects, and compiles them to JSON schemas.</li>
+          <li>Derives formats (like <code>Format&lt;'email'&gt;</code>, <code>Format&lt;'uuid'&gt;</code>) and constraints directly into fields (e.g. <code>minLength</code>, <code>exclusiveMinimum</code>).</li>
+          <li>Exports the final compilation to a standard <code>swagger.json</code> in the output directory.</li>
+        </ul>
+      </section>
+
+      <!-- Section: Decorators Reference Directory -->
+      <section id="decorators-reference">
+        <h2>Decorators API Reference</h2>
+        <p>
+          Below is the complete reference directory of all 22 decorators available in the Webergency Server library.
+        </p>
+
+        <!-- Filters & Search Controls -->
+        <div class="ref-header-controls">
+          <input type="text" id="decorator-search" oninput="filterDecorators()" placeholder="Search decorators (e.g. @Body)..." class="search-input">
+          
+          <div class="filter-btn-group">
+            <button class="filter-btn active" onclick="setFilter(this, 'all')">All</button>
+            <button class="filter-btn" onclick="setFilter(this, 'class')">Class</button>
+            <button class="filter-btn" onclick="setFilter(this, 'method')">Method</button>
+            <button class="filter-btn" onclick="setFilter(this, 'param')">Parameter</button>
+          </div>
+        </div>
+
+        <!-- Decorators List Container -->
+        <div id="decorators-list">
+          
+          <!-- Decorator: @Controller -->
+          <div class="decorator-card" data-category="class" data-name="@Controller">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Controller(prefixOrOptions?: string | ControllerOptions)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Annotates a class as a controller. Routes defined in this class will inherit the prefix path.</div>
+            <table class="decorator-meta-table">
+              <tr>
+                <th style="width: 25%;">Parameter</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+              <tr>
+                <td><code>prefixOrOptions</code></td>
+                <td><code>string | ControllerOptions</code></td>
+                <td>Optional path prefix string (e.g., <code>'/users'</code>), or option configuration containing <code>path</code> and <code>scope</code>.</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Decorator: @Module -->
+          <div class="decorator-card" data-category="class" data-name="@Module">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Module(metadata: ModuleMetadata)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Declares a server dependency injection module, defining internal providers, controllers, imports, and exports.</div>
+            <table class="decorator-meta-table">
+              <tr>
+                <th style="width: 25%;">Metadata Field</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+              <tr>
+                <td><code>imports</code></td>
+                <td><code>any[]</code></td>
+                <td>Array of imported helper modules.</td>
+              </tr>
+              <tr>
+                <td><code>controllers</code></td>
+                <td><code>any[]</code></td>
+                <td>List of controller classes registered in the module.</td>
+              </tr>
+              <tr>
+                <td><code>providers</code></td>
+                <td><code>any[]</code></td>
+                <td>List of DI injectable classes instantiated in this module.</td>
+              </tr>
+              <tr>
+                <td><code>exports</code></td>
+                <td><code>any[]</code></td>
+                <td>Exported injectable classes made visible to importing modules.</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Decorator: @Injectable -->
+          <div class="decorator-card" data-category="class" data-name="@Injectable">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Injectable(options?: InjectableOptions)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Marks a class as a DI provider that can be injected into constructor or property definitions.</div>
+            <table class="decorator-meta-table">
+              <tr>
+                <th style="width: 25%;">Options Field</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+              <tr>
+                <td><code>scope</code></td>
+                <td><code>Scope</code></td>
+                <td>Defines the provider lifetime. Supports <code>Scope.DEFAULT</code>, <code>Scope.TRANSIENT</code>, or <code>Scope.REQUEST</code>.</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Decorator: @Global -->
+          <div class="decorator-card" data-category="class" data-name="@Global">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Global()</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Declares a module as globally visible, exporting its providers to all importing scopes automatically.</div>
+          </div>
+
+          <!-- Decorator: @Get -->
+          <div class="decorator-card" data-category="method" data-name="@Get">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Get(path?: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Maps an HTTP GET route to the annotated handler.</div>
+          </div>
+
+          <!-- Decorator: @Post -->
+          <div class="decorator-card" data-category="method" data-name="@Post">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Post(path?: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Maps an HTTP POST route to the annotated handler.</div>
+          </div>
+
+          <!-- Decorator: @Put -->
+          <div class="decorator-card" data-category="method" data-name="@Put">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Put(path?: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Maps an HTTP PUT route to the annotated handler.</div>
+          </div>
+
+          <!-- Decorator: @Delete -->
+          <div class="decorator-card" data-category="method" data-name="@Delete">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Delete(path?: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Maps an HTTP DELETE route to the annotated handler.</div>
+          </div>
+
+          <!-- Decorator: @Patch -->
+          <div class="decorator-card" data-category="method" data-name="@Patch">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Patch(path?: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Maps an HTTP PATCH route to the annotated handler.</div>
+          </div>
+
+          <!-- Decorator: @Ws -->
+          <div class="decorator-card" data-category="method" data-name="@Ws">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Ws(path?: string, options?: WsOptions)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Upgrades connection requests and maps a bidirectional WebSocket server handler.</div>
+            <table class="decorator-meta-table">
+              <tr>
+                <th style="width: 25%;">Options Field</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+              <tr>
+                <td><code>pingInterval</code></td>
+                <td><code>number</code></td>
+                <td>Heartbeat interval timer (ms) to ping client sockets.</td>
+              </tr>
+              <tr>
+                <td><code>pingTimeout</code></td>
+                <td><code>number</code></td>
+                <td>Duration (ms) to await a pong response before terminating connection.</td>
+              </tr>
+              <tr>
+                <td><code>maxPayload</code></td>
+                <td><code>number</code></td>
+                <td>Maximum size (bytes) of accepted WebSocket frame payloads.</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Decorator: @Sse -->
+          <div class="decorator-card" data-category="method" data-name="@Sse">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Sse(path?: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Declares a Server-Sent Events stream. The handler should yield values conforming to <code>{ event: string, data: any }</code>.</div>
+          </div>
+
+          <!-- Decorator: @MessagePattern -->
+          <div class="decorator-card" data-category="method" data-name="@MessagePattern">
+            <div class="decorator-header">
+              <div class="decorator-signature">@MessagePattern(pattern: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Declares a microservice RPC handler, listening for request-response envelopes matching the key.</div>
+          </div>
+
+          <!-- Decorator: @EventPattern -->
+          <div class="decorator-card" data-category="method" data-name="@EventPattern">
+            <div class="decorator-header">
+              <div class="decorator-signature">@EventPattern(pattern: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Declares a microservice Event listener, executing one-way runs matching the key.</div>
+          </div>
+
+          <!-- Decorator: @Protect -->
+          <div class="decorator-card" data-category="method" data-name="@Protect">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Protect(...guards: (string | Function)[])</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Binds authorization guards to a class or endpoint handler method.</div>
+          </div>
+
+          <!-- Decorator: @Intercept -->
+          <div class="decorator-card" data-category="method" data-name="@Intercept">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Intercept(...interceptors: (string | Function)[])</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Binds interceptors to map execution hooks around class methods.</div>
+          </div>
+
+          <!-- Decorator: @Cors -->
+          <div class="decorator-card" data-category="method" data-name="@Cors">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Cors(options?: CorsOptions | string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Configures Cross-Origin Resource Sharing boundaries for endpoints.</div>
+          </div>
+
+          <!-- Decorator: @Security -->
+          <div class="decorator-card" data-category="method" data-name="@Security">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Security(options?: SecurityOptions | boolean)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Applies header protections, rate limiters, size limit bounds, and timeout thresholds.</div>
+          </div>
+
+          <!-- Decorator: @Public -->
+          <div class="decorator-card" data-category="method" data-name="@Public">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Public()</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-method">Method</span>
+                <span class="dec-badge dec-badge-class">Class</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Excludes the class/method from standard guard constraints. Useful to open authentication exclusions.</div>
+          </div>
+
+          <!-- Decorator: @Body -->
+          <div class="decorator-card" data-category="param" data-name="@Body">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Body(mode?: 'strict' | 'strip')</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Resolves and validates the request body. Supports strict type validations or strip unknown properties. Can be used parenthesized or paren-free.</div>
+          </div>
+
+          <!-- Decorator: @Query -->
+          <div class="decorator-card" data-category="param" data-name="@Query">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Query(name?: string, mode?: 'strict' | 'strip')</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Resolves one query parameter field, or parses the full query into an interface. Can be used parenthesized or paren-free.</div>
+          </div>
+
+          <!-- Decorator: @Param -->
+          <div class="decorator-card" data-category="param" data-name="@Param">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Param(name: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Extracts dynamic routing path parameter variables (e.g. <code>@Param('id')</code>).</div>
+          </div>
+
+          <!-- Decorator: @Header -->
+          <div class="decorator-card" data-category="param" data-name="@Header">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Header(name: string)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Extracts one request header field.</div>
+          </div>
+
+          <!-- Decorator: @Headers -->
+          <div class="decorator-card" data-category="param" data-name="@Headers">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Headers</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Paren-free decorator mapping all request headers fields to an object.</div>
+          </div>
+
+          <!-- Decorator: @Payload -->
+          <div class="decorator-card" data-category="param" data-name="@Payload">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Payload()</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Injects and validates the message payload in microservice event/RPC endpoints. Can be used parenthesized or paren-free.</div>
+          </div>
+
+          <!-- Decorator: @ConnectedSocket -->
+          <div class="decorator-card" data-category="param" data-name="@ConnectedSocket">
+            <div class="decorator-header">
+              <div class="decorator-signature">@ConnectedSocket()</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Extracts the running <code>ServerWebSocket</code> connection instance.</div>
+          </div>
+
+          <!-- Decorator: @Request -->
+          <div class="decorator-card" data-category="param" data-name="@Request">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Request</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Paren-free decorator injecting the raw HTTP request object.</div>
+          </div>
+
+          <!-- Decorator: @Response -->
+          <div class="decorator-card" data-category="param" data-name="@Response">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Response</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Paren-free decorator injecting the raw HTTP response handler.</div>
+          </div>
+
+          <!-- Decorator: @Context -->
+          <div class="decorator-card" data-category="param" data-name="@Context">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Context</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Paren-free decorator injecting the server request context block.</div>
+          </div>
+
+          <!-- Decorator: @Ip -->
+          <div class="decorator-card" data-category="param" data-name="@Ip">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Ip</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Paren-free decorator extracting the client requester IP address.</div>
+          </div>
+
+          <!-- Decorator: @Inject -->
+          <div class="decorator-card" data-category="param" data-name="@Inject">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Inject(token?: any)</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Injects a provider dependency into property declaration or constructor arguments. Can be used parenthesized or paren-free.</div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer>
+        &copy; 2026 Webergency AOT Server Engine. Compiled for speed, built for type-safety.
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    // Tab switching utility
+    function switchTab(btn, panelId) {
+      const container = btn.closest('.tabs-wrapper');
+      
+      // Deactivate other tabs in this container
+      container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      
+      // Activate selected
+      btn.classList.add('active');
+      const panel = container.querySelector('#' + panelId);
+      if (panel) {
+        panel.classList.add('active');
+      }
+    }
+
+    // Code copying utility
+    function copyCode(btn) {
+      const pre = btn.closest('.code-container').querySelector('pre');
+      const text = pre.innerText;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = 'Copied!';
+        btn.style.borderColor = '#10b981';
+        btn.style.color = '#10b981';
+        
+        setTimeout(() => {
+          btn.innerText = originalText;
+          btn.style.borderColor = '';
+          btn.style.color = '';
+        }, 1500);
+      });
+    }
+
+    // Decorators Reference Filtering & Search Logic
+    let currentFilter = 'all';
+
+    function setFilter(btn, category) {
+      // Toggle button active classes
+      const group = btn.closest('.filter-btn-group');
+      group.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      currentFilter = category;
+      filterDecorators();
+    }
+
+    function filterDecorators() {
+      const query = document.getElementById('decorator-search').value.toLowerCase().trim();
+      const cards = document.querySelectorAll('.decorator-card');
+      
+      cards.forEach(card => {
+        const category = card.getAttribute('data-category');
+        const name = card.getAttribute('data-name').toLowerCase();
+        const desc = card.querySelector('.decorator-desc').innerText.toLowerCase();
+        
+        // Category matching
+        const matchesCategory = (currentFilter === 'all' || category === currentFilter);
+        
+        // Text search matching
+        const matchesSearch = (name.includes(query) || desc.includes(query) || ('@' + query).includes(name));
+        
+        if (matchesCategory && matchesSearch) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Scrollspy navigation mapping
+    window.addEventListener('DOMContentLoaded', () => {
+      const sections = document.querySelectorAll('section');
+      const navLinks = document.querySelectorAll('.sidebar .nav-links li');
+
+      function makeActive() {
+        let currentSectionId = '';
+        
+        sections.forEach(section => {
+          const sectionTop = section.offsetTop;
+          if (pageYOffset >= sectionTop - 150) {
+            currentSectionId = section.getAttribute('id');
+          }
+        });
+
+        navLinks.forEach(li => {
+          li.classList.remove('active');
+          const href = li.querySelector('a').getAttribute('href');
+          if (href === '#' + currentSectionId) {
+            li.classList.add('active');
+          }
+        });
+      }
+
+      window.addEventListener('scroll', makeActive);
+      // Run once at start
+      makeActive();
+    });
+  </script>
+</body>
+</html>

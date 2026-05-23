@@ -22,7 +22,7 @@ export class Router {
 
   public find(method: string, path: string) {
     for (const route of this.routes) {
-      if (route.method !== method) continue;
+      if (route.method !== 'ALL' && route.method !== method) continue;
       
       const match = route.matchFn(path);
       if (match) {

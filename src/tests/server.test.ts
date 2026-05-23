@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Server } from '../server.js';
-import { Scope } from '../decorators.js';
+import { Scope, Meta, SetMetadata } from '../decorators.js';
+import { Reflector } from '../core/reflector.js';
 import { MetadataStore } from '../core/metadata.js';
 import { validators } from '@webergency-utils/typechecker';
 import { Context } from '../core/context.js';
@@ -1103,6 +1104,177 @@ describe('Server & Metadata', () => {
             expect(sequence).toContain('module:onApplicationShutdown:SIGINT');
 
             exitSpy.mockRestore();
+        });
+    });
+
+    describe('Custom Decorators & Reflector', () => {
+        it('should correctly attach metadata on class constructors using Meta and SetMetadata', () => {
+            @Meta({ roles: ['admin'], isClass: true })
+            class CustomCtrl {}
+
+            @SetMetadata('roles', ['user'])
+            class UserCtrl {}
+
+            const reflector = new Reflector();
+            expect(reflector.get('roles', CustomCtrl)).toEqual(['admin']);
+            expect(reflector.get('isClass', CustomCtrl)).toBe(true);
+            expect(reflector.get('roles', UserCtrl)).toEqual(['user']);
+            expect(reflector.get('nonexistent', CustomCtrl)).toBeUndefined();
+        });
+
+        it('should correctly attach metadata on methods using Meta and SetMetadata', () => {
+            class CustomCtrl {
+                @Meta({ permissions: ['read'] })
+                readAction() {}
+
+                @SetMetadata('permissions', ['write'])
+                writeAction() {}
+            }
+
+            const reflector = new Reflector();
+            
+            // Standard JS decorators attach descriptor.value
+            const readMethod = CustomCtrl.prototype.readAction;
+            const writeMethod = CustomCtrl.prototype.writeAction;
+
+            expect(reflector.get('permissions', readMethod)).toEqual(['read']);
+            expect(reflector.get('permissions', writeMethod)).toEqual(['write']);
+        });
+
+        it('should resolve metadata hierarchies using getAllAndOverride and getAllAndMerge', () => {
+            @Meta({ roles: ['admin'], scope: 'global' })
+            class CustomCtrl {
+                @Meta({ roles: ['user'] })
+                userAction() {}
+
+                noRolesAction() {}
+            }
+
+            const reflector = new Reflector();
+            const classObj = CustomCtrl;
+            const userMethod = CustomCtrl.prototype.userAction;
+            const guestMethod = CustomCtrl.prototype.noRolesAction;
+
+            // getAllAndOverride: returns the first defined metadata value in the array of targets
+            expect(reflector.getAllAndOverride('roles', [userMethod, classObj])).toEqual(['user']);
+            expect(reflector.getAllAndOverride('roles', [guestMethod, classObj])).toEqual(['admin']);
+            expect(reflector.getAllAndOverride('scope', [userMethod, classObj])).toBe('global');
+
+            // getAllAndMerge: merges arrays or objects
+            // Roles: array merge
+            expect(reflector.getAllAndMerge('roles', [userMethod, classObj])).toEqual(['user', 'admin']);
+            expect(reflector.getAllAndMerge('roles', [guestMethod, classObj])).toEqual(['admin']);
+
+            // Object merge
+            @Meta({ options: { a: 1, b: 2 } })
+            class OptionCtrl {
+                @Meta({ options: { b: 3, c: 4 } })
+                action() {}
+            }
+            const optionMethod = OptionCtrl.prototype.action;
+            expect(reflector.getAllAndMerge('options', [optionMethod, OptionCtrl])).toEqual({ a: 1, b: 3, c: 4 });
+        });
+
+        it('should integrate Reflector in request lifecycle guards', async () => {
+            const sequence: string[] = [];
+
+            // A mock guard checking metadata
+            class AuthGuard {
+                async use(req: Request) {
+                    const ctx = Context.get();
+                    if (!ctx) {
+                        sequence.push('no-context');
+                        return;
+                    }
+                    const reflector = new Reflector();
+                    const controllerClass = MetadataStore.getProvider(ctx.metadata.controller);
+                    const handlerMethod = controllerClass?.prototype?.[ctx.metadata.methodName];
+
+                    const requiredRoles = reflector.getAllAndOverride<string[]>('roles', [handlerMethod, controllerClass]);
+                    
+                    const roleHeader = req.headers.get('x-role');
+                    if (requiredRoles && (!roleHeader || !requiredRoles.includes(roleHeader))) {
+                        const err = new Error('Forbidden');
+                        (err as any).status = 403;
+                        throw err;
+                    }
+                    sequence.push('authorized');
+                }
+            }
+
+            class TestController {
+                async adminEndpoint() {
+                    return { ok: true, section: 'admin' };
+                }
+
+                async userEndpoint() {
+                    return { ok: true, section: 'user' };
+                }
+            }
+
+            // Manually register metadata similar to what AOT does:
+            MetadataStore.registerGuard('AuthGuard', AuthGuard);
+            MetadataStore.registerController('TestController', TestController);
+
+            // Register controller constructor as provider so getProvider works
+            MetadataStore.registerProvider('TestController', TestController);
+
+            // Attach metadata to controller and methods manually (simulating decorator evaluation)
+            Meta({ roles: ['admin'] })(TestController);
+            Meta({ roles: ['user', 'admin'] })(TestController.prototype, 'userEndpoint', Object.getOwnPropertyDescriptor(TestController.prototype, 'userEndpoint')!);
+
+            MetadataStore.registerEndpoint({
+                controller: 'TestController',
+                methodName: 'adminEndpoint',
+                httpMethod: 'GET',
+                path: '/admin',
+                params: [],
+                guards: [
+                    { type: 'class', name: 'AuthGuard', resolvers: [], params: [{ source: 'Request' }], isAsync: true }
+                ],
+                interceptors: [],
+                meta: {}
+            });
+
+            MetadataStore.registerEndpoint({
+                controller: 'TestController',
+                methodName: 'userEndpoint',
+                httpMethod: 'GET',
+                path: '/user',
+                params: [],
+                guards: [
+                    { type: 'class', name: 'AuthGuard', resolvers: [], params: [{ source: 'Request' }], isAsync: true }
+                ],
+                interceptors: [],
+                meta: {}
+            });
+
+            const server = new Server({ port: 3000 });
+            (server as any).init();
+
+            // 1. Calling /admin with no role -> 403 Forbidden
+            const res1 = await server.fetch(new Request('http://localhost/admin'));
+            expect(res1.status).toBe(403);
+
+            // 2. Calling /admin with admin role -> 200 OK
+            const res2 = await server.fetch(new Request('http://localhost/admin', {
+                headers: { 'x-role': 'admin' }
+            }));
+            expect(res2.status).toBe(200);
+            expect(await res2.json()).toEqual({ ok: true, section: 'admin' });
+
+            // 3. Calling /user with user role -> 200 OK
+            const res3 = await server.fetch(new Request('http://localhost/user', {
+                headers: { 'x-role': 'user' }
+            }));
+            expect(res3.status).toBe(200);
+            expect(await res3.json()).toEqual({ ok: true, section: 'user' });
+
+            // 4. Calling /user with guest role -> 403 Forbidden
+            const res4 = await server.fetch(new Request('http://localhost/user', {
+                headers: { 'x-role': 'guest' }
+            }));
+            expect(res4.status).toBe(403);
         });
     });
 });

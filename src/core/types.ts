@@ -1,9 +1,19 @@
-export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'ALL' | 'RPC';
+
+export interface ServerWebSocket {
+  send(data: string | ArrayBuffer | Buffer): void;
+  close(code?: number, reason?: string): void;
+  on(event: 'message' | 'close' | 'error', callback: Function): void;
+  off(event: 'message' | 'close' | 'error', callback: Function): void;
+  readonly headers: Headers;
+  readonly query: Record<string, string>;
+  readonly params: Record<string, string>;
+}
 
 export type ValidationMode = 'strict' | 'relaxed' | 'strip';
 
 export interface ParamMetadata {
-  source: 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject';
+  source: 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket';
   name?: string;
   validator?: string | Validator;
   mode?: ValidationMode;

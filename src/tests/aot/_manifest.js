@@ -8,6 +8,8 @@ import { SecureController } from './controllers.compiled.js';
 import { BaseController } from './controllers.compiled.js';
 import { InheritedController } from './controllers.compiled.js';
 import { DiTestController } from './controllers.compiled.js';
+import { RealtimeController } from './controllers.compiled.js';
+import { MathMicroserviceController } from './controllers.compiled.js';
 import { ConfigService } from './controllers.compiled.js';
 import { DatabaseService } from './controllers.compiled.js';
 import { LoggerService } from './controllers.compiled.js';
@@ -24,6 +26,8 @@ MetadataStore.registerController('SecureController', SecureController);
 MetadataStore.registerController('BaseController', BaseController);
 MetadataStore.registerController('InheritedController', InheritedController);
 MetadataStore.registerController('DiTestController', DiTestController);
+MetadataStore.registerController('RealtimeController', RealtimeController);
+MetadataStore.registerController('MathMicroserviceController', MathMicroserviceController);
 MetadataStore.registerProvider('ConfigService', ConfigService);
 MetadataStore.registerProvider('DatabaseService', DatabaseService);
 MetadataStore.registerProvider('LoggerService', LoggerService);
@@ -306,9 +310,9 @@ var __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, 
 
 var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
 
-var __val_913d6d1b0acb38ac = validators.date;
+var __val_1b07349e25c26601 = validators.date;
 
-var __val_3ab6837d7d6b0179 = validators.regexp;
+var __val_925fde611c826103 = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -504,6 +508,35 @@ var __val_8eb9a2d0e4390fe9 = (v, path, ctx) => {
     if (_s === false)
         ctx.success = false;
     return v;
+};
+
+var __val_ccb10958b6aa7739 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["a", "b"], "SumPayload"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["a", "b"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["a", false, __val_12886f9d00055adf],
+        ["b", false, __val_12886f9d00055adf]
+    ]);
+    return data;
 };
 
 
@@ -726,12 +759,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_913d6d1b0acb38ac
+			validator: __val_1b07349e25c26601
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_3ab6837d7d6b0179
+			validator: __val_925fde611c826103
 		},
 		{
 			source: 'Query',
@@ -830,6 +863,39 @@ MetadataStore.registerEndpoint({
 			mode: 'strip'
 		}
 	],
+	guards: [],
+	interceptors: [],
+	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'TypeSafetyController',
+	methodName: 'headExplicit',
+	httpMethod: 'HEAD',
+	path: '/type-safety/head-explicit',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'TypeSafetyController',
+	methodName: 'getFallback',
+	httpMethod: 'GET',
+	path: '/type-safety/get-fallback',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'TypeSafetyController',
+	methodName: 'allVerbs',
+	httpMethod: 'ALL',
+	path: '/type-safety/all-verbs',
+	params: [],
 	guards: [],
 	interceptors: [],
 	meta: {}
@@ -1031,5 +1097,169 @@ MetadataStore.registerEndpoint({
 	],
 	interceptors: [],
 	meta: {}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'RealtimeController',
+	methodName: 'handleWs',
+	httpMethod: 'WS',
+	path: '/realtime/ws',
+	params: [
+		{
+			source: 'WebSocket',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		ws: true
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'RealtimeController',
+	methodName: 'handleWsParams',
+	httpMethod: 'WS',
+	path: '/realtime/ws-params/:room',
+	params: [
+		{
+			source: 'WebSocket',
+			name: '',
+			validator: ''
+		},
+		{
+			source: 'Param',
+			name: 'room',
+			validator: __val_473287f8298dba71
+		},
+		{
+			source: 'Query',
+			name: 'token',
+			validator: __val_473287f8298dba71
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		ws: true
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'RealtimeController',
+	methodName: 'handleWsLimited',
+	httpMethod: 'WS',
+	path: '/realtime/ws-limited',
+	params: [
+		{
+			source: 'WebSocket',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		ws: true,
+		wsOptions: {
+			maxPayload: 10
+		}
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'RealtimeController',
+	methodName: 'handleWsHeartbeat',
+	httpMethod: 'WS',
+	path: '/realtime/ws-heartbeat',
+	params: [
+		{
+			source: 'WebSocket',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		ws: true,
+		wsOptions: {
+			pingInterval: 100,
+			pingTimeout: 50
+		}
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'RealtimeController',
+	methodName: 'handleSse',
+	httpMethod: 'GET',
+	path: '/realtime/sse',
+	params: [],
+	guards: [],
+	interceptors: [],
+	meta: {
+		sse: true
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MathMicroserviceController',
+	methodName: 'sum',
+	httpMethod: 'RPC',
+	path: 'math.sum',
+	params: [
+		{
+			source: 'Body',
+			name: '',
+			validator: __val_ccb10958b6aa7739
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		rpc: true
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MathMicroserviceController',
+	methodName: 'greet',
+	httpMethod: 'RPC',
+	path: 'math.greet',
+	params: [
+		{
+			source: 'Body',
+			name: '',
+			validator: __val_473287f8298dba71
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		rpc: true
+	}
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MathMicroserviceController',
+	methodName: 'notify',
+	httpMethod: 'RPC',
+	path: 'logs.notify',
+	params: [
+		{
+			source: 'Body',
+			name: '',
+			validator: __val_473287f8298dba71
+		}
+	],
+	guards: [],
+	interceptors: [],
+	meta: {
+		rpc: true,
+		event: true
+	}
 });
 

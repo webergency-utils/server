@@ -2,6 +2,7 @@ import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
 import compilerPlugin, { transformer, createRegistry, generateManifestCode } from '../../compiler/transformer.js';
+import { SwaggerSpecGenerator } from '../../compiler/swagger.js';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +46,9 @@ export function runAot() {
     const analyzer = transformer(program, registry)({} as any);
     analyzer(source);
 
+    // Generate swagger.json during AOT build of tests (using original paths in registry)
+    SwaggerSpecGenerator.generate(registry, program, path.dirname(manifestPath));
+
     // 3. Mutate paths in registry so they point to the compiled file
     const compiledVirtualTsPath = path.resolve(__dirname, 'controllers.compiled.ts');
     for (const key of registry.controllers.keys()) {
@@ -62,6 +66,7 @@ export function runAot() {
 
     const manifestCode = generateManifestCode(registry, new Map(), manifestPath);
     fs.writeFileSync(manifestPath, manifestCode);
+
     return manifestPath;
 }
 

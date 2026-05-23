@@ -3,9 +3,10 @@ export * from './decorators.js';
 export * from './core/router.js';
 export * from './core/metadata.js';
 export { RequestContext, Context as RequestContextStore } from './core/context.js';
+export { Reflector } from './core/reflector.js';
 export * from './errors.js';
 export * from './config.js';
-export { Logger, LogContext } from './core/types.js';
+export { Logger, LogContext, ServerWebSocket } from './core/types.js';
 export {
   pathCompiler,
   pathMatcher,
@@ -28,5 +29,6 @@ export {
   Key,
   Keys
 } from './helpers/match.js';
-
-
+export * from './microservice/microservice.js';
+export * from './microservice/adapter.js';
+export * from './microservice/tcp-adapter.js';

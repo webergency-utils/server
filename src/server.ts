@@ -367,7 +367,8 @@ export class Server extends EventEmitter {
     const startTime = Date.now();
     const url = new URL(request.url);
     const path = url.pathname;
-    const method = request.method;
+    const isUpgrade = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
+    const method = isUpgrade ? 'WS' : request.method;
     
     if (this.options.logs) {
       this.logger.info(`--> ${method} ${path}${url.search ? url.search : ''}`, {
@@ -380,7 +381,10 @@ export class Server extends EventEmitter {
 
     let finalMatch: any = null;
     try {
-      const match = this.router.find(method, path);
+      let match = this.router.find(method, path);
+      if (!match && method === 'HEAD') {
+        match = this.router.find('GET', path);
+      }
       
       finalMatch = match;
       if (!match && method === 'OPTIONS') {
@@ -426,6 +430,49 @@ export class Server extends EventEmitter {
         res = applyCors(res, this.options.cors);
         res = applySecurityHeaders(res, mergeSecurityConfigs([this.options.security]));
         return res;
+      }
+
+      if (isUpgrade) {
+        // Enforce guards before upgrading
+        const controllerModule = MetadataStore.getTokenModule(finalMatch.metadata.controller);
+        const controller = MetadataStore.getController(finalMatch.metadata.controller, controllerModule);
+        if (!controller) throw new Error(`Controller ${finalMatch.metadata.controller} not registered`);
+
+        // Run Guards
+        const req = request as AugmentedRequest;
+        req.params = finalMatch.params;
+        req.query = QueryParser.parse(url.search.startsWith('?') ? url.search.slice(1) : url.search);
+        const ctx = { success: true, errors: [], mode: "strict" };
+
+        for (const g of finalMatch.metadata.guards) {
+          const guardModule = g.type === 'class' ? MetadataStore.getTokenModule(g.name) : controllerModule;
+          const guardInstance = g.type === 'class' ? MetadataStore.getGuard(g.name, guardModule) : controller;
+          const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
+          
+          const guardArgs: any[] = [];
+          let resolverIdx = 0;
+          for (const p of g.params) {
+            if (p.source === 'WebSocket') {
+              guardArgs.push(null);
+            } else if (p.source === 'Request' && !p.name && !p.validator) {
+              const { RequestProcessor } = await import('./core/request-processor.js');
+              guardArgs.push(await RequestProcessor.resolveParam(p, req, ctx, undefined, guardModule));
+            } else if (p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject') {
+               const { RequestProcessor } = await import('./core/request-processor.js');
+               guardArgs.push(await RequestProcessor.resolveParam(p, req, ctx, undefined, guardModule));
+            } else {
+              guardArgs.push(g.resolvers[resolverIdx++]);
+            }
+          }
+          const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
+          await guardMethod.apply(guardInstance, finalArgs);
+        }
+
+        if (this.serverAdapter && typeof this.serverAdapter.upgrade === 'function') {
+          const res = await this.serverAdapter.upgrade(request, finalMatch.metadata, finalMatch.params);
+          return res;
+        }
+        return new Response('WebSockets not supported by adapter', { status: 501 });
       }
 
       const req = request as AugmentedRequest;
@@ -489,6 +536,14 @@ export class Server extends EventEmitter {
           duration
         });
       }
+
+      if (method === 'HEAD') {
+        response = new Response(null, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        });
+      }
       return response;
     } catch (err: any) {
       this.internalEmit('error', err);
@@ -518,6 +573,13 @@ export class Server extends EventEmitter {
       });
       res = applyCors(res, corsConfig);
       res = applySecurityHeaders(res, errSecurityConfig);
+      if (method === 'HEAD') {
+        res = new Response(null, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: res.headers
+        });
+      }
       return res;
     } finally {
       this.activeRequests--;

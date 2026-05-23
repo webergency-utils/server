@@ -1,0 +1,1947 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Webergency Application API",
+    "version": "1.0.0",
+    "description": "Automatically generated AOT REST & RPC endpoint documentation."
+  },
+  "paths": {
+    "/type-safety/strict": {
+      "post": {
+        "summary": "TypeSafetyController.strict",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "age": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "age"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "age": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "age"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/strict-intercepted": {
+      "post": {
+        "summary": "TypeSafetyController.strictIntercepted",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "age": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "age"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "age": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "age"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/strip": {
+      "post": {
+        "summary": "TypeSafetyController.strip",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "age": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "age"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "age": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "age"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/relaxed": {
+      "post": {
+        "summary": "TypeSafetyController.relaxed",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "age": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "age"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "age": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "age"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/union": {
+      "post": {
+        "summary": "TypeSafetyController.union",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "simple"
+                            },
+                            "val": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "type",
+                            "val"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "complex"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "number"
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "tags"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "type",
+                            "data"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "simple"
+                      },
+                      "val": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "val"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "complex"
+                      },
+                      "data": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "number"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "tags"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/status": {
+      "get": {
+        "summary": "TypeSafetyController.status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "s": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "reason"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "const": "active"
+                        },
+                        {
+                          "type": "string",
+                          "const": "inactive"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "s"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "s",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "reason"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "const": "active"
+                },
+                {
+                  "type": "string",
+                  "const": "inactive"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/mixed-array": {
+      "post": {
+        "summary": "TypeSafetyController.mixedArray",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/nested": {
+      "post": {
+        "summary": "TypeSafetyController.nested",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "user": {
+                          "anyOf": [
+                            {
+                              "type": "null",
+                              "description": "undefined"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "age": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "name",
+                                "age"
+                              ]
+                            }
+                          ]
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "tags"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "number"
+                  },
+                  "user": {
+                    "anyOf": [
+                      {
+                        "type": "null",
+                        "description": "undefined"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "age": {
+                            "type": "number"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "age"
+                        ]
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "tags"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/intersection": {
+      "post": {
+        "summary": "TypeSafetyController.intersection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {}
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/query-union": {
+      "get": {
+        "summary": "TypeSafetyController.queryUnion",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "active"
+                        },
+                        {
+                          "type": "string",
+                          "const": "inactive"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "active"
+                },
+                {
+                  "type": "string",
+                  "const": "inactive"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/array-query": {
+      "get": {
+        "summary": "TypeSafetyController.arrayQuery",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "tags"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "tags",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/coerce": {
+      "get": {
+        "summary": "TypeSafetyController.coerce",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "age": {
+                      "type": "number"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "big": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "age",
+                    "active",
+                    "date",
+                    "pattern",
+                    "big"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "age",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "pattern",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "exec": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "test": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "source": {
+                  "type": "string"
+                },
+                "global": {
+                  "type": "boolean"
+                },
+                "ignoreCase": {
+                  "type": "boolean"
+                },
+                "multiline": {
+                  "type": "boolean"
+                },
+                "lastIndex": {
+                  "type": "number"
+                },
+                "compile": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "flags": {
+                  "type": "string"
+                },
+                "sticky": {
+                  "type": "boolean"
+                },
+                "unicode": {
+                  "type": "boolean"
+                },
+                "dotAll": {
+                  "type": "boolean"
+                },
+                "hasIndices": {
+                  "type": "boolean"
+                },
+                "__@match@843": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "__@replace@845": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "__@search@848": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "__@split@850": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "__@matchAll@852": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "exec",
+                "test",
+                "source",
+                "global",
+                "ignoreCase",
+                "multiline",
+                "lastIndex",
+                "compile",
+                "flags",
+                "sticky",
+                "unicode",
+                "dotAll",
+                "hasIndices",
+                "__@match@843",
+                "__@replace@845",
+                "__@search@848",
+                "__@split@850",
+                "__@matchAll@852"
+              ]
+            }
+          },
+          {
+            "name": "big",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/deep-boolean": {
+      "get": {
+        "summary": "TypeSafetyController.deepBoolean",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "active": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "active"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "user"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "active": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "active"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/coerce-union": {
+      "get": {
+        "summary": "TypeSafetyController.coerceUnion",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "val": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "number"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bigint"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        },
+                        {
+                          "type": "string",
+                          "const": "symbol"
+                        },
+                        {
+                          "type": "string",
+                          "const": "undefined"
+                        },
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "function"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "val",
+                    "type"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "val",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/template-literal": {
+      "get": {
+        "summary": "TypeSafetyController.templateLiteral",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "id": {}
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "id"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {}
+          }
+        ]
+      }
+    },
+    "/type-safety/tags": {
+      "get": {
+        "summary": "TypeSafetyController.tags",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "pass": {
+                      "type": "string",
+                      "minLength": 8
+                    },
+                    "age": {
+                      "type": "number",
+                      "minimum": 18
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "pass",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "pass",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8
+            }
+          },
+          {
+            "name": "age",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": 18
+            }
+          }
+        ]
+      }
+    },
+    "/type-safety/custom-validator": {
+      "post": {
+        "summary": "TypeSafetyController.customValidator",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "val": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "val"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "val": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "val"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/head-explicit": {
+      "head": {
+        "summary": "TypeSafetyController.headExplicit",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null",
+                  "description": "undefined"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/get-fallback": {
+      "get": {
+        "summary": "TypeSafetyController.getFallback",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/type-safety/all-verbs": {
+      "get": {
+        "summary": "TypeSafetyController.allVerbs (GET)",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "TypeSafetyController.allVerbs (POST)",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "TypeSafetyController.allVerbs (PUT)",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "TypeSafetyController.allVerbs (DELETE)",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "TypeSafetyController.allVerbs (PATCH)",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tag-parity/number": {
+      "get": {
+        "summary": "TagParityController.getNumber",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "min": {
+                      "type": "number",
+                      "exclusiveMinimum": 10
+                    },
+                    "max": {
+                      "type": "number",
+                      "exclusiveMaximum": 20
+                    },
+                    "mult": {
+                      "type": "number",
+                      "multipleOf": 5
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "min",
+                    "max",
+                    "mult"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "min",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 10
+            }
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "exclusiveMaximum": 20
+            }
+          },
+          {
+            "name": "mult",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "multipleOf": 5
+            }
+          }
+        ]
+      }
+    },
+    "/tag-parity/string": {
+      "get": {
+        "summary": "TagParityController.getString",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "date": {
+                      "type": "string",
+                      "format": "date"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "email",
+                    "uuid",
+                    "date"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          {
+            "name": "uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ]
+      }
+    },
+    "/tag-parity/array": {
+      "post": {
+        "summary": "TagParityController.postArray",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 2,
+                "maxItems": 3
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tag-parity/unique-array": {
+      "post": {
+        "summary": "TagParityController.postUniqueArray",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "uniqueItems": true
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/secure-controller/default": {
+      "get": {
+        "summary": "SecureController.getDefault",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/secure-controller/override": {
+      "get": {
+        "summary": "SecureController.getOverride",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inherited/test": {
+      "get": {
+        "summary": "InheritedController.getTest",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inherited/override": {
+      "get": {
+        "summary": "InheritedController.getOverride",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/di/test": {
+      "get": {
+        "summary": "DiTestController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string"
+                    },
+                    "dbUrl": {
+                      "type": "string"
+                    },
+                    "logged": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "msg",
+                    "dbUrl",
+                    "logged"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/di/param-inject": {
+      "get": {
+        "summary": "DiTestController.paramInject",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dbUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "dbUrl"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/di/guarded": {
+      "get": {
+        "summary": "DiTestController.guarded",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/realtime/sse": {
+      "get": {
+        "summary": "RealtimeController.handleSse",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events Stream"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "math.sum": {
+      "rpc": {
+        "summary": "MathMicroserviceController.sum",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "a": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "a",
+                  "b"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "math.greet": {
+      "rpc": {
+        "summary": "MathMicroserviceController.greet",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "logs.notify": {
+      "rpc": {
+        "summary": "MathMicroserviceController.notify",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null",
+                  "description": "undefined"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}

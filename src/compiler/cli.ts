@@ -44,7 +44,7 @@ const absOutput = path.dirname(manifestPath);
 
 if (!fs.existsSync(absOutput)) fs.mkdirSync(absOutput, { recursive: true });
 
-function runBuild() {
+async function runBuild() {
   console.log('\n🚀 Starting AOT Build...');
   const registry = createRegistry();
 
@@ -98,6 +98,13 @@ function runBuild() {
   const manifestCode = generateManifestCode(registry, new Map(), manifestPath);
   fs.writeFileSync(manifestPath, manifestCode);
   console.log(`✅ AOT Manifest updated: ${path.basename(manifestPath)}`);
+
+  try {
+    const { SwaggerSpecGenerator } = await import('./swagger.js');
+    SwaggerSpecGenerator.generate(registry, program, path.dirname(manifestPath));
+  } catch (e: any) {
+    console.warn('⚠️ Warning: Failed to generate Swagger docs:', e.message);
+  }
 }
 
 if (watch) {

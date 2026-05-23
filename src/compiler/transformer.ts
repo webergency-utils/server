@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
 
-const HTTP_METHOD_DECORATORS = ['Get', 'Post', 'Put', 'Delete', 'Patch'];
+const HTTP_METHOD_DECORATORS = ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Head', 'All', 'Ws', 'Sse', 'MessagePattern', 'EventPattern'];
 
 const PARAM_DECORATORS: Record<string, string> = {
   'Request': 'Request',
@@ -19,7 +19,9 @@ const PARAM_DECORATORS: Record<string, string> = {
   'Body': 'Body',
   'RawBody': 'Body',
   'Ctx': 'Context',
-  'Context': 'Context'
+  'Context': 'Context',
+  'ConnectedSocket': 'WebSocket',
+  'Payload': 'Body'
 };
 
 export interface ProjectRegistry {
@@ -303,7 +305,7 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
   return (context: ts.TransformationContext) => {
     return (sourceFile: ts.SourceFile) => {
 
-      const resolveParamsMetadata = (params: ts.NodeArray<ts.ParameterDeclaration>, skipCount: number = 0) => {
+      const resolveParamsMetadata = (params: ts.NodeArray<ts.ParameterDeclaration>, isWsMethod: boolean = false, skipCount: number = 0) => {
         const metadata: any[] = [];
         const pArray = Array.from(params);
         for (let i = 0; i < pArray.length; i++) {
@@ -379,6 +381,14 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
           if (!dName && isInject) {
             dName = 'Inject';
             pName = injectToken || 'any';
+          }
+
+          if (!dName && isWsMethod) {
+            const pTypeName = p.type ? p.type.getText() : '';
+            const pNameText = p.name.getText();
+            if (pTypeName.includes('ServerWebSocket') || pNameText === 'ws' || pNameText === 'socket' || i === 0) {
+              dName = 'WebSocket';
+            }
           }
 
           if (dName) {
@@ -655,12 +665,72 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
 
                   const activeGuards = methodPublic ? [] : (methodGuards.length > 0 ? methodGuards : (classPublic ? [] : classGuards));
                   const activeInterceptors = [...classInterceptors, ...methodInterceptors];
-                  const paramsMetadata = resolveParamsMetadata(member.parameters);
+                  const paramsMetadata = resolveParamsMetadata(member.parameters, method === 'Ws');
+
+                  if (method === 'Head') {
+                    const signature = checker.getSignatureFromDeclaration(member);
+                    if (signature) {
+                      let returnType = checker.getReturnTypeOfSignature(signature);
+                      let isPromise = false;
+                      if (returnType.symbol?.name === 'Promise') {
+                        isPromise = true;
+                        const typeArgs = (returnType as ts.TypeReference).typeArguments;
+                        if (typeArgs && typeArgs[0]) {
+                          returnType = typeArgs[0];
+                        }
+                      }
+                      const returnTypeStr = checker.typeToString(returnType);
+                      const isVoid = returnTypeStr === 'void' || returnTypeStr === 'undefined' || (returnType.flags & ts.TypeFlags.Void) !== 0 || (returnType.flags & ts.TypeFlags.Undefined) !== 0;
+                      if (!isVoid) {
+                        const { line, character } = ts.getLineAndCharacterOfPosition(sourceFile, member.getStart());
+                        throw new Error(`[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Method "${member.name.getText()}" decorated with @Head must return void or Promise<void>. Found: ${isPromise ? 'Promise<' + returnTypeStr + '>' : returnTypeStr}`);
+                      }
+                    }
+                  }
+
+                  let httpMethod = method.toUpperCase();
+                  let isSse = false;
+                  let isWs = false;
+                  let isRpc = false;
+                  let isEvent = false;
+                  let wsOptions: any = undefined;
+                  if (method === 'Sse') {
+                    httpMethod = 'GET';
+                    isSse = true;
+                  } else if (method === 'Ws') {
+                    httpMethod = 'WS';
+                    isWs = true;
+                    if (httpDec && ts.isCallExpression(httpDec.expression) && httpDec.expression.arguments.length > 1) {
+                      wsOptions = parseExpression(httpDec.expression.arguments[1], sourceFile);
+                    }
+                  } else if (method === 'MessagePattern') {
+                    httpMethod = 'RPC';
+                    isRpc = true;
+                  } else if (method === 'EventPattern') {
+                    httpMethod = 'RPC';
+                    isRpc = true;
+                    isEvent = true;
+                  }
 
                   const endpoint: any = {
-                    controller: controllerName, methodName: member.name.getText(), httpMethod: method.toUpperCase(), path: fullPath,
+                    controller: controllerName, methodName: member.name.getText(), httpMethod, path: fullPath,
                     params: paramsMetadata, guards: activeGuards, interceptors: activeInterceptors, meta: {}
                   };
+                  if (isSse) {
+                    endpoint.meta.sse = true;
+                  }
+                  if (isWs) {
+                    endpoint.meta.ws = true;
+                    if (wsOptions !== undefined) {
+                      endpoint.meta.wsOptions = wsOptions;
+                    }
+                  }
+                  if (isRpc) {
+                    endpoint.meta.rpc = true;
+                    if (isEvent) {
+                      endpoint.meta.event = true;
+                    }
+                  }
                   if (activeCors !== undefined) {
                     endpoint.cors = activeCors;
                   }

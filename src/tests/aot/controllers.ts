@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All } from '../../index.js';
 
 import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems, constraint } from '@webergency-utils/typechecker';
 
@@ -122,6 +122,21 @@ export class TypeSafetyController {
     @Post('/custom-validator')
     customValidator(@Body('strip') data: CustomUser) {
         return { success: true, data };
+    }
+
+    @Head('/head-explicit')
+    headExplicit(): void {
+        // void return
+    }
+
+    @Get('/get-fallback')
+    getFallback() {
+        return { message: 'hello from get fallback' };
+    }
+
+    @All('/all-verbs')
+    allVerbs() {
+        return { message: 'hello from all verbs' };
     }
 }
 
@@ -281,5 +296,68 @@ export class DiTestController {
     @Protect(DiGuard)
     guarded() {
         return { success: true };
+    }
+}
+
+@Controller('/realtime')
+export class RealtimeController {
+    @Ws('/ws')
+    handleWs(ws: ServerWebSocket) {
+        ws.on('message', (msg: any) => {
+            ws.send(`Echo: ${msg}`);
+        });
+    }
+
+    @Ws('/ws-params/:room')
+    handleWsParams(
+        ws: ServerWebSocket,
+        @Param('room') room: string,
+        @Query('token') token: string
+    ) {
+        ws.send(`Room: ${room}, Token: ${token}`);
+        ws.on('message', (msg: any) => {
+            ws.send(msg);
+        });
+    }
+
+    @Ws('/ws-limited', { maxPayload: 10 })
+    handleWsLimited(ws: ServerWebSocket) {
+        ws.on('message', (msg: any) => {
+            ws.send(msg);
+        });
+    }
+
+    @Ws('/ws-heartbeat', { pingInterval: 100, pingTimeout: 50 })
+    handleWsHeartbeat(ws: ServerWebSocket) {
+        // Heartbeat verification endpoint
+    }
+
+    @Sse('/sse')
+    async *handleSse() {
+        yield { event: 'update', data: { val: 1 } };
+        yield { event: 'update', data: { val: 2 } };
+    }
+}
+
+export interface SumPayload {
+    a: number;
+    b: number;
+}
+
+@Controller()
+export class MathMicroserviceController {
+    @MessagePattern('math.sum')
+    sum(@Payload() data: SumPayload) {
+        return data.a + data.b;
+    }
+
+    @MessagePattern('math.greet')
+    greet(@Payload() name: string) {
+        return `Hello, ${name}!`;
+    }
+
+    @EventPattern('logs.notify')
+    notify(@Payload() msg: string) {
+        // Event listener
     }
 }

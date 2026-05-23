@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { Server } from '../../server.js';
 import { MetadataStore } from '../../core/metadata.js';
 import { runAot } from './build.js';
@@ -417,6 +417,173 @@ describe('Actual AOT Integration Test', () => {
                 expect(circA.b.a).toBeDefined();
                 expect(circA.b.a.getValue()).toBe('A');
             });
+        });
+
+        describe('@Head and @All routing', () => {
+            it('should handle explicit HEAD requests and return headers with empty body', async () => {
+                const res = await server.fetch(new Request('http://localhost/type-safety/head-explicit', {
+                    method: 'HEAD'
+                }));
+                expect(res.status).toBe(200);
+                expect(await res.text()).toBe('');
+            });
+
+            it('should fallback to GET route for HEAD request and strip response body', async () => {
+                const res = await server.fetch(new Request('http://localhost/type-safety/get-fallback', {
+                    method: 'HEAD'
+                }));
+                expect(res.status).toBe(200);
+                expect(res.headers.get('content-type')).toContain('application/json');
+                expect(await res.text()).toBe('');
+            });
+
+            it('should resolve @All routes for multiple HTTP verbs', async () => {
+                for (const verb of ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']) {
+                    const res = await server.fetch(new Request('http://localhost/type-safety/all-verbs', {
+                        method: verb
+                    }));
+                    expect(res.status).toBe(200);
+                    const data = await res.json();
+                    expect(data.message).toBe('hello from all verbs');
+                }
+            });
+        });
+    });
+
+    describe('WS & SSE Integration', () => {
+        let testServer: Server;
+        const port = 3888;
+
+        beforeAll(async () => {
+            testServer = new Server({ port, logs: false });
+            await testServer.start();
+        });
+
+        afterAll(async () => {
+            const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+            await testServer.shutdown();
+            exitSpy.mockRestore();
+        });
+
+        it('should handle SSE stream correctly', async () => {
+            const res = await testServer.fetch(new Request(`http://localhost:${port}/realtime/sse`));
+            expect(res.status).toBe(200);
+            expect(res.headers.get('content-type')).toBe('text/event-stream');
+            
+            const reader = res.body!.getReader();
+            const decoder = new TextDecoder();
+            let content = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                content += decoder.decode(value);
+            }
+            expect(content).toContain('event: update\ndata: {"val":1}\n\n');
+            expect(content).toContain('event: update\ndata: {"val":2}\n\n');
+        });
+
+        it('should establish WebSocket connection and echo messages', async () => {
+            const ws = new WebSocket(`ws://localhost:${port}/realtime/ws`);
+            
+            await new Promise<void>((resolve, reject) => {
+                ws.onopen = () => resolve();
+                ws.onerror = (err) => reject(err);
+            });
+
+            const responsePromise = new Promise<string>((resolve) => {
+                ws.onmessage = (event) => resolve(event.data);
+            });
+
+            ws.send('Hello from client');
+            const response = await responsePromise;
+            expect(response).toBe('Echo: Hello from client');
+
+            ws.close();
+            await new Promise<void>((resolve) => {
+                ws.onclose = () => resolve();
+            });
+        });
+
+        it('should handle WebSocket path and query parameters', async () => {
+            const ws = new WebSocket(`ws://localhost:${port}/realtime/ws-params/vip-room?token=super-secret`);
+            
+            const welcomePromise = new Promise<string>((resolve) => {
+                ws.onmessage = (event) => resolve(event.data);
+            });
+
+            const welcome = await welcomePromise;
+            expect(welcome).toBe('Room: vip-room, Token: super-secret');
+
+            const echoPromise = new Promise<string>((resolve) => {
+                ws.onmessage = (event) => resolve(event.data);
+            });
+
+            ws.send('ping');
+            const echo = await echoPromise;
+            expect(echo).toBe('ping');
+
+            ws.close();
+            await new Promise<void>((resolve) => {
+                ws.onclose = () => resolve();
+            });
+        });
+
+        it('should enforce maxPayload limits on WebSocket endpoints', async () => {
+            const ws = new WebSocket(`ws://localhost:${port}/realtime/ws-limited`);
+            
+            await new Promise<void>((resolve, reject) => {
+                ws.onopen = () => resolve();
+                ws.onerror = (err) => reject(err);
+            });
+
+            // Send standard length message (<= 10 bytes)
+            const echoPromise = new Promise<string>((resolve) => {
+                ws.onmessage = (event) => resolve(event.data);
+            });
+            ws.send('12345');
+            const echo = await echoPromise;
+            expect(echo).toBe('12345');
+
+            // Send too large message (> 10 bytes)
+            const closePromise = new Promise<{ code: number, reason: string }>((resolve) => {
+                ws.onclose = (event) => resolve({ code: event.code, reason: event.reason });
+            });
+            ws.send('123456789012345');
+            const closeEvent = await closePromise;
+            expect(closeEvent.code).toBe(1009); // Message Too Big
+        });
+
+        it('should close connection on ping/pong heartbeat timeout', async () => {
+            const net = await import('node:net');
+            const closedPromise = new Promise<void>((resolve, reject) => {
+                const client = net.connect(port, 'localhost', () => {
+                    client.write(
+                        'GET /realtime/ws-heartbeat HTTP/1.1\r\n' +
+                        'Host: localhost\r\n' +
+                        'Upgrade: websocket\r\n' +
+                        'Connection: Upgrade\r\n' +
+                        'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n' +
+                        'Sec-WebSocket-Version: 13\r\n\r\n'
+                    );
+                    client.resume();
+                });
+                
+                const timeout = setTimeout(() => {
+                    client.destroy();
+                    reject(new Error('Socket did not close on heartbeat timeout'));
+                }, 3000);
+
+                client.on('close', () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+                client.on('error', (err) => {
+                    clearTimeout(timeout);
+                    reject(err);
+                });
+            });
+
+            await closedPromise;
         });
     });
 });

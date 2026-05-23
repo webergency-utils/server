@@ -109,5 +109,21 @@ describe('TypeScript Compiler Plugin Transformer', () => {
     expect(compiled).toContain('origin: (o) => o === \'http://trusted\'');
     expect(compiled).toContain('allowedHeaders: [\'Content-Type\', \'X-Custom-*\']');
   });
+
+  it('should throw an error if @Head decorated method does not return void or Promise<void>', () => {
+    const code = `
+      import { Controller, Head } from '../decorators.js';
+
+      @Controller('/test')
+      export class TestController {
+        @Head('/ping')
+        ping(): string {
+          return "pong";
+        }
+      }
+    `;
+
+    expect(() => compileAndTransform(code)).toThrow(/must return void or Promise<void>/);
+  });
 });
 
