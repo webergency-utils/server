@@ -178,6 +178,7 @@ export class MetadataStore {
     if (store.classToModuleMap) store.classToModuleMap.clear();
     if (store.tokenToModuleMap) store.tokenToModuleMap.clear();
     if (store.globalModules) store.globalModules.clear();
+    store.defaultResponseMode = undefined;
   }
 
   public static resolve(token: string, contextModule?: any): any {
@@ -236,5 +237,13 @@ export class MetadataStore {
         await instance[hookName](...args);
       }
     }
+  }
+
+  public static setDefaultResponseMode(mode: 'strict' | 'relaxed' | 'strip') {
+    store.defaultResponseMode = mode;
+  }
+
+  public static getDefaultResponseMode(): 'strict' | 'relaxed' | 'strip' {
+    return store.defaultResponseMode || 'strip';
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
   "author": "radixxko",
@@ -27,7 +27,7 @@
     "build": "npm run clean && tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "version": "npm run build && npm publish && npm run commit && git push"
+    "version": "npm run build && npm publish --access public && npm run commit && git push"
   },
   "repository": {
     "type": "git",
@@ -38,7 +38,7 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "file:../typechecker"
+    "@webergency-utils/typechecker": "0.0.30"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"

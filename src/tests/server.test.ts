@@ -11,6 +11,10 @@ vi.mock('http', () => ({
     createServer: vi.fn()
 }));
 
+vi.mock('https', () => ({
+    createServer: vi.fn()
+}));
+
 describe('Server & Metadata', () => {
     beforeEach(() => {
         MetadataStore.clear();
@@ -436,6 +440,22 @@ describe('Server & Metadata', () => {
 
             expect(mockRes.statusCode).toBe(200);
             expect(mockRes.setHeader).toHaveBeenCalledWith('content-type', 'application/json');
+        });
+
+        it('should start HTTPS server when tls is provided', async () => {
+            const mockServer = {
+                listen: vi.fn((port, cb) => cb()),
+                close: vi.fn(cb => cb())
+            };
+            const { createServer } = await import('https');
+            const mockCreateServer = vi.mocked(createServer).mockReturnValue(mockServer as any);
+
+            const tlsOptions = { key: 'key-data', cert: 'cert-data' };
+            const server = new Server({ port: 4430, tls: tlsOptions });
+            await server.start();
+
+            expect(mockCreateServer).toHaveBeenCalledWith(tlsOptions, expect.any(Function));
+            expect(mockServer.listen).toHaveBeenCalledWith(4430, expect.any(Function));
         });
 
         it('should start Bun server', async () => {

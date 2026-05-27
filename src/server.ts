@@ -11,7 +11,8 @@ import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/securit
 // Decoupled architectural imports
 import { RequestProcessor } from './core/request-processor.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
-import { ServerAdapter } from './adapters/adapter.js';
+import { ServerAdapter, TlsOptions } from './adapters/adapter.js';
+export { TlsOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
@@ -43,6 +44,8 @@ export interface ServerOptions {
   logs?: boolean;
   logger?: Logger;
   module?: any | any[];
+  responseMode?: 'strict' | 'relaxed' | 'strip';
+  tls?: TlsOptions;
 }
 
 export type ServerEvents = {
@@ -93,6 +96,9 @@ export class Server extends EventEmitter {
     super();
     this.logger = options.logger || new ConsoleLogger();
     this.setupSignals();
+    if (options.responseMode) {
+      MetadataStore.setDefaultResponseMode(options.responseMode);
+    }
   }
 
   private collectModuleElements(moduleClass: any, activeControllers: Set<string>, visitedModules = new Set<any>()): any {
@@ -349,9 +355,10 @@ export class Server extends EventEmitter {
     });
 
     this.serverAdapter = this.selectAdapter(runtime);
-    await this.serverAdapter.listen(port, this.fetch);
+    await this.serverAdapter.listen(port, this.fetch, this.options.tls);
 
-    this.logger.info(`${runtime} server running at http://localhost:${port}`, {
+    const protocol = this.options.tls ? 'https' : 'http';
+    this.logger.info(`${runtime} server running at ${protocol}://localhost:${port}`, {
       type: 'server_start',
       runtime,
       port

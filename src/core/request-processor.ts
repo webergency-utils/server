@@ -103,6 +103,16 @@ export class RequestProcessor {
         const result = await controller[metadata.methodName](...args);
         if (result instanceof Response) return result;
 
+        let validatedResult = result;
+        if (metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function') {
+          const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+          const responseCtx = { success: true, errors: [], mode };
+          validatedResult = metadata.returnTypeValidator(result, 'response', responseCtx);
+          if (!responseCtx.success) {
+            throw new Error(`Response validation failed: ${JSON.stringify(responseCtx.errors)}`);
+          }
+        }
+
         if (metadata.meta?.sse) {
           const headers = new Headers({
             'Content-Type': 'text/event-stream',
@@ -145,7 +155,7 @@ export class RequestProcessor {
           return new Response(bodyStream, { headers });
         }
 
-        return (typeof result === "object" ? new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } }) : new Response(String(result || "")));
+        return (typeof validatedResult === "object" ? new Response(JSON.stringify(validatedResult), { headers: { "Content-Type": "application/json" } }) : new Response(String(validatedResult || "")));
       };
 
       // 4. Wrap in Interceptor Chain
@@ -254,7 +264,17 @@ export class RequestProcessor {
 
       // 3. Wrap in Interceptor Chain
       const finalHandler = async () => {
-        return await controller[metadata.methodName](...args);
+        const result = await controller[metadata.methodName](...args);
+        if (metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function') {
+          const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+          const responseCtx = { success: true, errors: [], mode };
+          const validatedResult = metadata.returnTypeValidator(result, 'response', responseCtx);
+          if (!responseCtx.success) {
+            throw new Error(`Response validation failed: ${JSON.stringify(responseCtx.errors)}`);
+          }
+          return validatedResult;
+        }
+        return result;
       };
 
       let chain = finalHandler;

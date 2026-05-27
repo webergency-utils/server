@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode } from '../../index.js';
 
 import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems, constraint } from '@webergency-utils/typechecker';
 
@@ -361,3 +361,86 @@ export class MathMicroserviceController {
         // Event listener
     }
 }
+
+export interface TestReturnUser {
+    name: string;
+    age: number;
+}
+
+@Controller('/return-type')
+export class ReturnTypeController {
+    @Get('/exact')
+    getExact(): TestReturnUser {
+        return { name: 'Alice', age: 25 };
+    }
+
+    @Get('/strip')
+    getStrip(): TestReturnUser {
+        return { name: 'Bob', age: 30, extraField: 'should-be-stripped' } as any;
+    }
+
+    @Get('/invalid')
+    getInvalid(): TestReturnUser {
+        return { name: 'Charlie', age: 'thirty' } as any;
+    }
+
+    @Get('/inferred-branch')
+    getInferredBranch(
+        @Query('branch') branch: string
+    ) {
+        if (branch === 'a') {
+            return { name: 'Jack', age: 50 };
+        } else {
+            return { name: 'Jill', age: 60 };
+        }
+    }
+
+    @MessagePattern('rpc.exact')
+    rpcExact(): TestReturnUser {
+        return { name: 'Dave', age: 40 };
+    }
+
+    @MessagePattern('rpc.strip')
+    rpcStrip(): TestReturnUser {
+        return { name: 'Eve', age: 45, secret: 'ignore-me' } as any;
+    }
+
+    @MessagePattern('rpc.invalid')
+    rpcInvalid(): TestReturnUser {
+        return { name: 'Frank' } as any;
+    }
+}
+
+@Controller('/response-mode-strict')
+@ResponseMode('strict')
+export class StrictResponseController {
+    @Get('/fail')
+    fail(): TestReturnUser {
+        return { name: 'Strict', age: 10, extra: 'not-allowed' } as any;
+    }
+
+    @Get('/override-relaxed')
+    @ResponseMode('relaxed')
+    overrideRelaxed(): TestReturnUser {
+        return { name: 'RelaxedOverride', age: 20, extra: 'kept' } as any;
+    }
+}
+
+@Controller()
+@ResponseMode('relaxed')
+export class BaseRelaxedController {}
+
+@Controller('/response-mode-inherited')
+export class InheritedResponseController extends BaseRelaxedController {
+    @Get('/inherited-relaxed')
+    inheritedRelaxed(): TestReturnUser {
+        return { name: 'InheritedRelaxed', age: 30, extra: 'inherited-kept' } as any;
+    }
+
+    @Get('/override-strict')
+    @ResponseMode('strict')
+    overrideStrict(): TestReturnUser {
+        return { name: 'StrictOverride', age: 40, extra: 'fail' } as any;
+    }
+}
+

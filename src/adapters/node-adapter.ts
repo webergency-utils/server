@@ -1,4 +1,4 @@
-import { ServerAdapter } from './adapter.js';
+import { ServerAdapter, TlsOptions } from './adapter.js';
 import { SimpleMultibuffer, WebsocketFrame } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { EventEmitter } from 'node:events';
@@ -7,9 +7,8 @@ import crypto from 'node:crypto';
 export class NodeAdapter implements ServerAdapter {
   private nodeServer?: any;
 
-  async listen(port: number, handler: (request: Request) => Promise<Response>): Promise<void> {
-    const { createServer } = await import('http');
-    this.nodeServer = createServer(async (req, res) => {
+  async listen(port: number, handler: (request: Request) => Promise<Response>, tls?: TlsOptions): Promise<void> {
+    const connectionHandler = async (req: any, res: any) => {
       const protocol = (req.socket as any).encrypted ? 'https' : 'http';
       const url = `${protocol}://${req.headers.host}${req.url}`;
       const fetchReq = new Request(url, {
@@ -27,7 +26,15 @@ export class NodeAdapter implements ServerAdapter {
         // @ts-ignore
         Readable.fromWeb(response.body).pipe(res);
       } else res.end();
-    });
+    };
+
+    if (tls) {
+      const { createServer } = await import('https');
+      this.nodeServer = createServer(tls as any, connectionHandler);
+    } else {
+      const { createServer } = await import('http');
+      this.nodeServer = createServer(connectionHandler);
+    }
 
     const { MetadataStore } = await import('../core/metadata.js');
     const hasWs = MetadataStore.getEndpoints().some((ep: any) => ep.httpMethod === 'WS');

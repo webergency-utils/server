@@ -491,6 +491,7 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
         let securityConfigs: any[] = [];
         let guards: any[] = [];
         let interceptors: string[] = [];
+        let responseModes: string[] = [];
 
         const type = checker.getTypeAtLocation(classDecl);
         const baseTypes = type.getBaseTypes();
@@ -504,6 +505,7 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
               securityConfigs.push(...parentMeta.securityConfigs);
               guards.push(...parentMeta.guards);
               interceptors.push(...parentMeta.interceptors);
+              responseModes.push(...parentMeta.responseModes);
             }
           }
         }
@@ -556,11 +558,27 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
         }
         interceptors.push(...directInterceptors);
 
+        let directResponseMode: string | undefined;
+        if (decorators) {
+          for (const d of decorators) {
+            if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'ResponseMode') {
+              const arg = d.expression.arguments[0];
+              if (arg && ts.isStringLiteral(arg)) {
+                directResponseMode = arg.text;
+              }
+            }
+          }
+        }
+        if (directResponseMode !== undefined) {
+          responseModes.push(directResponseMode);
+        }
+
         return {
           corsConfigs,
           securityConfigs,
           guards,
-          interceptors
+          interceptors,
+          responseModes
         };
       };
 
@@ -598,6 +616,12 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
             if (decorators) for (const d of decorators) if (d.expression.getText().includes('Public')) { classPublic = true; break; }
 
             const classMeta = collectClassMetadata(statement);
+
+            // Merge response modes hierarchically (parent -> child)
+            let classResponseMode: any = undefined;
+            if (classMeta.responseModes.length > 0) {
+              classResponseMode = classMeta.responseModes[classMeta.responseModes.length - 1];
+            }
 
             // Merge CorsConfigs hierarchically (parent -> child)
             let classCors: any = undefined;
@@ -663,6 +687,19 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                   if (mDecs) for (const d of mDecs) if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'Intercept') { mInterceptDec = d; break; }
                   if (mInterceptDec && ts.isCallExpression(mInterceptDec.expression)) for (const arg of mInterceptDec.expression.arguments) { const i = resolveClassRef(arg, registry.interceptors); if (i) methodInterceptors.push(i); }
 
+                  let methodResponseMode: any = undefined;
+                  if (mDecs) {
+                    for (const d of mDecs) {
+                      if (ts.isCallExpression(d.expression) && d.expression.expression.getText() === 'ResponseMode') {
+                        const arg = d.expression.arguments[0];
+                        if (arg && ts.isStringLiteral(arg)) {
+                          methodResponseMode = arg.text;
+                        }
+                      }
+                    }
+                  }
+                  const activeResponseMode = methodResponseMode !== undefined ? methodResponseMode : classResponseMode;
+
                   const activeGuards = methodPublic ? [] : (methodGuards.length > 0 ? methodGuards : (classPublic ? [] : classGuards));
                   const activeInterceptors = [...classInterceptors, ...methodInterceptors];
                   const paramsMetadata = resolveParamsMetadata(member.parameters, method === 'Ws');
@@ -712,10 +749,40 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
                     isEvent = true;
                   }
 
+                  let returnTypeValidatorHash = '';
+                  const signature = checker.getSignatureFromDeclaration(member);
+                  if (signature) {
+                    let returnType = checker.getReturnTypeOfSignature(signature);
+                    if (returnType.symbol?.name === 'Promise') {
+                      const typeArgs = (returnType as ts.TypeReference).typeArguments;
+                      if (typeArgs && typeArgs[0]) {
+                        returnType = typeArgs[0];
+                      }
+                    }
+                    const returnTypeStr = checker.typeToString(returnType);
+                    const isVoid = returnTypeStr === 'void' || returnTypeStr === 'undefined' || (returnType.flags & ts.TypeFlags.Void) !== 0 || (returnType.flags & ts.TypeFlags.Undefined) !== 0;
+                    const isResponse = returnTypeStr === 'Response' || returnType.symbol?.name === 'Response';
+                    const isAnyOrUnknown = returnTypeStr === 'any' || returnTypeStr === 'unknown' || returnTypeStr === 'never';
+
+                    if (!isVoid && !isResponse && !isAnyOrUnknown && !isWs && !isSse) {
+                      const hash = generateHash(returnType, checker);
+                      if (!registry.validators.has(hash)) {
+                        buildValidator(returnType, checker, registry.validators, registry.requiredUtils);
+                      }
+                      returnTypeValidatorHash = hash;
+                    }
+                  }
+
                   const endpoint: any = {
                     controller: controllerName, methodName: member.name.getText(), httpMethod, path: fullPath,
                     params: paramsMetadata, guards: activeGuards, interceptors: activeInterceptors, meta: {}
                   };
+                  if (activeResponseMode !== undefined) {
+                    endpoint.returnTypeMode = activeResponseMode;
+                  }
+                  if (returnTypeValidatorHash) {
+                    endpoint.returnTypeValidator = returnTypeValidatorHash;
+                  }
                   if (isSse) {
                     endpoint.meta.sse = true;
                   }
@@ -963,9 +1030,9 @@ export function generateManifestCode(registry: ProjectRegistry, controllerMap: M
 
     // Replace validator hashes with actual code references
     let epJson = JSON.stringify(ep, null, 4);
-    epJson = epJson.replace(/"validator":\s*"([^"]+)"/g, (match, hash) => {
+    epJson = epJson.replace(/"(validator|returnTypeValidator)":\s*"([^"]+)"/g, (match, key, hash) => {
       const code = validatorCodeMap.get(hash);
-      return code ? `"validator": ${code}` : match;
+      return code ? `"${key}": ${code}` : match;
     });
 
     // Replace __raw_code__ placeholders before cleaning up quotes
@@ -1009,7 +1076,7 @@ function objectToExpression(obj: any): ts.Expression {
     }
     const properties: ts.ObjectLiteralElementLike[] = [];
     for (const [key, value] of Object.entries(obj)) {
-      if (key === 'validator' && typeof value === 'string' && value !== '') {
+      if ((key === 'validator' || key === 'returnTypeValidator') && typeof value === 'string' && value !== '') {
         properties.push(
           ts.factory.createPropertyAssignment(
             ts.factory.createIdentifier(key),

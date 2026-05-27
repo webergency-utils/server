@@ -38,6 +38,8 @@ export interface EndpointMetadata {
   cors?: any;
   security?: any;
   meta: Record<string, any>;
+  returnTypeValidator?: string | Validator;
+  returnTypeMode?: 'strict' | 'relaxed' | 'strip';
 }
 
 export type Validator = (v: any, path: string, ctx: any) => any;

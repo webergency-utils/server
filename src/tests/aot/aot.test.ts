@@ -448,6 +448,95 @@ describe('Actual AOT Integration Test', () => {
                 }
             });
         });
+
+        describe('Return Type Validation and Stripping', () => {
+            it('should succeed and keep exact return type properties', async () => {
+                const res = await server.fetch(new Request('http://localhost/return-type/exact'));
+                expect(res.status).toBe(200);
+                const data = await res.json();
+                expect(data).toEqual({ name: 'Alice', age: 25 });
+            });
+
+            it('should strip extra properties from the response object', async () => {
+                const res = await server.fetch(new Request('http://localhost/return-type/strip'));
+                expect(res.status).toBe(200);
+                const data = await res.json();
+                expect(data).toEqual({ name: 'Bob', age: 30 });
+                expect(data.extraField).toBeUndefined();
+            });
+
+            it('should throw an error (HTTP 500) if the response does not conform to the return type', async () => {
+                const res = await server.fetch(new Request('http://localhost/return-type/invalid'));
+                expect(res.status).toBe(500);
+                const data = await res.json();
+                expect(data.success).toBe(false);
+                expect(data.error).toContain('Response validation failed');
+            });
+
+            it('should infer union return type and validate correctly', async () => {
+                const resA = await server.fetch(new Request('http://localhost/return-type/inferred-branch?branch=a'));
+                expect(resA.status).toBe(200);
+                expect(await resA.json()).toEqual({ name: 'Jack', age: 50 });
+
+                const resB = await server.fetch(new Request('http://localhost/return-type/inferred-branch?branch=b'));
+                expect(resB.status).toBe(200);
+                expect(await resB.json()).toEqual({ name: 'Jill', age: 60 });
+            });
+
+            it('should validate and strip RPC return values', async () => {
+                const { RequestProcessor } = await import('../../core/request-processor.js');
+                const exactMeta = MetadataStore.getEndpoints().find(ep => ep.methodName === 'rpcExact')!;
+                const stripMeta = MetadataStore.getEndpoints().find(ep => ep.methodName === 'rpcStrip')!;
+                const invalidMeta = MetadataStore.getEndpoints().find(ep => ep.methodName === 'rpcInvalid')!;
+
+                const resExact = await RequestProcessor.executeRpc(exactMeta, {});
+                expect(resExact).toEqual({ name: 'Dave', age: 40 });
+
+                const resStrip = await RequestProcessor.executeRpc(stripMeta, {});
+                expect(resStrip).toEqual({ name: 'Eve', age: 45 });
+                expect(resStrip.secret).toBeUndefined();
+
+                await expect(RequestProcessor.executeRpc(invalidMeta, {})).rejects.toThrow('Response validation failed');
+            });
+
+            it('should fail validation in strict mode if extra properties are returned', async () => {
+                const res = await server.fetch(new Request('http://localhost/response-mode-strict/fail'));
+                expect(res.status).toBe(500);
+                const data = await res.json();
+                expect(data.success).toBe(false);
+                expect(data.error).toContain('Response validation failed');
+            });
+
+            it('should support overriding controller-level strict mode to relaxed mode on method', async () => {
+                const res = await server.fetch(new Request('http://localhost/response-mode-strict/override-relaxed'));
+                expect(res.status).toBe(200);
+                const data = await res.json();
+                expect(data).toEqual({ name: 'RelaxedOverride', age: 20, extra: 'kept' });
+            });
+
+            it('should inherit response validation mode from base controller', async () => {
+                const res = await server.fetch(new Request('http://localhost/response-mode-inherited/inherited-relaxed'));
+                expect(res.status).toBe(200);
+                const data = await res.json();
+                expect(data).toEqual({ name: 'InheritedRelaxed', age: 30, extra: 'inherited-kept' });
+            });
+
+            it('should support method-level strict mode overriding inherited relaxed mode', async () => {
+                const res = await server.fetch(new Request('http://localhost/response-mode-inherited/override-strict'));
+                expect(res.status).toBe(500);
+                const data = await res.json();
+                expect(data.success).toBe(false);
+                expect(data.error).toContain('Response validation failed');
+            });
+
+            it('should configure defaultResponseMode when initializing Server', () => {
+                const s = new Server({ port: 3999, responseMode: 'strict' });
+                expect(MetadataStore.getDefaultResponseMode()).toBe('strict');
+
+                // Reset default response mode
+                MetadataStore.setDefaultResponseMode('strip');
+            });
+        });
     });
 
     describe('WS & SSE Integration', () => {

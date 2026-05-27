@@ -936,27 +936,27 @@
                 "hasIndices": {
                   "type": "boolean"
                 },
-                "__@match@843": {
+                "__@match@993": {
                   "type": "object",
                   "properties": {},
                   "additionalProperties": false
                 },
-                "__@replace@845": {
+                "__@replace@995": {
                   "type": "object",
                   "properties": {},
                   "additionalProperties": false
                 },
-                "__@search@848": {
+                "__@search@998": {
                   "type": "object",
                   "properties": {},
                   "additionalProperties": false
                 },
-                "__@split@850": {
+                "__@split@1000": {
                   "type": "object",
                   "properties": {},
                   "additionalProperties": false
                 },
-                "__@matchAll@852": {
+                "__@matchAll@1002": {
                   "type": "object",
                   "properties": {},
                   "additionalProperties": false
@@ -977,11 +977,11 @@
                 "unicode",
                 "dotAll",
                 "hasIndices",
-                "__@match@843",
-                "__@replace@845",
-                "__@search@848",
-                "__@split@850",
-                "__@matchAll@852"
+                "__@match@993",
+                "__@replace@995",
+                "__@search@998",
+                "__@split@1000",
+                "__@matchAll@1002"
               ]
             }
           },
@@ -1934,6 +1934,346 @@
             "application/json": {
               "schema": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/return-type/exact": {
+      "get": {
+        "summary": "ReturnTypeController.getExact",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/return-type/strip": {
+      "get": {
+        "summary": "ReturnTypeController.getStrip",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/return-type/invalid": {
+      "get": {
+        "summary": "ReturnTypeController.getInvalid",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/return-type/inferred-branch": {
+      "get": {
+        "summary": "ReturnTypeController.getInferredBranch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "branch",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/return-typerpc.exact": {
+      "rpc": {
+        "summary": "ReturnTypeController.rpcExact",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/return-typerpc.strip": {
+      "rpc": {
+        "summary": "ReturnTypeController.rpcStrip",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/return-typerpc.invalid": {
+      "rpc": {
+        "summary": "ReturnTypeController.rpcInvalid",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/response-mode-strict/fail": {
+      "get": {
+        "summary": "StrictResponseController.fail",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/response-mode-strict/override-relaxed": {
+      "get": {
+        "summary": "StrictResponseController.overrideRelaxed",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/response-mode-inherited/inherited-relaxed": {
+      "get": {
+        "summary": "InheritedResponseController.inheritedRelaxed",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/response-mode-inherited/override-strict": {
+      "get": {
+        "summary": "InheritedResponseController.overrideStrict",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "age"
+                  ]
+                }
               }
             }
           }

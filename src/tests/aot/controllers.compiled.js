@@ -52,6 +52,37 @@ const __val_04c78f82f98a8cf4 = (v, path, ctx) => {
     ]);
     return data;
 };
+const __val_d31fde334b3f24e2 = (v, path, ctx) => validators.literal(v, path, ctx, false);
+const __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, true);
+const __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
+const __val_c67915707769fcf5 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: User; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["data", false, __val_04c78f82f98a8cf4]
+    ]);
+    return data;
+};
 const __val_6d1570e5b8d6d45a = (v, path, ctx) => validators.literal(v, path, ctx, "simple");
 const __val_2258654cc0f69d37 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["type", "val"], "{ type: \"simple\"; val: string; }"))
@@ -140,6 +171,34 @@ const __val_5c5ed695091ba342 = (v, path, ctx) => {
     return data;
 };
 const __val_a41824426b6b1ede = (v, path, ctx) => validators.union(v, path, ctx, [__val_2258654cc0f69d37, __val_5c5ed695091ba342]);
+const __val_d74cefa44e345d17 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MyUnion; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["data", false, __val_a41824426b6b1ede]
+    ]);
+    return data;
+};
 const __val_55e3fcb8d722f805 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["reason"], "{ reason: string; }"))
         return v;
@@ -170,8 +229,64 @@ const __val_55e3fcb8d722f805 = (v, path, ctx) => {
 const __val_2d1db52869bf4329 = (v, path, ctx) => validators.literal(v, path, ctx, "active");
 const __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, "inactive");
 const __val_857204a536cb022c = (v, path, ctx) => validators.union(v, path, ctx, [__val_55e3fcb8d722f805, __val_2d1db52869bf4329, __val_88e643147651d549]);
+const __val_2d6ea820a293bacf = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "s"], "{ success: boolean; s: Status; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "s"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["s", false, __val_857204a536cb022c]
+    ]);
+    return data;
+};
 const __val_affb28566d707e35 = (v, path, ctx) => validators.union(v, path, ctx, [__val_473287f8298dba71, __val_12886f9d00055adf]);
 const __val_8c1c1b2d325f9de6 = (v, path, ctx) => validators.array(v, path, ctx, __val_affb28566d707e35);
+const __val_a042f9877fc2376a = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MixedArray; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["data", false, __val_8c1c1b2d325f9de6]
+    ]);
+    return data;
+};
 const __val_eb045d78d2731073 = validators.undefined;
 const __val_ca383f8818520f0b = (v, path, ctx) => validators.union(v, path, ctx, [__val_eb045d78d2731073, __val_04c78f82f98a8cf4]);
 const __val_68aecd6fa646cade = (v, path, ctx) => {
@@ -200,6 +315,34 @@ const __val_68aecd6fa646cade = (v, path, ctx) => {
         ["id", false, __val_12886f9d00055adf],
         ["user", true, __val_ca383f8818520f0b],
         ["tags", false, __val_e5da2f9fabafe20e]
+    ]);
+    return data;
+};
+const __val_f0ac6e3a29009cf1 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Nested; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["data", false, __val_68aecd6fa646cade]
     ]);
     return data;
 };
@@ -267,13 +410,126 @@ const __val_f28f8acf7e68cbfd = (v, path, ctx) => {
     }
     return data;
 };
+const __val_0d157d33684c0018 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Intersection; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["data", false, __val_f28f8acf7e68cbfd]
+    ]);
+    return data;
+};
 const __val_85a41b63d9a32b8b = (v, path, ctx) => validators.union(v, path, ctx, [__val_2d1db52869bf4329, __val_88e643147651d549]);
-const __val_d31fde334b3f24e2 = (v, path, ctx) => validators.literal(v, path, ctx, false);
-const __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, true);
-const __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1]);
-const __val_1b07349e25c26601 = validators.date;
-const __val_925fde611c826103 = validators.regexp;
+const __val_0084393b0d7248e4 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "status"], "{ success: boolean; status: \"active\" | \"inactive\"; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "status"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["status", false, __val_85a41b63d9a32b8b]
+    ]);
+    return data;
+};
+const __val_d9bb28ea073c815e = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "tags"], "{ success: boolean; tags: string[]; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "tags"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["tags", false, __val_e5da2f9fabafe20e]
+    ]);
+    return data;
+};
+const __val_6799b49e362650ad = validators.date;
+const __val_0c20e695ad7641aa = validators.regexp;
 const __val_75d012fe28656e0a = validators.bigint;
+const __val_dfd1002a464a1dbf = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "age", "active", "date", "pattern", "big"], "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "age", "active", "date", "pattern", "big"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["age", false, __val_12886f9d00055adf],
+        ["active", false, __val_ced862ef1505bc73],
+        ["date", false, __val_473287f8298dba71],
+        ["pattern", false, __val_473287f8298dba71],
+        ["big", false, __val_473287f8298dba71]
+    ]);
+    return data;
+};
 const __val_91d782a2d0de1354 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["name", "active"], "{ name: string; active: boolean; }"))
         return v;
@@ -302,7 +558,101 @@ const __val_91d782a2d0de1354 = (v, path, ctx) => {
     ]);
     return data;
 };
+const __val_d979aa00a685cb05 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "user"], "{ success: boolean; user: { name: string; active: boolean; }; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "user"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["user", false, __val_91d782a2d0de1354]
+    ]);
+    return data;
+};
+const __val_32873a7f224f38d8 = (v, path, ctx) => validators.literal(v, path, ctx, "string");
+const __val_628f6ca4b78e6b50 = (v, path, ctx) => validators.literal(v, path, ctx, "number");
+const __val_46a7c6afe9b432e6 = (v, path, ctx) => validators.literal(v, path, ctx, "bigint");
+const __val_1207c37d006fe9f8 = (v, path, ctx) => validators.literal(v, path, ctx, "boolean");
+const __val_046317c2cffaf10d = (v, path, ctx) => validators.literal(v, path, ctx, "symbol");
+const __val_df6b16b0e625bf20 = (v, path, ctx) => validators.literal(v, path, ctx, "undefined");
+const __val_e64d77191bc932bb = (v, path, ctx) => validators.literal(v, path, ctx, "object");
+const __val_9120d5d091aa5bf3 = (v, path, ctx) => validators.literal(v, path, ctx, "function");
+const __val_1e1a258db2184d0e = (v, path, ctx) => validators.union(v, path, ctx, [__val_32873a7f224f38d8, __val_628f6ca4b78e6b50, __val_46a7c6afe9b432e6, __val_1207c37d006fe9f8, __val_046317c2cffaf10d, __val_df6b16b0e625bf20, __val_e64d77191bc932bb, __val_9120d5d091aa5bf3]);
+const __val_87e266a791052d41 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "val", "type"], "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "val", "type"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["val", false, __val_affb28566d707e35],
+        ["type", false, __val_1e1a258db2184d0e]
+    ]);
+    return data;
+};
 const __val_9a141e74a6c02429 = (v, path, ctx) => validators.templateLiteral(v, path, ctx, new RegExp("^id-[0-9]+(\\.[0-9]+)?$"), "`id-${number}`");
+const __val_6b50e5736cb6bb55 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "id"], "{ success: boolean; id: `id-${number}`; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "id"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["id", false, __val_9a141e74a6c02429]
+    ]);
+    return data;
+};
 const __val_1ec226ab681d53d9 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -324,6 +674,35 @@ const __val_37c14191d7986595 = (v, path, ctx) => {
     if (_s === false)
         ctx.success = false;
     return v;
+};
+const __val_1dff2d5c58b86753 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "pass", "age"], "{ success: boolean; pass: string & MinLength<8>; age: number & Minimum<18>; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "pass", "age"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["pass", false, __val_1ec226ab681d53d9],
+        ["age", false, __val_37c14191d7986595]
+    ]);
+    return data;
 };
 const __val_68c5a02a527ab0fc = (v, path, ctx) => {
     const _s = ctx.success;
@@ -363,6 +742,61 @@ const __val_e07351f5c6fe82e2 = (v, path, ctx) => {
     ]);
     return data;
 };
+const __val_58105d2252d9b4b0 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: CustomUser; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success", "data"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73],
+        ["data", false, __val_e07351f5c6fe82e2]
+    ]);
+    return data;
+};
+const __val_b237870e8da1ad64 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["message"], "{ message: string; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["message"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["message", false, __val_473287f8298dba71]
+    ]);
+    return data;
+};
 const __val_6e9d6dc4e79aca25 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -395,6 +829,35 @@ const __val_ef10024629c72e9e = (v, path, ctx) => {
     if (_s === false)
         ctx.success = false;
     return v;
+};
+const __val_be9e5c090b67e0cc = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["min", "max", "mult"], "{ min: number & ExclusiveMinimum<10>; max: number & ExclusiveMaximum<20>; mult: number & MultipleOf<5>; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["min", "max", "mult"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["min", false, __val_6e9d6dc4e79aca25],
+        ["max", false, __val_3f5a160666ebabc6],
+        ["mult", false, __val_ef10024629c72e9e]
+    ]);
+    return data;
 };
 const __val_56d21ddd31fd7b13 = (v, path, ctx) => {
     const _s = ctx.success;
@@ -429,6 +892,35 @@ const __val_dbeae6ee7b504b21 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
+const __val_a5aae050502e8365 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["email", "uuid", "date"], "{ email: string & Format<\"email\">; uuid: string & Format<\"uuid\">; date: string & Format<\"date\">; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["email", "uuid", "date"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["email", false, __val_56d21ddd31fd7b13],
+        ["uuid", false, __val_f1148b0341282e7b],
+        ["date", false, __val_dbeae6ee7b504b21]
+    ]);
+    return data;
+};
 const __val_6140e60a8304d25a = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -452,6 +944,89 @@ const __val_8eb9a2d0e4390fe9 = (v, path, ctx) => {
     if (_s === false)
         ctx.success = false;
     return v;
+};
+const __val_d6749fa8772de8dd = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["msg", "dbUrl", "logged"], "{ msg: string; dbUrl: string; logged: string; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["msg", "dbUrl", "logged"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["msg", false, __val_473287f8298dba71],
+        ["dbUrl", false, __val_473287f8298dba71],
+        ["logged", false, __val_473287f8298dba71]
+    ]);
+    return data;
+};
+const __val_ab68d46bd18d4a0a = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["dbUrl"], "{ dbUrl: string; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["dbUrl"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["dbUrl", false, __val_473287f8298dba71]
+    ]);
+    return data;
+};
+const __val_e955dd67e417e2f5 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["success"], "{ success: boolean; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["success"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["success", false, __val_ced862ef1505bc73]
+    ]);
+    return data;
 };
 const __val_ccb10958b6aa7739 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["a", "b"], "SumPayload"))
@@ -481,7 +1056,7 @@ const __val_ccb10958b6aa7739 = (v, path, ctx) => {
     ]);
     return data;
 };
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, All } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode } from '../../index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
 let TypeSafetyController = class TypeSafetyController {
     static __injections__ = {
@@ -975,6 +1550,122 @@ MathMicroserviceController = __decorate([
     Controller()
 ], MathMicroserviceController);
 export { MathMicroserviceController };
+let ReturnTypeController = class ReturnTypeController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    getExact() {
+        return { name: 'Alice', age: 25 };
+    }
+    getStrip() {
+        return { name: 'Bob', age: 30, extraField: 'should-be-stripped' };
+    }
+    getInvalid() {
+        return { name: 'Charlie', age: 'thirty' };
+    }
+    getInferredBranch(branch) {
+        if (branch === 'a') {
+            return { name: 'Jack', age: 50 };
+        }
+        else {
+            return { name: 'Jill', age: 60 };
+        }
+    }
+    rpcExact() {
+        return { name: 'Dave', age: 40 };
+    }
+    rpcStrip() {
+        return { name: 'Eve', age: 45, secret: 'ignore-me' };
+    }
+    rpcInvalid() {
+        return { name: 'Frank' };
+    }
+};
+__decorate([
+    Get('/exact')
+], ReturnTypeController.prototype, "getExact", null);
+__decorate([
+    Get('/strip')
+], ReturnTypeController.prototype, "getStrip", null);
+__decorate([
+    Get('/invalid')
+], ReturnTypeController.prototype, "getInvalid", null);
+__decorate([
+    Get('/inferred-branch'),
+    __param(0, Query('branch'))
+], ReturnTypeController.prototype, "getInferredBranch", null);
+__decorate([
+    MessagePattern('rpc.exact')
+], ReturnTypeController.prototype, "rpcExact", null);
+__decorate([
+    MessagePattern('rpc.strip')
+], ReturnTypeController.prototype, "rpcStrip", null);
+__decorate([
+    MessagePattern('rpc.invalid')
+], ReturnTypeController.prototype, "rpcInvalid", null);
+ReturnTypeController = __decorate([
+    Controller('/return-type')
+], ReturnTypeController);
+export { ReturnTypeController };
+let StrictResponseController = class StrictResponseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    fail() {
+        return { name: 'Strict', age: 10, extra: 'not-allowed' };
+    }
+    overrideRelaxed() {
+        return { name: 'RelaxedOverride', age: 20, extra: 'kept' };
+    }
+};
+__decorate([
+    Get('/fail')
+], StrictResponseController.prototype, "fail", null);
+__decorate([
+    Get('/override-relaxed'),
+    ResponseMode('relaxed')
+], StrictResponseController.prototype, "overrideRelaxed", null);
+StrictResponseController = __decorate([
+    Controller('/response-mode-strict'),
+    ResponseMode('strict')
+], StrictResponseController);
+export { StrictResponseController };
+let BaseRelaxedController = class BaseRelaxedController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+};
+BaseRelaxedController = __decorate([
+    Controller(),
+    ResponseMode('relaxed')
+], BaseRelaxedController);
+export { BaseRelaxedController };
+let InheritedResponseController = class InheritedResponseController extends BaseRelaxedController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    inheritedRelaxed() {
+        return { name: 'InheritedRelaxed', age: 30, extra: 'inherited-kept' };
+    }
+    overrideStrict() {
+        return { name: 'StrictOverride', age: 40, extra: 'fail' };
+    }
+};
+__decorate([
+    Get('/inherited-relaxed')
+], InheritedResponseController.prototype, "inheritedRelaxed", null);
+__decorate([
+    Get('/override-strict'),
+    ResponseMode('strict')
+], InheritedResponseController.prototype, "overrideStrict", null);
+InheritedResponseController = __decorate([
+    Controller('/response-mode-inherited')
+], InheritedResponseController);
+export { InheritedResponseController };
 __server_metadata_store.providers.set("DiGuard", DiGuard);
 __server_metadata_store.guardClasses.add("DiGuard");
 __server_metadata_store.endpoints.push({
@@ -990,7 +1681,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_c67915707769fcf5
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1005,7 +1697,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: ["GlobalErrorSanitizer"],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_c67915707769fcf5
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1020,7 +1713,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_c67915707769fcf5
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1035,7 +1729,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_c67915707769fcf5
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1050,7 +1745,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_d74cefa44e345d17
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1065,7 +1761,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_2d6ea820a293bacf
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1080,7 +1777,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_a042f9877fc2376a
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1095,7 +1793,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_f0ac6e3a29009cf1
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1110,7 +1809,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_0d157d33684c0018
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1125,7 +1825,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_0084393b0d7248e4
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1140,7 +1841,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_d9bb28ea073c815e
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1160,12 +1862,12 @@ __server_metadata_store.endpoints.push({
         }, {
             source: "Query",
             name: "date",
-            validator: __val_1b07349e25c26601,
+            validator: __val_6799b49e362650ad,
             mode: undefined
         }, {
             source: "Query",
             name: "pattern",
-            validator: __val_925fde611c826103,
+            validator: __val_0c20e695ad7641aa,
             mode: undefined
         }, {
             source: "Query",
@@ -1175,7 +1877,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_dfd1002a464a1dbf
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1190,7 +1893,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_d979aa00a685cb05
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1205,7 +1909,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_87e266a791052d41
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1220,7 +1925,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_6b50e5736cb6bb55
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1240,7 +1946,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_1dff2d5c58b86753
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1255,7 +1962,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_58105d2252d9b4b0
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1275,7 +1983,8 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_b237870e8da1ad64
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1285,7 +1994,8 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_b237870e8da1ad64
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -1310,7 +2020,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_be9e5c090b67e0cc
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -1335,7 +2046,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_a5aae050502e8365
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -1350,7 +2062,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_6140e60a8304d25a
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -1365,7 +2078,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_8eb9a2d0e4390fe9
 });
 __server_metadata_store.endpoints.push({
     controller: "SecureController",
@@ -1376,6 +2090,7 @@ __server_metadata_store.endpoints.push({
     guards: [],
     interceptors: [],
     meta: {},
+    returnTypeValidator: __val_473287f8298dba71,
     security: {
         frameguard: "deny"
     }
@@ -1389,6 +2104,7 @@ __server_metadata_store.endpoints.push({
     guards: [],
     interceptors: [],
     meta: {},
+    returnTypeValidator: __val_473287f8298dba71,
     security: {
         frameguard: false
     }
@@ -1402,6 +2118,7 @@ __server_metadata_store.endpoints.push({
     guards: [],
     interceptors: [],
     meta: {},
+    returnTypeValidator: __val_473287f8298dba71,
     security: {
         frameguard: "deny",
         timeout: 500
@@ -1416,6 +2133,7 @@ __server_metadata_store.endpoints.push({
     guards: [],
     interceptors: [],
     meta: {},
+    returnTypeValidator: __val_473287f8298dba71,
     security: {
         frameguard: false
     }
@@ -1428,7 +2146,8 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_d6749fa8772de8dd
 });
 __server_metadata_store.endpoints.push({
     controller: "DiTestController",
@@ -1443,7 +2162,8 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_ab68d46bd18d4a0a
 });
 __server_metadata_store.endpoints.push({
     controller: "DiTestController",
@@ -1464,7 +2184,8 @@ __server_metadata_store.endpoints.push({
             isAsync: false
         }],
     interceptors: [],
-    meta: {}
+    meta: {},
+    returnTypeValidator: __val_e955dd67e417e2f5
 });
 __server_metadata_store.endpoints.push({
     controller: "RealtimeController",
@@ -1578,7 +2299,8 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     meta: {
         rpc: true
-    }
+    },
+    returnTypeValidator: __val_12886f9d00055adf
 });
 __server_metadata_store.endpoints.push({
     controller: "MathMicroserviceController",
@@ -1595,7 +2317,8 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     meta: {
         rpc: true
-    }
+    },
+    returnTypeValidator: __val_473287f8298dba71
 });
 __server_metadata_store.endpoints.push({
     controller: "MathMicroserviceController",
@@ -1615,6 +2338,142 @@ __server_metadata_store.endpoints.push({
         event: true
     }
 });
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "getExact",
+    httpMethod: "GET",
+    path: "/return-type/exact",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "getStrip",
+    httpMethod: "GET",
+    path: "/return-type/strip",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "getInvalid",
+    httpMethod: "GET",
+    path: "/return-type/invalid",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "getInferredBranch",
+    httpMethod: "GET",
+    path: "/return-type/inferred-branch",
+    params: [{
+            source: "Query",
+            name: "branch",
+            validator: __val_473287f8298dba71,
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "rpcExact",
+    httpMethod: "RPC",
+    path: "/return-typerpc.exact",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {
+        rpc: true
+    },
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "rpcStrip",
+    httpMethod: "RPC",
+    path: "/return-typerpc.strip",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {
+        rpc: true
+    },
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "ReturnTypeController",
+    methodName: "rpcInvalid",
+    httpMethod: "RPC",
+    path: "/return-typerpc.invalid",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {
+        rpc: true
+    },
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "StrictResponseController",
+    methodName: "fail",
+    httpMethod: "GET",
+    path: "/response-mode-strict/fail",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeMode: "strict",
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "StrictResponseController",
+    methodName: "overrideRelaxed",
+    httpMethod: "GET",
+    path: "/response-mode-strict/override-relaxed",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeMode: "relaxed",
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "InheritedResponseController",
+    methodName: "inheritedRelaxed",
+    httpMethod: "GET",
+    path: "/response-mode-inherited/inherited-relaxed",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeMode: "relaxed",
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "InheritedResponseController",
+    methodName: "overrideStrict",
+    httpMethod: "GET",
+    path: "/response-mode-inherited/override-strict",
+    params: [],
+    guards: [],
+    interceptors: [],
+    meta: {},
+    returnTypeMode: "strict",
+    returnTypeValidator: __val_04c78f82f98a8cf4
+});
 __server_metadata_store.providers.set("TypeSafetyController", TypeSafetyController);
 __server_metadata_store.controllerClasses.add("TypeSafetyController");
 __server_metadata_store.providers.set("TagParityController", TagParityController);
@@ -1631,6 +2490,14 @@ __server_metadata_store.providers.set("RealtimeController", RealtimeController);
 __server_metadata_store.controllerClasses.add("RealtimeController");
 __server_metadata_store.providers.set("MathMicroserviceController", MathMicroserviceController);
 __server_metadata_store.controllerClasses.add("MathMicroserviceController");
+__server_metadata_store.providers.set("ReturnTypeController", ReturnTypeController);
+__server_metadata_store.controllerClasses.add("ReturnTypeController");
+__server_metadata_store.providers.set("StrictResponseController", StrictResponseController);
+__server_metadata_store.controllerClasses.add("StrictResponseController");
+__server_metadata_store.providers.set("BaseRelaxedController", BaseRelaxedController);
+__server_metadata_store.controllerClasses.add("BaseRelaxedController");
+__server_metadata_store.providers.set("InheritedResponseController", InheritedResponseController);
+__server_metadata_store.controllerClasses.add("InheritedResponseController");
 __server_metadata_store.providers.set("ConfigService", ConfigService);
 __server_metadata_store.providers.set("DatabaseService", DatabaseService);
 __server_metadata_store.providers.set("LoggerService", LoggerService);

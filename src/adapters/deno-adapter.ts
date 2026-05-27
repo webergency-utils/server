@@ -1,9 +1,14 @@
-import { ServerAdapter } from './adapter.js';
+import { ServerAdapter, TlsOptions } from './adapter.js';
 import { EventEmitter } from 'node:events';
 
 export class DenoAdapter implements ServerAdapter {
-  async listen(port: number, handler: (request: Request) => Promise<Response>): Promise<void> {
-    (globalThis as any).Deno.serve({ port }, handler);
+  async listen(port: number, handler: (request: Request) => Promise<Response>, tls?: TlsOptions): Promise<void> {
+    const options: any = { port };
+    if (tls) {
+      options.cert = typeof tls.cert === 'string' ? tls.cert : new TextDecoder().decode(tls.cert);
+      options.key = typeof tls.key === 'string' ? tls.key : new TextDecoder().decode(tls.key);
+    }
+    (globalThis as any).Deno.serve(options, handler);
   }
 
   async upgrade(request: Request, metadata: any, params: any): Promise<Response> {

@@ -133,6 +133,7 @@ export function SetMetadata<K = any, V = any>(key: K, value: V): any {
 
 export function Protect(guard: string | Function, ...guards: (string | Function)[]): any { return () => {}; }
 export function Intercept(...interceptors: any[]): any { return () => {}; }
+export function ResponseMode(mode: 'strict' | 'relaxed' | 'strip'): any { return () => {}; }
 
 export interface CorsOptions {
   origin?: string | string[] | boolean | Function;

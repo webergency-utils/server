@@ -1,52 +1,63 @@
-import { ServerAdapter } from './adapter.js';
+import { ServerAdapter, TlsOptions } from './adapter.js';
 import { EventEmitter } from 'node:events';
 
 export class BunAdapter implements ServerAdapter {
   private server?: any;
 
-  async listen(port: number, handler: (request: Request) => Promise<Response>): Promise<void> {
+  async listen(port: number, handler: (request: Request) => Promise<Response>, tls?: TlsOptions): Promise<void> {
     const { MetadataStore } = await import('../core/metadata.js');
     const hasWs = MetadataStore.getEndpoints().some((ep: any) => ep.httpMethod === 'WS');
 
+    const serveOptions: any = {
+      port
+    };
+
+    if (tls) {
+      serveOptions.tls = {
+        key: tls.key,
+        cert: tls.cert,
+        ca: tls.ca
+      };
+    }
+
     if (hasWs) {
       const { RequestProcessor } = await import('../core/request-processor.js');
-      this.server = (globalThis as any).Bun.serve({
-        port,
-        fetch(req: Request, server: any) {
-          (req as any).bunServer = server;
-          return handler(req);
+      serveOptions.fetch = function (req: Request, server: any) {
+        (req as any).bunServer = server;
+        return handler(req);
+      };
+      serveOptions.websocket = {
+        open(ws: any) {
+          const { metadata, params, query, headers, request } = ws.data;
+          const connection = new BunServerWebSocket(ws, headers, params, query, metadata.meta?.wsOptions);
+          RequestProcessor.executeWs(metadata, connection, request);
         },
-        websocket: {
-          open(ws: any) {
-            const { metadata, params, query, headers, request } = ws.data;
-            const connection = new BunServerWebSocket(ws, headers, params, query, metadata.meta?.wsOptions);
-            RequestProcessor.executeWs(metadata, connection, request);
-          },
-          message(ws: any, msg: any) {
-            const maxPayload = ws.data.metadata.meta?.wsOptions?.maxPayload;
-            if (maxPayload !== undefined) {
-              const len = typeof msg === 'string' ? Buffer.byteLength(msg) : (msg.byteLength !== undefined ? msg.byteLength : msg.length);
-              if (len > maxPayload) {
-                ws.close(1009, 'Message Too Big');
-                return;
-              }
+        message(ws: any, msg: any) {
+          const maxPayload = ws.data.metadata.meta?.wsOptions?.maxPayload;
+          if (maxPayload !== undefined) {
+            const len = typeof msg === 'string' ? Buffer.byteLength(msg) : (msg.byteLength !== undefined ? msg.byteLength : msg.length);
+            if (len > maxPayload) {
+              ws.close(1009, 'Message Too Big');
+              return;
             }
-            ws.data.emitter.emit('message', msg);
-          },
-          pong(ws: any) {
-            ws.data.emitter.emit('pong');
-          },
-          close(ws: any, code: number, reason: string) {
-            ws.data.emitter.emit('close', code, reason);
-          },
-          error(ws: any, err: any) {
-            ws.data.emitter.emit('error', err);
           }
+          ws.data.emitter.emit('message', msg);
+        },
+        pong(ws: any) {
+          ws.data.emitter.emit('pong');
+        },
+        close(ws: any, code: number, reason: string) {
+          ws.data.emitter.emit('close', code, reason);
+        },
+        error(ws: any, err: any) {
+          ws.data.emitter.emit('error', err);
         }
-      });
+      };
     } else {
-      this.server = (globalThis as any).Bun.serve({ port, fetch: handler });
+      serveOptions.fetch = handler;
     }
+
+    this.server = (globalThis as any).Bun.serve(serveOptions);
   }
 
   upgrade(request: Request, metadata: any, params: any): Response {
