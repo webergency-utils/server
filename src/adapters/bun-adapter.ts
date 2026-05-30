@@ -14,16 +14,63 @@ export class BunAdapter implements ServerAdapter {
 
     if (tls) {
       serveOptions.tls = {
-        key: tls.key,
-        cert: tls.cert,
-        ca: tls.ca
+        key: tls.key as any,
+        cert: tls.cert as any,
+        ca: tls.ca as any,
+        ciphers: tls.ciphers,
+        minVersion: tls.minVersion,
+        maxVersion: tls.maxVersion,
+        requestCert: tls.requestCert,
+        rejectUnauthorized: tls.rejectUnauthorized
       };
+
+      if (tls.sniCallback) {
+        const { createSecureContext } = await import('node:tls');
+        serveOptions.tls.SNICallback = async (servername: string, callback: any) => {
+          try {
+            const credentials = await tls.sniCallback!(servername);
+            if (credentials) {
+              const ctx = createSecureContext({
+                key: credentials.key as any,
+                cert: credentials.cert as any,
+                ca: credentials.ca as any,
+                ciphers: tls.ciphers,
+                minVersion: tls.minVersion,
+                maxVersion: tls.maxVersion
+              });
+              callback(null, ctx);
+            } else {
+              callback(new Error(`No secure context for servername: ${servername}`));
+            }
+          } catch (err) {
+            callback(err);
+          }
+        };
+      }
     }
 
     if (hasWs) {
       const { RequestProcessor } = await import('../core/request-processor.js');
       serveOptions.fetch = function (req: Request, server: any) {
         (req as any).bunServer = server;
+        if (server && typeof server.getPeerCertificate === 'function') {
+          const rawCert = server.getPeerCertificate(req);
+          if (rawCert && Object.keys(rawCert).length > 0) {
+            const serial = rawCert.serialNumber || '';
+            (req as any).clientCert = {
+              subject: rawCert.subject || {},
+              issuer: rawCert.issuer || {},
+              valid: {
+                from: rawCert.valid_from ? new Date(rawCert.valid_from) : new Date(0),
+                to: rawCert.valid_to ? new Date(rawCert.valid_to) : new Date(0)
+              },
+              fingerprint: rawCert.fingerprint || '',
+              fingerprint256: rawCert.fingerprint256,
+              serialNumber: serial,
+              serial: serial
+            };
+          }
+        }
         return handler(req);
       };
       serveOptions.websocket = {
@@ -54,7 +101,27 @@ export class BunAdapter implements ServerAdapter {
         }
       };
     } else {
-      serveOptions.fetch = handler;
+      serveOptions.fetch = (req: Request, server: any) => {
+        if (server && typeof server.getPeerCertificate === 'function') {
+          const rawCert = server.getPeerCertificate(req);
+          if (rawCert && Object.keys(rawCert).length > 0) {
+            const serial = rawCert.serialNumber || '';
+            (req as any).clientCert = {
+              subject: rawCert.subject || {},
+              issuer: rawCert.issuer || {},
+              valid: {
+                from: rawCert.valid_from ? new Date(rawCert.valid_from) : new Date(0),
+                to: rawCert.valid_to ? new Date(rawCert.valid_to) : new Date(0)
+              },
+              fingerprint: rawCert.fingerprint || '',
+              fingerprint256: rawCert.fingerprint256,
+              serialNumber: serial,
+              serial: serial
+            };
+          }
+        }
+        return handler(req);
+      };
     }
 
     this.server = (globalThis as any).Bun.serve(serveOptions);

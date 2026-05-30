@@ -21,7 +21,8 @@ const PARAM_DECORATORS: Record<string, string> = {
   'Ctx': 'Context',
   'Context': 'Context',
   'ConnectedSocket': 'WebSocket',
-  'Payload': 'Body'
+  'Payload': 'Body',
+  'Peer': 'Peer'
 };
 
 export interface ProjectRegistry {
@@ -358,20 +359,24 @@ export function transformer(program: ts.Program, registry: ProjectRegistry) {
               if (ts.isIdentifier(ident) && PARAM_DECORATORS[ident.text]) {
                 dName = PARAM_DECORATORS[ident.text];
                 if (ts.isCallExpression(e)) {
-                   if (dName === 'Body') {
-                      if (e.arguments[0] && ts.isStringLiteral(e.arguments[0])) {
-                         vMode = e.arguments[0].text as any;
-                      }
-                   } else if (dName === 'Query') {
-                      if (e.arguments[0] && ts.isStringLiteral(e.arguments[0])) {
-                         pName = e.arguments[0].text;
-                      }
-                      if (e.arguments[1] && ts.isStringLiteral(e.arguments[1])) {
-                         vMode = e.arguments[1].text as any;
-                      }
-                   } else if (e.arguments[0] && ts.isStringLiteral(e.arguments[0])) {
-                      pName = e.arguments[0].text;
-                   }
+                  if (dName === 'Peer') {
+                     const { line, character } = ts.getLineAndCharacterOfPosition(sourceFile, e.getStart());
+                     throw new Error(`[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Decorator "@Peer" must not be called with parentheses. Use "@Peer" instead of "@Peer()".`);
+                  }
+                  if (dName === 'Body') {
+                     if (e.arguments[0] && ts.isStringLiteral(e.arguments[0])) {
+                        vMode = e.arguments[0].text as any;
+                     }
+                  } else if (dName === 'Query') {
+                     if (e.arguments[0] && ts.isStringLiteral(e.arguments[0])) {
+                        pName = e.arguments[0].text;
+                     }
+                     if (e.arguments[1] && ts.isStringLiteral(e.arguments[1])) {
+                        vMode = e.arguments[1].text as any;
+                     }
+                  } else if (dName !== 'Peer' && e.arguments[0] && ts.isStringLiteral(e.arguments[0])) {
+                     pName = e.arguments[0].text;
+                  }
                 }
                 break;
               }

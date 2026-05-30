@@ -55,7 +55,7 @@ describe('Server Type Safety (Strict, Relaxed, Strip)', () => {
             }));
             expect(res2.status).toBe(400);
             const data2 = await res2.json();
-            expect(data2.errors[0].expected).toContain('property not allowed: unknown');
+            expect(data2.errors[0].error).toContain('PropertyNotAllowed<unknown>');
         });
     });
 

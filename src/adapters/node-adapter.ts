@@ -18,6 +18,24 @@ export class NodeAdapter implements ServerAdapter {
         // @ts-ignore
         duplex: 'half'
       });
+      if (req.socket && typeof req.socket.getPeerCertificate === 'function') {
+        const rawCert = req.socket.getPeerCertificate();
+        if (rawCert && Object.keys(rawCert).length > 0) {
+          const serial = rawCert.serialNumber || '';
+          (fetchReq as any).clientCert = {
+            subject: rawCert.subject || {},
+            issuer: rawCert.issuer || {},
+            valid: {
+              from: rawCert.valid_from ? new Date(rawCert.valid_from) : new Date(0),
+              to: rawCert.valid_to ? new Date(rawCert.valid_to) : new Date(0)
+            },
+            fingerprint: rawCert.fingerprint || '',
+            fingerprint256: rawCert.fingerprint256,
+            serialNumber: serial,
+            serial: serial
+          };
+        }
+      }
       const response = await handler(fetchReq);
       res.statusCode = response.status;
       response.headers.forEach((value, key) => res.setHeader(key, value));
@@ -30,7 +48,42 @@ export class NodeAdapter implements ServerAdapter {
 
     if (tls) {
       const { createServer } = await import('https');
-      this.nodeServer = createServer(tls as any, connectionHandler);
+      const options: any = {
+        key: tls.key as any,
+        cert: tls.cert as any,
+        ca: tls.ca as any,
+        ciphers: tls.ciphers,
+        minVersion: tls.minVersion,
+        maxVersion: tls.maxVersion,
+        requestCert: tls.requestCert,
+        rejectUnauthorized: tls.rejectUnauthorized
+      };
+
+      if (tls.sniCallback) {
+        const { createSecureContext } = await import('node:tls');
+        options.SNICallback = async (servername: string, callback: any) => {
+          try {
+            const credentials = await tls.sniCallback!(servername);
+            if (credentials) {
+              const ctx = createSecureContext({
+                key: credentials.key as any,
+                cert: credentials.cert as any,
+                ca: credentials.ca as any,
+                ciphers: tls.ciphers,
+                minVersion: tls.minVersion,
+                maxVersion: tls.maxVersion
+              });
+              callback(null, ctx);
+            } else {
+              callback(new Error(`No secure context for servername: ${servername}`));
+            }
+          } catch (err) {
+            callback(err);
+          }
+        };
+      }
+
+      this.nodeServer = createServer(options, connectionHandler);
     } else {
       const { createServer } = await import('http');
       this.nodeServer = createServer(connectionHandler);

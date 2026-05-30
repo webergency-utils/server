@@ -1489,6 +1489,33 @@ npx ts-patch install</code></pre>
   }
 }</code></pre>
         </div>
+
+        <h3>Mutual TLS (mTLS) & Client Certificate Verification</h3>
+        <p>
+          Webergency supports standard mutual TLS (mTLS) client certificate verification natively in Bun and Node.js. Enable validation by providing <code>requestCert</code> and <code>rejectUnauthorized</code> toggles inside your Server boot options:
+        </p>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">src/main.ts (mTLS Server Boot)</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="keyword">import</span> { <span class="type">Server</span> } <span class="keyword">from</span> <span class="string">'@webergency-utils/server'</span>;
+<span class="keyword">import</span> * <span class="keyword">as</span> <span class="type">fs</span> <span class="keyword">from</span> <span class="string">'node:fs'</span>;
+
+<span class="keyword">const</span> server = <span class="keyword">new</span> <span class="type">Server</span>({
+  port: <span class="number">443</span>,
+  tls: {
+    key: fs.readFileSync(<span class="string">'server-key.pem'</span>),
+    cert: fs.readFileSync(<span class="string">'server-cert.pem'</span>),
+    ca: fs.readFileSync(<span class="string">'ca-cert.pem'</span>), // Trusted CA to authorize client certificates
+    requestCert: <span class="boolean">true</span>,                 // Request client cert
+    rejectUnauthorized: <span class="boolean">true</span>           // Block requests without a valid client cert
+  }
+});
+
+<span class="keyword">await</span> server.start();</code></pre>
+        </div>
       </section>
 
       <!-- Section: WebSockets -->
@@ -2051,6 +2078,17 @@ eventSource.onerror = (err) =&gt; {
               </div>
             </div>
             <div class="decorator-desc">Paren-free decorator extracting the client requester IP address.</div>
+          </div>
+
+          <!-- Decorator: @Peer -->
+          <div class="decorator-card" data-category="param" data-name="@Peer">
+            <div class="decorator-header">
+              <div class="decorator-signature">@Peer</div>
+              <div class="decorator-badges">
+                <span class="dec-badge dec-badge-param">Parameter</span>
+              </div>
+            </div>
+            <div class="decorator-desc">Paren-free decorator extracting normalized client certificate information (<code>PeerCert</code>) for secured mTLS connections. Must not be called with parentheses.</div>
           </div>
 
           <!-- Decorator: @Inject -->

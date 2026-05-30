@@ -6,7 +6,7 @@ export { RequestContext, Context as RequestContextStore } from './core/context.j
 export { Reflector } from './core/reflector.js';
 export * from './errors.js';
 export * from './config.js';
-export { Logger, LogContext, ServerWebSocket } from './core/types.js';
+export { Logger, LogContext, ServerWebSocket, PeerCert, PeerCertSubject } from './core/types.js';
 export {
   pathCompiler,
   pathMatcher,

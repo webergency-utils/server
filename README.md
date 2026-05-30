@@ -122,6 +122,55 @@ The server is built on the Fetch API, allowing it to run natively anywhere:
 | `@Ip()` | Injects the client IP address. |
 | `@Request()` | Injects the standard Web `Request` object. |
 | `@RawBody()` | Injects the body as an `ArrayBuffer` (lazy/cached). |
+| `@Peer()` | Injects client certificate info (as `PeerCert`) for mTLS connections. |
+
+---
+
+## 🔒 Mutual TLS (mTLS) & `@Peer` Decorator
+
+The framework supports mutual TLS authentication (client certificate validation) across Node.js and Bun adapters.
+
+### 1. Configure the Server for mTLS
+Provide `requestCert: true` and `rejectUnauthorized: true` inside `tls` options:
+
+```typescript
+import { Server } from '@webergency-utils/server';
+import fs from 'fs';
+
+const server = new Server({
+  port: 443,
+  controllers: [SecureController],
+  tls: {
+    key: fs.readFileSync('server-key.pem'),
+    cert: fs.readFileSync('server-cert.pem'),
+    ca: fs.readFileSync('ca-cert.pem'), // Trusted CA for client certs
+    requestCert: true,
+    rejectUnauthorized: true
+  }
+});
+
+await server.start();
+```
+
+### 2. Inject Client Certificate Details
+Use the `@Peer` parameter decorator to inject the peer certificate:
+
+```typescript
+import { Controller, Get, Peer, PeerCert } from '@webergency-utils/server';
+
+@Controller('/secure')
+export class SecureController {
+  @Get('/profile')
+  getSecureProfile(@Peer() cert: PeerCert) {
+    return {
+      message: `Hello ${cert.subject.CN}!`,
+      organization: cert.subject.O,
+      validTo: cert.valid.to,
+      serial: cert.serial // or cert.serialNumber
+    };
+  }
+}
+```
 
 ---
 

@@ -5,8 +5,15 @@ export class DenoAdapter implements ServerAdapter {
   async listen(port: number, handler: (request: Request) => Promise<Response>, tls?: TlsOptions): Promise<void> {
     const options: any = { port };
     if (tls) {
-      options.cert = typeof tls.cert === 'string' ? tls.cert : new TextDecoder().decode(tls.cert);
-      options.key = typeof tls.key === 'string' ? tls.key : new TextDecoder().decode(tls.key);
+      if (tls.ciphers || tls.minVersion || tls.maxVersion || tls.sniCallback || tls.requestCert || tls.rejectUnauthorized) {
+        console.warn("Warning: ciphers, minVersion, maxVersion, sniCallback, requestCert, and rejectUnauthorized are not supported by the Deno adapter.");
+      }
+      if (tls.cert) {
+        options.cert = typeof tls.cert === 'string' ? tls.cert : new TextDecoder().decode(tls.cert as any);
+      }
+      if (tls.key) {
+        options.key = typeof tls.key === 'string' ? tls.key : new TextDecoder().decode(tls.key as any);
+      }
     }
     (globalThis as any).Deno.serve(options, handler);
   }

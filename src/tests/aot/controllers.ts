@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode } from '../../index.js';
 
-import { MinLength, MaxLength, Minimum, Maximum, Pattern, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, Format, MinItems, MaxItems, UniqueItems, constraint } from '@webergency-utils/typechecker';
+import { constraint, format, tag } from '@webergency-utils/typechecker';
 
 export const isEvenNumber = (val: number) => val % 2 === 0;
 
@@ -115,7 +115,7 @@ export class TypeSafetyController {
     }
 
     @Get('/tags')
-    tags(@Query('pass') pass: string & MinLength<8>, @Query('age') age: number & Minimum<18>) {
+    tags(@Query('pass') pass: string & constraint.MinLength<8>, @Query('age') age: number & constraint.Minimum<18>) {
         return { success: true, pass, age };
     }
 
@@ -144,32 +144,32 @@ export class TypeSafetyController {
 export class TagParityController {
     @Get('/number')
     getNumber(
-        @Query('min') min: number & ExclusiveMinimum<10>,
-        @Query('max') max: number & ExclusiveMaximum<20>,
-        @Query('mult') mult: number & MultipleOf<5>
+        @Query('min') min: number & constraint.ExclusiveMinimum<10>,
+        @Query('max') max: number & constraint.ExclusiveMaximum<20>,
+        @Query('mult') mult: number & constraint.MultipleOf<5>
     ) {
         return { min, max, mult };
     }
 
     @Get('/string')
     getString(
-        @Query('email') email: string & Format<'email'>,
-        @Query('uuid') uuid: string & Format<'uuid'>,
-        @Query('date') date: string & Format<'date'>
+        @Query('email') email: string & constraint.Format<'email'>,
+        @Query('uuid') uuid: string & constraint.Format<'uuid'>,
+        @Query('date') date: string & constraint.Format<'date'>
     ) {
         return { email, uuid, date };
     }
 
     @Post('/array')
     postArray(
-        @Body() items: string[] & MinItems<2> & MaxItems<3>
+        @Body() items: string[] & constraint.MinItems<2> & constraint.MaxItems<3>
     ) {
         return items;
     }
 
     @Post('/unique-array')
     postUniqueArray(
-        @Body() items: number[] & UniqueItems
+        @Body() items: number[] & constraint.UniqueItems
     ) {
         return items;
     }

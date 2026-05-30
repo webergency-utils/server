@@ -12,8 +12,31 @@ export interface ServerWebSocket {
 
 export type ValidationMode = 'strict' | 'relaxed' | 'strip';
 
+export interface PeerCertSubject {
+  C?: string;
+  ST?: string;
+  L?: string;
+  O?: string;
+  OU?: string;
+  CN?: string;
+  [key: string]: any;
+}
+
+export interface PeerCert {
+  subject: PeerCertSubject;
+  issuer: PeerCertSubject;
+  valid: {
+    from: Date;
+    to: Date;
+  };
+  fingerprint: string;
+  fingerprint256?: string;
+  serialNumber: string;
+  serial: string; // Alias for serialNumber
+}
+
 export interface ParamMetadata {
-  source: 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket';
+  source: 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer';
   name?: string;
   validator?: string | Validator;
   mode?: ValidationMode;

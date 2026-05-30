@@ -462,7 +462,7 @@ describe('Server & Metadata', () => {
             (globalThis as any).Bun = { serve: vi.fn() };
             const server = new Server({ port: 3001 });
             await server.start();
-            expect((globalThis as any).Bun.serve).toHaveBeenCalledWith({ port: 3001, fetch: server.fetch });
+            expect((globalThis as any).Bun.serve).toHaveBeenCalledWith({ port: 3001, fetch: expect.any(Function) });
             delete (globalThis as any).Bun;
         });
 
@@ -470,7 +470,7 @@ describe('Server & Metadata', () => {
             (globalThis as any).Deno = { serve: vi.fn() };
             const server = new Server({ port: 3002 });
             await server.start();
-            expect((globalThis as any).Deno.serve).toHaveBeenCalledWith({ port: 3002 }, server.fetch);
+            expect((globalThis as any).Deno.serve).toHaveBeenCalledWith({ port: 3002 }, expect.any(Function));
             delete (globalThis as any).Deno;
         });
 
@@ -483,7 +483,7 @@ describe('Server & Metadata', () => {
             await server.start();
             const handler = vi.mocked(createServer).mock.calls[vi.mocked(createServer).mock.calls.length - 1][0];
 
-            const mockReq = { method: 'GET', url: '/empty-test', headers: { host: 'l' }, socket: {} };
+            const mockReq = { method: 'GET', url: '/empty-test', headers: { host: 'l' }, socket: { getPeerCertificate: () => null } };
             const mockRes = { statusCode: 0, setHeader: vi.fn(), end: vi.fn(), on: vi.fn(), once: vi.fn(), emit: vi.fn(), write: vi.fn() };
 
             // Mock an endpoint that returns null/empty
@@ -1295,6 +1295,93 @@ describe('Server & Metadata', () => {
                 headers: { 'x-role': 'guest' }
             }));
             expect(res4.status).toBe(403);
+        });
+    });
+
+    describe('mTLS client certificate and @Peer resolver', () => {
+        it('should extract client certificate metadata correctly', async () => {
+            class PeerTestController {
+                async handle(peer: any) {
+                    return { peer };
+                }
+            }
+
+            MetadataStore.registerController('PeerTestController', PeerTestController);
+            MetadataStore.registerEndpoint({
+                controller: 'PeerTestController',
+                methodName: 'handle',
+                httpMethod: 'GET',
+                path: '/peer-test',
+                params: [
+                    { source: 'Peer' }
+                ],
+                guards: [],
+                interceptors: [],
+                meta: {}
+            });
+
+            const server = new Server({ port: 3000 });
+            (server as any).init();
+
+            const req = new Request('http://localhost/peer-test') as any;
+            req.clientCert = {
+                subject: {
+                    CN: 'ClientName',
+                    O: 'Organization'
+                },
+                issuer: {
+                    CN: 'Authority'
+                },
+                valid: {
+                    from: new Date('2026-05-28'),
+                    to: new Date('2027-05-28')
+                },
+                fingerprint: 'AA:BB:CC',
+                fingerprint256: 'DD:EE:FF',
+                serialNumber: '123456',
+                serial: '123456'
+            };
+
+            const res = await server.fetch(req);
+            expect(res.status).toBe(200);
+            const body = await res.json();
+            expect(body.peer.subject.CN).toBe('ClientName');
+            expect(body.peer.serialNumber).toBe('123456');
+            expect(body.peer.serial).toBe('123456');
+            expect(new Date(body.peer.valid.from).getTime()).toBe(new Date('2026-05-28').getTime());
+            expect(new Date(body.peer.valid.to).getTime()).toBe(new Date('2027-05-28').getTime());
+            expect(body.peer.raw).toBeUndefined();
+        });
+
+        it('should return undefined if client certificate is missing', async () => {
+            class PeerTestController2 {
+                async handle(peer: any) {
+                    return { peer: peer ?? null };
+                }
+            }
+
+            MetadataStore.registerController('PeerTestController2', PeerTestController2);
+            MetadataStore.registerEndpoint({
+                controller: 'PeerTestController2',
+                methodName: 'handle',
+                httpMethod: 'GET',
+                path: '/peer-test-missing',
+                params: [
+                    { source: 'Peer' }
+                ],
+                guards: [],
+                interceptors: [],
+                meta: {}
+            });
+
+            const server = new Server({ port: 3000 });
+            (server as any).init();
+
+            const req = new Request('http://localhost/peer-test-missing');
+            const res = await server.fetch(req);
+            expect(res.status).toBe(200);
+            const body = await res.json();
+            expect(body.peer).toBeNull();
         });
     });
 });

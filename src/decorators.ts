@@ -6,6 +6,7 @@ export const Context = (target: any, key: string | symbol, idx: number) => {};
 export const Response = (target: any, key: string | symbol, idx: number) => {};
 export const Headers = (target: any, key: string | symbol, idx: number) => {};
 export const Ip = (target: any, key: string | symbol, idx: number) => {};
+export const Peer = (target: any, key: string | symbol, idx: number) => {};
 
 /**
  * PARAMETER DECORATORS (Hybrid - Parentheses optional)

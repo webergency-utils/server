@@ -19,7 +19,8 @@ import {
     Meta, 
     Protect, 
     Intercept, 
-    Cors 
+    Cors,
+    Peer
 } from '../decorators.js';
 
 describe('Decorators', () => {
@@ -39,6 +40,8 @@ describe('Decorators', () => {
         
         Param('id')({}, 'test', 0);
         Header('h')({}, 'test', 0);
+        
+        Peer({}, 'test', 0);
     });
 
     it('should call method and class decorators (no-ops at runtime)', () => {

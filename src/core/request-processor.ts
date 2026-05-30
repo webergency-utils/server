@@ -29,6 +29,10 @@ export class RequestProcessor {
       case 'Context': val = Context.get(); break;
       case 'Inject': val = MetadataStore.getInjectable(p.name!, contextModule); break;
       case 'WebSocket': val = ws; break;
+      case 'Peer': {
+        val = (req as any).clientCert;
+        break;
+      }
     }
 
     if (p.validator && typeof p.validator === 'function') {

@@ -29,7 +29,7 @@ describe('Actual AOT Integration Test', () => {
         const data = await res.json();
         expect(data.errors[0]).toEqual({
             path: 'body',
-            expected: 'property not allowed: unknown',
+            error: 'PropertyNotAllowed<unknown>',
             value: 'prop'
         });
     });
@@ -202,7 +202,7 @@ describe('Actual AOT Integration Test', () => {
         const data1 = await res1.json();
         expect(data1.errors[0]).toEqual({
             path: 'body.age',
-            expected: 'number',
+            error: 'Type<number>',
             value: '30'
         });
 
@@ -215,7 +215,7 @@ describe('Actual AOT Integration Test', () => {
         const data2 = await res2.json();
         expect(data2.errors[0]).toEqual({
             path: 'body',
-            expected: 'array',
+            error: 'Type<Array>',
             value: 'a'
         });
     });
@@ -230,7 +230,7 @@ describe('Actual AOT Integration Test', () => {
         expect(res2.status).toBe(400);
         const data2 = await res2.json();
         expect(data2.errors[0].path).toBe('id');
-        expect(data2.errors[0].expected).toContain('id-');
+        expect(data2.errors[0].error).toContain('id-');
     });
 
     it('should validate Tag-based constraints (MinLength, Minimum)', async () => {
@@ -245,8 +245,8 @@ describe('Actual AOT Integration Test', () => {
         
         // Should report both errors
         expect(data2.errors).toHaveLength(2);
-        expect(data2.errors.find((e: any) => e.path === 'pass').expected).toBe('MinLength<8>');
-        expect(data2.errors.find((e: any) => e.path === 'age').expected).toBe('Minimum<18>');
+        expect(data2.errors.find((e: any) => e.path === 'pass').error).toBe('MinLength<8>');
+        expect(data2.errors.find((e: any) => e.path === 'age').error).toBe('Minimum<18>');
     });
 
     describe('Expanded Tag Parity', () => {
@@ -258,9 +258,9 @@ describe('Actual AOT Integration Test', () => {
             expect(res2.status).toBe(400);
             const data2 = await res2.json();
             expect(data2.errors).toHaveLength(3);
-            expect(data2.errors.find((e: any) => e.path === 'min').expected).toBe('ExclusiveMinimum<10>');
-            expect(data2.errors.find((e: any) => e.path === 'max').expected).toBe('ExclusiveMaximum<20>');
-            expect(data2.errors.find((e: any) => e.path === 'mult').expected).toBe('MultipleOf<5>');
+            expect(data2.errors.find((e: any) => e.path === 'min').error).toBe('ExclusiveMinimum<10>');
+            expect(data2.errors.find((e: any) => e.path === 'max').error).toBe('ExclusiveMaximum<20>');
+            expect(data2.errors.find((e: any) => e.path === 'mult').error).toBe('MultipleOf<5>');
         });
 
         it('should validate String Formats (email, uuid, date)', async () => {
@@ -271,9 +271,9 @@ describe('Actual AOT Integration Test', () => {
             expect(res2.status).toBe(400);
             const data2 = await res2.json();
             expect(data2.errors).toHaveLength(3);
-            expect(data2.errors.find((e: any) => e.path === 'email').expected).toBe('Format<email>');
-            expect(data2.errors.find((e: any) => e.path === 'uuid').expected).toBe('Format<uuid>');
-            expect(data2.errors.find((e: any) => e.path === 'date').expected).toBe('Format<date>');
+            expect(data2.errors.find((e: any) => e.path === 'email').error).toBe('Format<email>');
+            expect(data2.errors.find((e: any) => e.path === 'uuid').error).toBe('Format<uuid>');
+            expect(data2.errors.find((e: any) => e.path === 'date').error).toBe('Format<date>');
         });
 
         it('should validate Array Item Counts (MinItems, MaxItems)', async () => {
@@ -291,7 +291,7 @@ describe('Actual AOT Integration Test', () => {
             }));
             expect(res2.status).toBe(400);
             const data2 = await res2.json();
-            expect(data2.errors[0].expected).toBe('MinItems<2>');
+            expect(data2.errors[0].error).toBe('MinItems<2>');
 
             const res3 = await server.fetch(new Request('http://localhost/tag-parity/array', {
                 method: 'POST',
@@ -300,7 +300,7 @@ describe('Actual AOT Integration Test', () => {
             }));
             expect(res3.status).toBe(400);
             const data3 = await res3.json();
-            expect(data3.errors[0].expected).toBe('MaxItems<3>');
+            expect(data3.errors[0].error).toBe('MaxItems<3>');
         });
 
         it('should validate Array Unique Items (UniqueItems)', async () => {
@@ -318,7 +318,7 @@ describe('Actual AOT Integration Test', () => {
             }));
             expect(res2.status).toBe(400);
             const data2 = await res2.json();
-            expect(data2.errors[0].expected).toBe('UniqueItems');
+            expect(data2.errors[0].error).toBe('UniqueItems');
         });
 
         it('should support custom validator functions with auto-imports', async () => {
@@ -338,7 +338,7 @@ describe('Actual AOT Integration Test', () => {
             }));
             expect(res2.status).toBe(400);
             const data2 = await res2.json();
-            expect(data2.errors[0].expected).toBe('Custom<isEvenNumber>');
+            expect(data2.errors[0].error).toBe('Custom<isEvenNumber>');
         });
 
         it('should correctly apply security config extracted during AOT', async () => {
@@ -673,6 +673,51 @@ describe('Actual AOT Integration Test', () => {
             });
 
             await closedPromise;
+        });
+    });
+
+    describe('AOT compiler validation rules', () => {
+        it('should throw compile error if @Peer is called with parentheses', async () => {
+            const { transformer, createRegistry } = await import('../../compiler/transformer.js');
+            const ts = await import('typescript');
+            const fs = await import('fs');
+            const path = await import('path');
+
+            const tempFilePath = path.resolve(__dirname, 'temp-peer-error.ts');
+            const sourceCode = `
+                import { Controller, Get, Peer } from '../../index.js';
+                @Controller('/test')
+                class Test {
+                    @Get()
+                    hello(@Peer() cert: any) {}
+                }
+            `;
+
+            fs.writeFileSync(tempFilePath, sourceCode);
+
+            const serverRoot = path.resolve(__dirname, '../../index.ts');
+            const registry = createRegistry();
+            const program = ts.createProgram([serverRoot, tempFilePath], {
+                experimentalDecorators: true,
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.NodeNext,
+                moduleResolution: ts.ModuleResolutionKind.NodeNext,
+                skipLibCheck: true
+            });
+
+            const sourceFile = program.getSourceFile(tempFilePath);
+            const runTransform = () => {
+                const compileTransformer = transformer(program, registry)({} as any);
+                compileTransformer(sourceFile!);
+            };
+
+            try {
+                expect(runTransform).toThrow(/Decorator "@Peer" must not be called with parentheses/);
+            } finally {
+                if (fs.existsSync(tempFilePath)) {
+                    fs.unlinkSync(tempFilePath);
+                }
+            }
         });
     });
 });
