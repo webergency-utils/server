@@ -4,14 +4,14 @@
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "type": "module",
   "author": "radixxko",
-  "main": "dist/server/src/index.js",
-  "types": "dist/server/src/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "webergency-server-build": "./dist/server/src/compiler/cli.js"
+    "webergency-server-build": "./dist/compiler/cli.js"
   },
   "exports": {
-    ".": "./dist/server/src/index.js",
-    "./transformer": "./dist/server/src/compiler/transformer.js"
+    ".": "./dist/index.js",
+    "./transformer": "./dist/compiler/transformer.js"
   },
   "files": [
     "dist",
@@ -27,7 +27,8 @@
     "build": "npm run clean && tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "version": "npm run build && npm publish --access public && npm run commit && git push"
+    "version": "npm run build && npm publish --access public && npm run commit && git push",
+    "lint": "eslint ."
   },
   "repository": {
     "type": "git",
@@ -44,10 +45,14 @@
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^10.4.1",
     "tsx": "^4.0.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.6"
   }
 }

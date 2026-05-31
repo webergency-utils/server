@@ -1318,10 +1318,12 @@ let ConfigService = class ConfigService {
         propertyDeps: {}
     };
     get(key) {
-        if (key === 'db.url')
+        if (key === 'db.url') {
             return 'mongodb://localhost:27017';
-        if (key === 'api.secret')
+        }
+        if (key === 'api.secret') {
             return 'super-secret-key';
+        }
         return '';
     }
 };

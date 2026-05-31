@@ -9,10 +9,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": false,
-    "rootDir": "..",
+    "rootDir": "./src",
     "types": ["node"]
   },
   "include": ["src/**/*"],

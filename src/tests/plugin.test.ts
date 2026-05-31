@@ -4,35 +4,44 @@ import * as fs from 'fs';
 import * as path from 'path';
 import compilerPlugin from '../compiler/transformer.js';
 
-describe('TypeScript Compiler Plugin Transformer', () => {
-  function compileAndTransform(sourceCode: string): string {
-    const tempFile = path.resolve('./temp_test_controller.ts');
-    fs.writeFileSync(tempFile, sourceCode);
+describe( 'TypeScript Compiler Plugin Transformer', () => 
+{
+    function compileAndTransform( sourceCode: string ): string 
+    {
+        const tempFile = path.resolve( './temp_test_controller.ts' );
+        fs.writeFileSync( tempFile, sourceCode );
 
-    try {
-      const program = ts.createProgram([tempFile], {
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.NodeNext,
-        moduleResolution: ts.ModuleResolutionKind.NodeNext,
-        skipLibCheck: true,
-        experimentalDecorators: true
-      });
+        try 
+        {
+            const program = ts.createProgram([tempFile], {
+                target                 : ts.ScriptTarget.ES2022,
+                module                 : ts.ModuleKind.NodeNext,
+                moduleResolution       : ts.ModuleResolutionKind.NodeNext,
+                skipLibCheck           : true,
+                experimentalDecorators : true
+            });
 
-      const sourceFile = program.getSourceFile(tempFile);
-      if (!sourceFile) throw new Error("Could not load source file");
+            const sourceFile = program.getSourceFile( tempFile );
 
-      const result = ts.transform(sourceFile, [compilerPlugin(program)]);
-      const printer = ts.createPrinter();
-      return printer.printFile(result.transformed[0]);
-    } finally {
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
-      }
+            if( !sourceFile ) { throw new Error( 'Could not load source file' ) }
+
+            const result = ts.transform( sourceFile, [compilerPlugin( program )]);
+            const printer = ts.createPrinter();
+
+            return printer.printFile( result.transformed[0]);
+        }
+        finally 
+        {
+            if( fs.existsSync( tempFile )) 
+            {
+                fs.unlinkSync( tempFile );
+            }
+        }
     }
-  }
 
-  it('should transform a simple controller and append self-registrations', () => {
-    const code = `
+    it( 'should transform a simple controller and append self-registrations', () => 
+    {
+        const code = `
       import { Controller, Get, Post, Body, Param } from '../decorators.js';
 
       interface User {
@@ -54,33 +63,34 @@ describe('TypeScript Compiler Plugin Transformer', () => {
       }
     `;
 
-    const compiled = compileAndTransform(code);
+        const compiled = compileAndTransform( code );
 
-    // Should initialize __server_metadata_store from globalThis
-    expect(compiled).toContain('__server_metadata_store = globalThis.__WEBERGENCY_SERVER_METADATA_STORE__');
+        // Should initialize __server_metadata_store from globalThis
+        expect( compiled ).toContain( '__server_metadata_store = globalThis.__WEBERGENCY_SERVER_METADATA_STORE__' );
 
-    // Should import typechecker runtime
-    expect(compiled).toContain('import "@webergency-utils/typechecker/runtime"');
+        // Should import typechecker runtime
+        expect( compiled ).toContain( 'import "@webergency-utils/typechecker/runtime"' );
 
-    // Should declare validator constant
-    expect(compiled).toContain("const __val_");
+        // Should declare validator constant
+        expect( compiled ).toContain( 'const __val_' );
 
-    // Should register controller
-    expect(compiled).toContain('__server_metadata_store.providers.set("UserController", UserController)');
-    expect(compiled).toContain('__server_metadata_store.controllerClasses.add("UserController")');
+        // Should register controller
+        expect( compiled ).toContain( '__server_metadata_store.providers.set("UserController", UserController)' );
+        expect( compiled ).toContain( '__server_metadata_store.controllerClasses.add("UserController")' );
 
-    // Should register GET /users/:id endpoint
-    expect(compiled).toContain('httpMethod: "GET"');
-    expect(compiled).toContain('path: "/users/:id"');
+        // Should register GET /users/:id endpoint
+        expect( compiled ).toContain( 'httpMethod: "GET"' );
+        expect( compiled ).toContain( 'path: "/users/:id"' );
 
-    // Should register POST /users endpoint with validator
-    expect(compiled).toContain('httpMethod: "POST"');
-    expect(compiled).toContain('path: "/users"');
-    expect(compiled).toContain("validator: __val_");
-  });
+        // Should register POST /users endpoint with validator
+        expect( compiled ).toContain( 'httpMethod: "POST"' );
+        expect( compiled ).toContain( 'path: "/users"' );
+        expect( compiled ).toContain( 'validator: __val_' );
+    });
 
-  it('should transform CORS decorators at class and method level', () => {
-    const code = `
+    it( 'should transform CORS decorators at class and method level', () => 
+    {
+        const code = `
       import { Controller, Get, Post, Cors } from '../decorators.js';
 
       @Cors({ origin: 'http://localhost', credentials: true })
@@ -100,18 +110,19 @@ describe('TypeScript Compiler Plugin Transformer', () => {
       }
     `;
 
-    const compiled = compileAndTransform(code);
+        const compiled = compileAndTransform( code );
 
-    // getPublic has @Cors() without params, which resolves to {}
-    expect(compiled).toContain('cors: {}');
+        // getPublic has @Cors() without params, which resolves to {}
+        expect( compiled ).toContain( 'cors: {}' );
 
-    // getRestricted has method level @Cors with inline arrow function and array of wildcards
-    expect(compiled).toContain('origin: (o) => o === \'http://trusted\'');
-    expect(compiled).toContain('allowedHeaders: [\'Content-Type\', \'X-Custom-*\']');
-  });
+        // getRestricted has method level @Cors with inline arrow function and array of wildcards
+        expect( compiled ).toContain( 'origin: (o) => o === \'http://trusted\'' );
+        expect( compiled ).toContain( 'allowedHeaders: [\'Content-Type\', \'X-Custom-*\']' );
+    });
 
-  it('should throw an error if @Head decorated method does not return void or Promise<void>', () => {
-    const code = `
+    it( 'should throw an error if @Head decorated method does not return void or Promise<void>', () => 
+    {
+        const code = `
       import { Controller, Head } from '../decorators.js';
 
       @Controller('/test')
@@ -123,7 +134,7 @@ describe('TypeScript Compiler Plugin Transformer', () => {
       }
     `;
 
-    expect(() => compileAndTransform(code)).toThrow(/must return void or Promise<void>/);
-  });
+        expect(() => compileAndTransform( code )).toThrow( /must return void or Promise<void>/ );
+    });
 });
 
