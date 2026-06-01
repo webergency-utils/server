@@ -615,34 +615,28 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                 return null;
             };
 
-            const resolveGuardMetadata = ( expr: ts.Expression, currentController: ts.ClassDeclaration ) => 
+            const resolveGuardMetadata = ( expr: ts.CallExpression ) => 
             {
-                if( ts.isStringLiteral( expr )) 
-                {
-                    const methodName = expr.text;
-                    const member = currentController.members.find( m => ts.isMethodDeclaration( m ) && m.name.getText() === methodName ) as ts.MethodDeclaration;
-                    const params = member ? resolveParamsMetadata( member.parameters ) : [];
+                if( expr.arguments.length === 0 ) { return null }
 
-                    return { type : 'method', name : methodName, resolvers : [], params, isAsync : false };
-                }
-                const name = resolveClassRef( expr, registry.guards );
+                const firstArg = expr.arguments[0];
+                const name = resolveClassRef( firstArg, registry.guards );
 
                 if( name ) 
                 {
                     const staticArgs: any[] = [];
 
-                    if( ts.isCallExpression( expr )) 
+                    for( let i = 1; i < expr.arguments.length; i++ ) 
                     {
-                        for( const arg of expr.arguments ) 
+                        const arg = expr.arguments[i];
+
+                        if( ts.isStringLiteral( arg )) { staticArgs.push( arg.text ) }
+                        else if( ts.isNumericLiteral( arg )) { staticArgs.push( Number( arg.text )) }
+                        else if( arg.kind === ts.SyntaxKind.TrueKeyword ) { staticArgs.push( true ) }
+                        else if( arg.kind === ts.SyntaxKind.FalseKeyword ) { staticArgs.push( false ) }
+                        else if( ts.isArrayLiteralExpression( arg )) 
                         {
-                            if( ts.isStringLiteral( arg )) { staticArgs.push( arg.text ) }
-                            else if( ts.isNumericLiteral( arg )) { staticArgs.push( Number( arg.text )) }
-                            else if( arg.kind === ts.SyntaxKind.TrueKeyword ) { staticArgs.push( true ) }
-                            else if( arg.kind === ts.SyntaxKind.FalseKeyword ) { staticArgs.push( false ) }
-                            else if( ts.isArrayLiteralExpression( arg )) 
-                            {
-                                staticArgs.push( arg.elements.map( e => ( e as any ).text || e.getText()));
-                            }
+                            staticArgs.push( arg.elements.map( e => ( e as any ).text || e.getText()));
                         }
                     }
                     const guardInfo = registry.guards.get( name );
@@ -692,6 +686,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                 const securityConfigs: any[] = [];
                 const guards: any[] = [];
                 const interceptors: string[] = [];
+                const middlewares: string[] = [];
                 const responseModes: string[] = [];
 
                 const type = checker.getTypeAtLocation( classDecl );
@@ -711,6 +706,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                             securityConfigs.push( ...parentMeta.securityConfigs );
                             guards.push( ...parentMeta.guards );
                             interceptors.push( ...parentMeta.interceptors );
+                            middlewares.push( ...parentMeta.middlewares );
                             responseModes.push( ...parentMeta.responseModes );
                         }
                     }
@@ -733,56 +729,167 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                 }
 
                 const directGuards: any[] = [];
-                let guardDec: ts.Decorator | null = null;
+                let isOverrideGuard = false;
+                let removeAllGuards = false;
+                const guardsToRemove = new Set<string>();
 
                 if( decorators ) 
                 {
                     for( const d of decorators ) 
                     {
-                        if( ts.isCallExpression( d.expression ) && d.expression.expression.getText() === 'Protect' ) 
+                        if( ts.isCallExpression( d.expression ) ) 
                         {
-                            guardDec = d;
-                            break;
+                            const name = d.expression.expression.getText();
+                            if( name === 'Protect' || name === 'OverrideProtect' ) 
+                            {
+                                if( name === 'OverrideProtect' ) { isOverrideGuard = true }
+                                const g = resolveGuardMetadata( d.expression );
+                                if( g ) { directGuards.push( g ) }
+                            }
+                            else if( name === 'Unprotect' ) 
+                            {
+                                for( const arg of d.expression.arguments ) 
+                                {
+                                    const gName = resolveClassRef( arg, registry.guards );
+                                    if( gName ) { guardsToRemove.add( gName ) }
+                                }
+                            }
+                        }
+                        else if( ts.isIdentifier( d.expression ) && d.expression.text === 'Unprotect' ) 
+                        {
+                            removeAllGuards = true;
                         }
                     }
                 }
-
-                if( guardDec && ts.isCallExpression( guardDec.expression )) 
+                if( removeAllGuards ) 
                 {
-                    for( const arg of guardDec.expression.arguments ) 
+                    guards.length = 0;
+                }
+                else if( guardsToRemove.size > 0 ) 
+                {
+                    for( let i = guards.length - 1; i >= 0; i-- ) 
                     {
-                        const g = resolveGuardMetadata( arg, classDecl );
-
-                        if( g ) { directGuards.push( g ) }
+                        if( guardsToRemove.has( guards[i].name )) 
+                        {
+                            guards.splice( i, 1 );
+                        }
                     }
+                }
+                if( isOverrideGuard ) {
+                    guards.length = 0;
                 }
                 guards.push( ...directGuards );
 
                 const directInterceptors: string[] = [];
-                let interceptDec: ts.Decorator | null = null;
+                let isOverrideIntercept = false;
+                let removeAllInterceptors = false;
+                const interceptorsToRemove = new Set<string>();
 
                 if( decorators ) 
                 {
                     for( const d of decorators ) 
                     {
-                        if( ts.isCallExpression( d.expression ) && d.expression.expression.getText() === 'Intercept' ) 
+                        if( ts.isCallExpression( d.expression ) ) 
                         {
-                            interceptDec = d;
-                            break;
+                            const name = d.expression.expression.getText();
+                            if( name === 'Intercept' || name === 'OverrideIntercept' ) 
+                            {
+                                if( name === 'OverrideIntercept' ) { isOverrideIntercept = true }
+                                if( d.expression.arguments.length > 0 ) 
+                                {
+                                    const firstArg = d.expression.arguments[0];
+                                    const i = resolveClassRef( firstArg, registry.interceptors );
+                                    if( i ) { directInterceptors.push( i ) }
+                                }
+                            }
+                            else if( name === 'Unintercept' ) 
+                            {
+                                for( const arg of d.expression.arguments ) 
+                                {
+                                    const iName = resolveClassRef( arg, registry.interceptors );
+                                    if( iName ) { interceptorsToRemove.add( iName ) }
+                                }
+                            }
+                        }
+                        else if( ts.isIdentifier( d.expression ) && d.expression.text === 'Unintercept' ) 
+                        {
+                            removeAllInterceptors = true;
                         }
                     }
                 }
-
-                if( interceptDec && ts.isCallExpression( interceptDec.expression )) 
+                if( removeAllInterceptors ) 
                 {
-                    for( const arg of interceptDec.expression.arguments ) 
+                    interceptors.length = 0;
+                }
+                else if( interceptorsToRemove.size > 0 ) 
+                {
+                    for( let i = interceptors.length - 1; i >= 0; i-- ) 
                     {
-                        const i = resolveClassRef( arg, registry.interceptors );
-
-                        if( i ) { directInterceptors.push( i ) }
+                        if( interceptorsToRemove.has( interceptors[i] )) 
+                        {
+                            interceptors.splice( i, 1 );
+                        }
                     }
                 }
+                if( isOverrideIntercept ) {
+                    interceptors.length = 0;
+                }
                 interceptors.push( ...directInterceptors );
+
+                const directMiddlewares: string[] = [];
+                let isOverrideMiddleware = false;
+                let removeAllMiddlewares = false;
+                const middlewaresToRemove = new Set<string>();
+
+                if( decorators ) 
+                {
+                    for( const d of decorators ) 
+                    {
+                        if( ts.isCallExpression( d.expression ) ) 
+                        {
+                            const name = d.expression.expression.getText();
+                            if( name === 'Use' || name === 'OverrideUse' ) 
+                            {
+                                if( name === 'OverrideUse' ) { isOverrideMiddleware = true }
+                                for( const arg of d.expression.arguments ) 
+                                {
+                                    const m = resolveClassRef( arg, registry.providers );
+                                    if( m ) { directMiddlewares.push( m ) }
+                                }
+                            }
+                            else if( name === 'Unuse' ) 
+                            {
+                                for( const arg of d.expression.arguments ) 
+                                {
+                                    const mName = resolveClassRef( arg, registry.providers );
+                                    if( mName ) { middlewaresToRemove.add( mName ) }
+                                }
+                            }
+                        }
+                        else if( ts.isIdentifier( d.expression ) && d.expression.text === 'Unuse' ) 
+                        {
+                            removeAllMiddlewares = true;
+                        }
+                    }
+                }
+                if( removeAllMiddlewares ) 
+                {
+                    middlewares.length = 0;
+                }
+                else if( middlewaresToRemove.size > 0 ) 
+                {
+                    for( let i = middlewares.length - 1; i >= 0; i-- ) 
+                    {
+                        if( middlewaresToRemove.has( middlewares[i] )) 
+                        {
+                            middlewares.splice( i, 1 );
+                        }
+                    }
+                }
+                if( isOverrideMiddleware ) {
+                    middlewares.length = 0;
+                }
+                middlewares.push( ...directMiddlewares );
 
                 let directResponseMode: string | undefined;
 
@@ -812,6 +919,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                     securityConfigs,
                     guards,
                     interceptors,
+                    middlewares,
                     responseModes
                 };
             };
@@ -915,6 +1023,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
 
                         const classGuards = classMeta.guards;
                         const classInterceptors = classMeta.interceptors;
+                        const classMiddlewares = classMeta.middlewares;
 
                         // Scan for property injections AFTER decorators have registered their classes
                         scanInjections( statement, controllerName );
@@ -949,33 +1058,97 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                                     const activeSecurity = methodSecurity !== undefined ? methodSecurity : classSecurity;
 
                                     const methodGuards: any[] = [];
-                                    let mGuardDec: ts.Decorator | null = null;
+                                    let mIsOverrideGuard = false;
+                                    let mRemoveAllGuards = false;
+                                    const mGuardsToRemove = new Set<string>();
 
-                                    if( mDecs ) { for( const d of mDecs ) { if( ts.isCallExpression( d.expression ) && d.expression.expression.getText() === 'Protect' ) { mGuardDec = d; break } } }
-
-                                    if( mGuardDec && ts.isCallExpression( mGuardDec.expression )) 
-                                    {
-                                        for( const arg of mGuardDec.expression.arguments ) 
-                                        {
-                                            const g = resolveGuardMetadata( arg, statement );
-
-                                            if( g ) { methodGuards.push( g ) } 
-                                        } 
+                                    if( mDecs ) {
+                                        for( const d of mDecs ) {
+                                            if( ts.isCallExpression( d.expression ) ) {
+                                                const name = d.expression.expression.getText();
+                                                if (name === 'Protect' || name === 'OverrideProtect') {
+                                                    if (name === 'OverrideProtect') { mIsOverrideGuard = true; }
+                                                    const g = resolveGuardMetadata( d.expression );
+                                                    if( g ) { methodGuards.push( g ) }
+                                                }
+                                                else if (name === 'Unprotect') {
+                                                    for( const arg of d.expression.arguments ) 
+                                                    {
+                                                        const gName = resolveClassRef( arg, registry.guards );
+                                                        if( gName ) { mGuardsToRemove.add( gName ) }
+                                                    }
+                                                }
+                                            }
+                                            else if( ts.isIdentifier( d.expression ) && d.expression.text === 'Unprotect' ) 
+                                            {
+                                                mRemoveAllGuards = true;
+                                            }
+                                        }
                                     }
 
                                     const methodInterceptors: string[] = [];
-                                    let mInterceptDec: ts.Decorator | null = null;
+                                    let mIsOverrideIntercept = false;
+                                    let mRemoveAllInterceptors = false;
+                                    const mInterceptorsToRemove = new Set<string>();
 
-                                    if( mDecs ) { for( const d of mDecs ) { if( ts.isCallExpression( d.expression ) && d.expression.expression.getText() === 'Intercept' ) { mInterceptDec = d; break } } }
+                                    if( mDecs ) {
+                                        for( const d of mDecs ) {
+                                            if( ts.isCallExpression( d.expression ) ) {
+                                                const name = d.expression.expression.getText();
+                                                if (name === 'Intercept' || name === 'OverrideIntercept') {
+                                                    if (name === 'OverrideIntercept') { mIsOverrideIntercept = true; }
+                                                    if( d.expression.arguments.length > 0 ) 
+                                                    {
+                                                        const firstArg = d.expression.arguments[0];
+                                                        const i = resolveClassRef( firstArg, registry.interceptors );
+                                                        if( i ) { methodInterceptors.push( i ) }
+                                                    }
+                                                }
+                                                else if (name === 'Unintercept') {
+                                                    for( const arg of d.expression.arguments ) 
+                                                    {
+                                                        const iName = resolveClassRef( arg, registry.interceptors );
+                                                        if( iName ) { mInterceptorsToRemove.add( iName ) }
+                                                    }
+                                                }
+                                            }
+                                            else if( ts.isIdentifier( d.expression ) && d.expression.text === 'Unintercept' ) 
+                                            {
+                                                mRemoveAllInterceptors = true;
+                                            }
+                                        }
+                                    }
 
-                                    if( mInterceptDec && ts.isCallExpression( mInterceptDec.expression )) 
-                                    {
-                                        for( const arg of mInterceptDec.expression.arguments ) 
-                                        {
-                                            const i = resolveClassRef( arg, registry.interceptors );
+                                    const methodMiddlewares: string[] = [];
+                                    let mIsOverrideMiddleware = false;
+                                    let mRemoveAllMiddlewares = false;
+                                    const mMiddlewaresToRemove = new Set<string>();
 
-                                            if( i ) { methodInterceptors.push( i ) } 
-                                        } 
+                                    if( mDecs ) {
+                                        for( const d of mDecs ) {
+                                            if( ts.isCallExpression( d.expression ) ) {
+                                                const name = d.expression.expression.getText();
+                                                if (name === 'Use' || name === 'OverrideUse') {
+                                                    if (name === 'OverrideUse') { mIsOverrideMiddleware = true; }
+                                                    for( const arg of d.expression.arguments ) 
+                                                    {
+                                                        const m = resolveClassRef( arg, registry.providers );
+                                                        if( m ) { methodMiddlewares.push( m ) }
+                                                    }
+                                                }
+                                                else if (name === 'Unuse') {
+                                                    for( const arg of d.expression.arguments ) 
+                                                    {
+                                                        const mName = resolveClassRef( arg, registry.providers );
+                                                        if( mName ) { mMiddlewaresToRemove.add( mName ) }
+                                                    }
+                                                }
+                                            }
+                                            else if( ts.isIdentifier( d.expression ) && d.expression.text === 'Unuse' ) 
+                                            {
+                                                mRemoveAllMiddlewares = true;
+                                            }
+                                        }
                                     }
 
                                     let methodResponseMode: any = undefined;
@@ -997,8 +1170,39 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                                     }
                                     const activeResponseMode = methodResponseMode !== undefined ? methodResponseMode : classResponseMode;
 
-                                    const activeGuards = methodPublic ? [] : ( methodGuards.length > 0 ? methodGuards : ( classPublic ? [] : classGuards ));
-                                    const activeInterceptors = [...classInterceptors, ...methodInterceptors];
+                                    let activeClassGuards = [...classGuards];
+                                    if( mRemoveAllGuards ) 
+                                    {
+                                        activeClassGuards = [];
+                                    }
+                                    else if( mGuardsToRemove.size > 0 ) 
+                                    {
+                                        activeClassGuards = activeClassGuards.filter( g => !mGuardsToRemove.has( g.name ));
+                                    }
+
+                                    let activeClassInterceptors = [...classInterceptors];
+                                    if( mRemoveAllInterceptors ) 
+                                    {
+                                        activeClassInterceptors = [];
+                                    }
+                                    else if( mInterceptorsToRemove.size > 0 ) 
+                                    {
+                                        activeClassInterceptors = activeClassInterceptors.filter( i => !mInterceptorsToRemove.has( i ));
+                                    }
+
+                                    let activeClassMiddlewares = [...classMiddlewares];
+                                    if( mRemoveAllMiddlewares ) 
+                                    {
+                                        activeClassMiddlewares = [];
+                                    }
+                                    else if( mMiddlewaresToRemove.size > 0 ) 
+                                    {
+                                        activeClassMiddlewares = activeClassMiddlewares.filter( m => !mMiddlewaresToRemove.has( m ));
+                                    }
+
+                                    const activeGuards = ( methodPublic || classPublic ) ? [] : ( mIsOverrideGuard ? methodGuards : [...activeClassGuards, ...methodGuards] );
+                                    const activeInterceptors = mIsOverrideIntercept ? methodInterceptors : [...activeClassInterceptors, ...methodInterceptors];
+                                    const activeMiddlewares = mIsOverrideMiddleware ? methodMiddlewares : [...activeClassMiddlewares, ...methodMiddlewares];
                                     const paramsMetadata = resolveParamsMetadata( member.parameters, method === 'Ws' );
 
                                     if( method === 'Head' ) 
@@ -1100,7 +1304,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
 
                                     const endpoint: any = {
                     controller   : controllerName, methodName   : member.name.getText(), httpMethod, path         : fullPath,
-                    params       : paramsMetadata, guards       : activeGuards, interceptors : activeInterceptors, meta         : {}
+                    params       : paramsMetadata, guards       : activeGuards, interceptors : activeInterceptors, middlewares: activeMiddlewares, meta         : {}
                   };
 
                                     if( activeResponseMode !== undefined ) 

@@ -74,41 +74,10 @@ export class RequestProcessor
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
             const ctx = { success : true, errors : [], mode : 'strict' };
+            const middlewareResponse = new Response();
 
             const finalHandler = async () => 
             {
-                // 1. Run Guards FIRST (Security gate)
-                for( const g of metadata.guards ) 
-                {
-                    const guardModule = g.type === 'class' ? MetadataStore.getTokenModule( g.name ) : controllerModule;
-                    const guardInstance = g.type === 'class' ? MetadataStore.getGuard( g.name, guardModule ) : controller;
-                    const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
-          
-                    // Resolve Guard Parameters
-                    const guardArgs: any[] = [];
-                    let resolverIdx = 0;
-
-                    for( const p of g.params ) 
-                    {
-                        if( p.source === 'Request' && !p.name && !p.validator ) 
-                        {
-                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
-                        }
-                        else if( p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject' ) 
-                        {
-                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
-                        }
-                        else 
-                        {
-                            guardArgs.push( g.resolvers[resolverIdx++]);
-                        }
-                    }
-
-                    const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
-          
-                    await guardMethod.apply( guardInstance, finalArgs );
-                }
-
                 // 2. Resolve parameters (Parsing & Validation)
                 const args: any[] = [];
 
@@ -219,16 +188,113 @@ export class RequestProcessor
 
             try 
             {
-                return await chain();
+                // Run Middlewares before guards
+                if( metadata.middlewares && metadata.middlewares.length > 0 ) 
+                {
+                    for( const mName of metadata.middlewares ) 
+                    {
+                        const middlewareInstance = MetadataStore.getInjectable( mName, controllerModule );
+                        if( !middlewareInstance ) 
+                        {
+                            throw new Error( `Middleware ${mName} not registered` );
+                        }
+
+                        if( typeof middlewareInstance.use === 'function' ) 
+                        {
+                            await middlewareInstance.use( req, middlewareResponse );
+                        }
+                        else if( typeof middlewareInstance.useCallback === 'function' ) 
+                        {
+                            await new Promise<void>(( resolve, reject ) => 
+                            {
+                                try 
+                                {
+                                    const next = ( error?: any ) => 
+                                    {
+                                        if( error ) 
+                                        {
+                                            reject( error );
+                                        }
+                                        else 
+                                        {
+                                            resolve();
+                                        }
+                                    };
+                                    const res = middlewareInstance.useCallback( req, middlewareResponse, next );
+                                    if( res instanceof Promise ) 
+                                    {
+                                        res.catch( reject );
+                                    }
+                                }
+                                catch ( err ) 
+                                {
+                                    reject( err );
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // 1. Run Guards FIRST (Security gate)
+                for( const g of metadata.guards ) 
+                {
+                    const guardModule = g.type === 'class' ? MetadataStore.getTokenModule( g.name ) : controllerModule;
+                    const guardInstance = g.type === 'class' ? MetadataStore.getGuard( g.name, guardModule ) : controller;
+                    const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
+          
+                    // Resolve Guard Parameters
+                    const guardArgs: any[] = [];
+                    let resolverIdx = 0;
+
+                    for( const p of g.params ) 
+                    {
+                        if( p.source === 'Request' && !p.name && !p.validator ) 
+                        {
+                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
+                        }
+                        else if( p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject' ) 
+                        {
+                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
+                        }
+                        else 
+                        {
+                            guardArgs.push( g.resolvers[resolverIdx++]);
+                        }
+                    }
+
+                    const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
+          
+                    await guardMethod.apply( guardInstance, finalArgs );
+                }
+
+                const response = await chain();
+                for( const [key, value] of middlewareResponse.headers.entries()) 
+                {
+                    response.headers.set( key, value );
+                }
+                return response;
             }
             catch ( err: any ) 
             {
+                if( err instanceof Response ) 
+                {
+                    for( const [key, value] of middlewareResponse.headers.entries()) 
+                    {
+                        err.headers.set( key, value );
+                    }
+                    return err;
+                }
                 const status = err.status || err.code || 500;
 
-                return new Response( JSON.stringify( err.data || { success : false, error : err.message }), { 
+                const response = new Response( JSON.stringify( err.data || { success : false, error : err.message }), { 
                     status, 
                     headers : { 'Content-Type' : 'application/json' } 
                 });
+                for( const [key, value] of middlewareResponse.headers.entries()) 
+                {
+                    response.headers.set( key, value );
+                }
+                return response;
             }
         });
     }

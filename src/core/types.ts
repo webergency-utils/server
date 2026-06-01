@@ -1,3 +1,5 @@
+import { ServerError } from '../errors.js';
+
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'ALL' | 'RPC';
 
 export interface ServerWebSocket {
@@ -58,6 +60,7 @@ export interface EndpointMetadata {
     params               : ParamMetadata[]
     guards               : GuardMetadata[]
     interceptors         : string[]
+    middlewares          : string[]
     cors?                : any
     security?            : any
     meta                 : Record<string, any>
@@ -101,4 +104,18 @@ export interface Logger {
     error( message: any, context?: LogContext ): void
     debug?( message: any, context?: LogContext ): void
 }
+
+export type EndpointRequest = AugmentedRequest;
+export type EndpointResponse = Response;
+
+export interface Middleware 
+{
+    use?( request: EndpointRequest, response: EndpointResponse ): Promise<void> | void;
+    useCallback?( request: EndpointRequest, response: EndpointResponse, next: (error?: ServerError) => Promise<void> | void ): Promise<void> | void;
+}
+
+export type MiddlewareClass = 
+    | (new (...args: any[]) => { use(request: EndpointRequest, response: EndpointResponse): Promise<void> | void; useCallback?: never })
+    | (new (...args: any[]) => { useCallback(request: EndpointRequest, response: EndpointResponse, next: (error?: ServerError) => Promise<void> | void): Promise<void> | void; use?: never });
+
 

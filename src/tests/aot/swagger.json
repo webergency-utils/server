@@ -1735,6 +1735,32 @@
         }
       }
     },
+    "/di/guarded-with-params": {
+      "get": {
+        "summary": "DiTestController.guardedWithParams",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/realtime/sse": {
       "get": {
         "summary": "RealtimeController.handleSse",
@@ -2181,6 +2207,369 @@
                     "name",
                     "age"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unprotected-class/test": {
+      "get": {
+        "summary": "UnprotectedClassController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unprotected-class-all/test": {
+      "get": {
+        "summary": "UnprotectedClassAllController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unprotected-method/one": {
+      "get": {
+        "summary": "UnprotectedMethodController.getOne",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unprotected-method/all": {
+      "get": {
+        "summary": "UnprotectedMethodController.getAll",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unintercepted-class/test": {
+      "get": {
+        "summary": "UninterceptedClassController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unintercepted-class-all/test": {
+      "get": {
+        "summary": "UninterceptedClassAllController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unintercepted-method/one": {
+      "get": {
+        "summary": "UninterceptedMethodController.getOne",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/unintercepted-method/all": {
+      "get": {
+        "summary": "UninterceptedMethodController.getAll",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/middleware-test/both": {
+      "get": {
+        "summary": "MiddlewareTestController.both",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "one": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "two": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "one",
+                    "two"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/middleware-test/override": {
+      "get": {
+        "summary": "MiddlewareTestController.override",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "one": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "two": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "one",
+                    "two"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/middleware-unmiddleware/remove-one": {
+      "get": {
+        "summary": "MiddlewareUnmiddlewareController.removeOne",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "one": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "two": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "one",
+                    "two"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/middleware-unmiddleware/remove-all": {
+      "get": {
+        "summary": "MiddlewareUnmiddlewareController.removeAll",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "one": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "two": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "one",
+                    "two"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/guard-interceptor-order/test": {
+      "get": {
+        "summary": "GuardInterceptorOrderController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/class-public/test": {
+      "get": {
+        "summary": "ClassPublicController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/method-public/test": {
+      "get": {
+        "summary": "MethodPublicController.test",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

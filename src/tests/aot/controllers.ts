@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware } from '../../index.js';
 
 import { constraint, format, tag } from '@webergency-utils/typechecker';
 
@@ -29,6 +29,32 @@ export type MyUnion =
     | { type : 'simple', val : string }
     | { type : 'complex', data : { id : number, tags : string[] } };
 
+export class GlobalErrorSanitizer {
+    async intercept(req: any, next: any) {
+        const response = await next();
+        if( response.status === 400 ) 
+        {
+            const clone = response.clone();
+            try 
+            {
+                const data = await clone.json();
+                if( data.success === false && data.errors ) 
+                {
+                    return new Response( JSON.stringify({ 
+                        success : false, 
+                        message : 'Internal Server Error' 
+                    }), { 
+                        status  : 500,
+                        headers : { 'Content-Type' : 'application/json' }
+                    });
+                }
+            }
+            catch ( e ) {}
+        }
+        return response;
+    }
+}
+
 @Controller( '/type-safety' )
 export class TypeSafetyController 
 {
@@ -40,7 +66,7 @@ export class TypeSafetyController
     }
 
     @Post( '/strict-intercepted' )
-    @Intercept( 'GlobalErrorSanitizer' )
+    @Intercept( GlobalErrorSanitizer )
     strictIntercepted( @Body( 'strict' ) data: User ) 
     {
         return { success : true, data };
@@ -349,6 +375,13 @@ export class DiTestController
     {
         return { success : true };
     }
+
+    @Get( '/guarded-with-params' )
+    @Protect( DiGuard, 'admin', 123 )
+    guardedWithParams() 
+    {
+        return { success : true };
+    }
 }
 
 @Controller( '/realtime' )
@@ -525,4 +558,277 @@ export class InheritedResponseController extends BaseRelaxedController
         return { name : 'StrictOverride', age : 40, extra : 'fail' } as any;
     }
 }
+
+@Injectable()
+export class SimpleGuard implements Guard 
+{
+    use() 
+    {
+        return true;
+    }
+}
+
+@Injectable()
+export class AnotherGuard implements Guard 
+{
+    use() 
+    {
+        return true;
+    }
+}
+
+@Controller( '/unprotected-class-base' )
+@Protect( SimpleGuard )
+@Protect( AnotherGuard )
+export class UnprotectedBaseController {}
+
+@Controller( '/unprotected-class' )
+@Unprotect( SimpleGuard )
+export class UnprotectedClassController extends UnprotectedBaseController 
+{
+    @Get( '/test' )
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+@Controller( '/unprotected-class-all' )
+@Unprotect
+export class UnprotectedClassAllController extends UnprotectedBaseController 
+{
+    @Get( '/test' )
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+@Controller( '/unprotected-method' )
+@Protect( SimpleGuard )
+@Protect( AnotherGuard )
+export class UnprotectedMethodController 
+{
+    @Get( '/one' )
+    @Unprotect( SimpleGuard )
+    getOne() 
+    {
+        return 'ok';
+    }
+
+    @Get( '/all' )
+    @Unprotect
+    getAll() 
+    {
+        return 'ok';
+    }
+}
+
+export class SimpleInterceptor {
+    intercept(req: any, next: any) { return next(); }
+}
+
+export class AnotherInterceptor {
+    intercept(req: any, next: any) { return next(); }
+}
+
+@Controller( '/unintercepted-class-base' )
+@Intercept( SimpleInterceptor )
+@Intercept( AnotherInterceptor )
+export class UninterceptedBaseController {}
+
+@Controller( '/unintercepted-class' )
+@Unintercept( SimpleInterceptor )
+export class UninterceptedClassController extends UninterceptedBaseController 
+{
+    @Get( '/test' )
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+@Controller( '/unintercepted-class-all' )
+@Unintercept
+export class UninterceptedClassAllController extends UninterceptedBaseController 
+{
+    @Get( '/test' )
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+@Controller( '/unintercepted-method' )
+@Intercept( SimpleInterceptor )
+@Intercept( AnotherInterceptor )
+export class UninterceptedMethodController 
+{
+    @Get( '/one' )
+    @Unintercept( SimpleInterceptor )
+    getOne() 
+    {
+        return 'ok';
+    }
+
+    @Get( '/all' )
+    @Unintercept
+    getAll() 
+    {
+        return 'ok';
+    }
+}
+
+// --- Middleware Integration Tests ---
+
+@Injectable()
+export class SimpleTestMiddleware implements Middleware 
+{
+    use( req: EndpointRequest, res: EndpointResponse ) 
+    {
+        req.headers.set( 'x-middleware-one', 'active' );
+        res.headers.set( 'x-middleware-res-one', 'response-active' );
+    }
+}
+
+@Injectable()
+export class CallbackTestMiddleware implements Middleware 
+{
+    async useCallback( req: EndpointRequest, res: EndpointResponse, next: (error?: any) => Promise<void> | void ) 
+    {
+        req.headers.set( 'x-middleware-two', 'callback-active' );
+        res.headers.set( 'x-middleware-res-two', 'response-callback-active' );
+        await next();
+    }
+}
+
+@Injectable()
+export class MiddlewareCheckingGuard implements Guard 
+{
+    use( req: EndpointRequest ) 
+    {
+        const one = req.headers.get( 'x-middleware-one' );
+        if( !one ) 
+        {
+            throw { status : 403, message : 'Middleware did not run before Guard' };
+        }
+    }
+}
+
+@Controller( '/middleware-test' )
+@Use( SimpleTestMiddleware, CallbackTestMiddleware )
+export class MiddlewareTestController 
+{
+    @Get( '/both' )
+    @Protect( MiddlewareCheckingGuard )
+    both( req: EndpointRequest ) 
+    {
+        return {
+            one : req.headers.get( 'x-middleware-one' ),
+            two : req.headers.get( 'x-middleware-two' )
+        };
+    }
+
+    @Get( '/override' )
+    @OverrideUse( SimpleTestMiddleware )
+    override( req: EndpointRequest ) 
+    {
+        return {
+            one : req.headers.get( 'x-middleware-one' ),
+            two : req.headers.get( 'x-middleware-two' )
+        };
+    }
+}
+
+@Controller( '/middleware-unmiddleware' )
+@Use( SimpleTestMiddleware, CallbackTestMiddleware )
+export class MiddlewareUnmiddlewareController 
+{
+    @Get( '/remove-one' )
+    @Unuse( SimpleTestMiddleware )
+    removeOne( req: EndpointRequest ) 
+    {
+        return {
+            one : req.headers.get( 'x-middleware-one' ),
+            two : req.headers.get( 'x-middleware-two' )
+        };
+    }
+
+    @Get( '/remove-all' )
+    @Unuse
+    removeAll( req: EndpointRequest ) 
+    {
+        return {
+            one : req.headers.get( 'x-middleware-one' ),
+            two : req.headers.get( 'x-middleware-two' )
+        };
+    }
+}
+
+@Injectable()
+export class FailingGuard implements Guard 
+{
+    use() 
+    {
+        throw { status : 403, message : 'Guard Failed' };
+    }
+}
+
+export class CountingInterceptor 
+{
+    static callCount = 0;
+    async intercept( req: any, next: any ) 
+    {
+        CountingInterceptor.callCount++;
+        return next();
+    }
+}
+
+@Controller( '/guard-interceptor-order' )
+export class GuardInterceptorOrderController 
+{
+    @Get( '/test' )
+    @Protect( FailingGuard )
+    @Intercept( CountingInterceptor )
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+@Injectable()
+export class PublicDenyGuard implements Guard 
+{
+    use() 
+    {
+        throw { status : 403, message : 'Denied by PublicDenyGuard' };
+    }
+}
+
+@Controller( '/class-public' )
+@Public
+@Protect( PublicDenyGuard )
+export class ClassPublicController 
+{
+    @Get( '/test' )
+    @Protect( PublicDenyGuard )
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+@Controller( '/method-public' )
+@Protect( PublicDenyGuard )
+export class MethodPublicController 
+{
+    @Get( '/test' )
+    @Public
+    test() 
+    {
+        return 'ok';
+    }
+}
+
+
 

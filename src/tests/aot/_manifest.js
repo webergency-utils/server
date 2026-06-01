@@ -2,6 +2,15 @@ import { MetadataStore } from '@webergency-utils/server';
 import { validators } from '@webergency-utils/typechecker';
 import { isEvenNumber } from './controllers.js';
 import { DiGuard } from './controllers.compiled.js';
+import { SimpleGuard } from './controllers.compiled.js';
+import { AnotherGuard } from './controllers.compiled.js';
+import { MiddlewareCheckingGuard } from './controllers.compiled.js';
+import { FailingGuard } from './controllers.compiled.js';
+import { PublicDenyGuard } from './controllers.compiled.js';
+import { GlobalErrorSanitizer } from './controllers.compiled.js';
+import { SimpleInterceptor } from './controllers.compiled.js';
+import { AnotherInterceptor } from './controllers.compiled.js';
+import { CountingInterceptor } from './controllers.compiled.js';
 import { TypeSafetyController } from './controllers.compiled.js';
 import { TagParityController } from './controllers.compiled.js';
 import { SecureController } from './controllers.compiled.js';
@@ -14,16 +23,40 @@ import { ReturnTypeController } from './controllers.compiled.js';
 import { StrictResponseController } from './controllers.compiled.js';
 import { BaseRelaxedController } from './controllers.compiled.js';
 import { InheritedResponseController } from './controllers.compiled.js';
+import { UnprotectedBaseController } from './controllers.compiled.js';
+import { UnprotectedClassController } from './controllers.compiled.js';
+import { UnprotectedClassAllController } from './controllers.compiled.js';
+import { UnprotectedMethodController } from './controllers.compiled.js';
+import { UninterceptedBaseController } from './controllers.compiled.js';
+import { UninterceptedClassController } from './controllers.compiled.js';
+import { UninterceptedClassAllController } from './controllers.compiled.js';
+import { UninterceptedMethodController } from './controllers.compiled.js';
+import { MiddlewareTestController } from './controllers.compiled.js';
+import { MiddlewareUnmiddlewareController } from './controllers.compiled.js';
+import { GuardInterceptorOrderController } from './controllers.compiled.js';
+import { ClassPublicController } from './controllers.compiled.js';
+import { MethodPublicController } from './controllers.compiled.js';
 import { ConfigService } from './controllers.compiled.js';
 import { DatabaseService } from './controllers.compiled.js';
 import { LoggerService } from './controllers.compiled.js';
 import { BaseService } from './controllers.compiled.js';
 import { ChildService } from './controllers.compiled.js';
+import { SimpleTestMiddleware } from './controllers.compiled.js';
+import { CallbackTestMiddleware } from './controllers.compiled.js';
 
 // --- EXTERNAL MANIFESTS ---
 
 // --- SINGLETONS ---
 MetadataStore.registerGuard('DiGuard', DiGuard);
+MetadataStore.registerGuard('SimpleGuard', SimpleGuard);
+MetadataStore.registerGuard('AnotherGuard', AnotherGuard);
+MetadataStore.registerGuard('MiddlewareCheckingGuard', MiddlewareCheckingGuard);
+MetadataStore.registerGuard('FailingGuard', FailingGuard);
+MetadataStore.registerGuard('PublicDenyGuard', PublicDenyGuard);
+MetadataStore.registerInterceptor('GlobalErrorSanitizer', GlobalErrorSanitizer);
+MetadataStore.registerInterceptor('SimpleInterceptor', SimpleInterceptor);
+MetadataStore.registerInterceptor('AnotherInterceptor', AnotherInterceptor);
+MetadataStore.registerInterceptor('CountingInterceptor', CountingInterceptor);
 MetadataStore.registerController('TypeSafetyController', TypeSafetyController);
 MetadataStore.registerController('TagParityController', TagParityController);
 MetadataStore.registerController('SecureController', SecureController);
@@ -36,11 +69,26 @@ MetadataStore.registerController('ReturnTypeController', ReturnTypeController);
 MetadataStore.registerController('StrictResponseController', StrictResponseController);
 MetadataStore.registerController('BaseRelaxedController', BaseRelaxedController);
 MetadataStore.registerController('InheritedResponseController', InheritedResponseController);
+MetadataStore.registerController('UnprotectedBaseController', UnprotectedBaseController);
+MetadataStore.registerController('UnprotectedClassController', UnprotectedClassController);
+MetadataStore.registerController('UnprotectedClassAllController', UnprotectedClassAllController);
+MetadataStore.registerController('UnprotectedMethodController', UnprotectedMethodController);
+MetadataStore.registerController('UninterceptedBaseController', UninterceptedBaseController);
+MetadataStore.registerController('UninterceptedClassController', UninterceptedClassController);
+MetadataStore.registerController('UninterceptedClassAllController', UninterceptedClassAllController);
+MetadataStore.registerController('UninterceptedMethodController', UninterceptedMethodController);
+MetadataStore.registerController('MiddlewareTestController', MiddlewareTestController);
+MetadataStore.registerController('MiddlewareUnmiddlewareController', MiddlewareUnmiddlewareController);
+MetadataStore.registerController('GuardInterceptorOrderController', GuardInterceptorOrderController);
+MetadataStore.registerController('ClassPublicController', ClassPublicController);
+MetadataStore.registerController('MethodPublicController', MethodPublicController);
 MetadataStore.registerProvider('ConfigService', ConfigService);
 MetadataStore.registerProvider('DatabaseService', DatabaseService);
 MetadataStore.registerProvider('LoggerService', LoggerService);
 MetadataStore.registerProvider('BaseService', BaseService);
 MetadataStore.registerProvider('ChildService', ChildService);
+MetadataStore.registerProvider('SimpleTestMiddleware', SimpleTestMiddleware);
+MetadataStore.registerProvider('CallbackTestMiddleware', CallbackTestMiddleware);
 
 // --- VALIDATORS ---
 var __val_473287f8298dba71 = validators.string;
@@ -550,9 +598,9 @@ var __val_d9bb28ea073c815e = (v, path, ctx) => {
     return data;
 };
 
-var __val_80b7d2052445f9d0 = validators.date;
+var __val_ded42a1700b7a72c = validators.date;
 
-var __val_57fcbbdf9d78d32e = validators.regexp;
+var __val_900e92cb086f9b10 = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -750,7 +798,7 @@ var __val_1571502a4cf29710 = (v, path, ctx) => {
     return v;
 };
 
-var __val_e897736f203be74e = (v, path, ctx) => {
+var __val_00069fea01d8de1c = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "pass", "age"], "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }"))
         return v;
     let data = v;
@@ -913,7 +961,7 @@ var __val_c5049313b5648c12 = (v, path, ctx) => {
     return v;
 };
 
-var __val_5285fc4f32a80237 = (v, path, ctx) => {
+var __val_3e8eb7c863774273 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["min", "max", "mult"], "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }"))
         return v;
     let data = v;
@@ -979,7 +1027,7 @@ var __val_40fff573e6b6d78e = (v, path, ctx) => {
     return v;
 };
 
-var __val_b4e02c0ca2c6a67f = (v, path, ctx) => {
+var __val_7ce81cd8a307e08c = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["email", "uuid", "date"], "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string & Format<\"date\", string>; }"))
         return v;
     let data = v;
@@ -1009,7 +1057,7 @@ var __val_b4e02c0ca2c6a67f = (v, path, ctx) => {
     return data;
 };
 
-var __val_b4e46058d2b7ed62 = (v, path, ctx) => {
+var __val_7d7a88865ea2e56a = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = __val_e5da2f9fabafe20e(v, path, ctx);
@@ -1151,6 +1199,39 @@ var __val_ccb10958b6aa7739 = (v, path, ctx) => {
     return data;
 };
 
+var __val_74234e98afe7498f = validators.null;
+
+var __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [__val_74234e98afe7498f, __val_473287f8298dba71], "Type<string|null>");
+
+var __val_8ee319793d943d85 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["one", "two"], "{ one: string | null; two: string | null; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["one", "two"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["one", false, __val_6bd4d7da4d0dd205],
+        ["two", false, __val_6bd4d7da4d0dd205]
+    ]);
+    return data;
+};
+
 
 // --- ENDPOINTS ---
 MetadataStore.registerEndpoint({
@@ -1168,6 +1249,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1189,6 +1271,7 @@ MetadataStore.registerEndpoint({
 	interceptors: [
 		'GlobalErrorSanitizer'
 	],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1208,6 +1291,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1227,6 +1311,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1246,6 +1331,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_d74cefa44e345d17
 });
@@ -1265,6 +1351,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_2d6ea820a293bacf
 });
@@ -1284,6 +1371,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_a042f9877fc2376a
 });
@@ -1303,6 +1391,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_f0ac6e3a29009cf1
 });
@@ -1322,6 +1411,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_0d157d33684c0018
 });
@@ -1340,6 +1430,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_0084393b0d7248e4
 });
@@ -1359,6 +1450,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_d9bb28ea073c815e
 });
@@ -1382,12 +1474,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_80b7d2052445f9d0
+			validator: __val_ded42a1700b7a72c
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_57fcbbdf9d78d32e
+			validator: __val_900e92cb086f9b10
 		},
 		{
 			source: 'Query',
@@ -1397,6 +1489,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_dfd1002a464a1dbf
 });
@@ -1415,6 +1508,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_d979aa00a685cb05
 });
@@ -1433,6 +1527,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_87e266a791052d41
 });
@@ -1451,6 +1546,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_6b50e5736cb6bb55
 });
@@ -1474,8 +1570,9 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_e897736f203be74e
+	returnTypeValidator: __val_00069fea01d8de1c
 });
 
 MetadataStore.registerEndpoint({
@@ -1493,6 +1590,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_6fb78ae896df3d55
 });
@@ -1505,6 +1603,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {}
 });
 
@@ -1516,6 +1615,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_b237870e8da1ad64
 });
@@ -1528,6 +1628,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_b237870e8da1ad64
 });
@@ -1556,8 +1657,9 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_5285fc4f32a80237
+	returnTypeValidator: __val_3e8eb7c863774273
 });
 
 MetadataStore.registerEndpoint({
@@ -1584,8 +1686,9 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_b4e02c0ca2c6a67f
+	returnTypeValidator: __val_7ce81cd8a307e08c
 });
 
 MetadataStore.registerEndpoint({
@@ -1597,13 +1700,14 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Body',
 			name: '',
-			validator: __val_b4e46058d2b7ed62
+			validator: __val_7d7a88865ea2e56a
 		}
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_b4e46058d2b7ed62
+	returnTypeValidator: __val_7d7a88865ea2e56a
 });
 
 MetadataStore.registerEndpoint({
@@ -1620,6 +1724,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_5a6f5d9e825bc197
 });
@@ -1632,6 +1737,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_473287f8298dba71,
 	security: {
@@ -1647,6 +1753,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_473287f8298dba71,
 	security: {
@@ -1662,6 +1769,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_473287f8298dba71,
 	security: {
@@ -1678,6 +1786,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_473287f8298dba71,
 	security: {
@@ -1693,6 +1802,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_d6749fa8772de8dd
 });
@@ -1711,6 +1821,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_ab68d46bd18d4a0a
 });
@@ -1737,6 +1848,37 @@ MetadataStore.registerEndpoint({
 		}
 	],
 	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_e955dd67e417e2f5
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'DiTestController',
+	methodName: 'guardedWithParams',
+	httpMethod: 'GET',
+	path: '/di/guarded-with-params',
+	params: [],
+	guards: [
+		{
+			type: 'class',
+			name: 'DiGuard',
+			resolvers: [
+				'admin',
+				123
+			],
+			params: [
+				{
+					source: 'Inject',
+					name: 'DatabaseService',
+					validator: ''
+				}
+			],
+			isAsync: false
+		}
+	],
+	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_e955dd67e417e2f5
 });
@@ -1755,6 +1897,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		ws: true
 	}
@@ -1784,6 +1927,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		ws: true
 	}
@@ -1803,6 +1947,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		ws: true,
 		wsOptions: {
@@ -1825,6 +1970,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		ws: true,
 		wsOptions: {
@@ -1842,6 +1988,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		sse: true
 	}
@@ -1861,6 +2008,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		rpc: true
 	},
@@ -1881,6 +2029,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		rpc: true
 	},
@@ -1901,6 +2050,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		rpc: true,
 		event: true
@@ -1915,6 +2065,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -1927,6 +2078,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -1939,6 +2091,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -1957,6 +2110,7 @@ MetadataStore.registerEndpoint({
 	],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -1969,6 +2123,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		rpc: true
 	},
@@ -1983,6 +2138,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		rpc: true
 	},
@@ -1997,6 +2153,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {
 		rpc: true
 	},
@@ -2011,6 +2168,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeMode: 'strict',
 	returnTypeValidator: __val_04c78f82f98a8cf4
@@ -2024,6 +2182,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeMode: 'relaxed',
 	returnTypeValidator: __val_04c78f82f98a8cf4
@@ -2037,6 +2196,7 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeMode: 'relaxed',
 	returnTypeValidator: __val_04c78f82f98a8cf4
@@ -2050,8 +2210,279 @@ MetadataStore.registerEndpoint({
 	params: [],
 	guards: [],
 	interceptors: [],
+	middlewares: [],
 	meta: {},
 	returnTypeMode: 'strict',
 	returnTypeValidator: __val_04c78f82f98a8cf4
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UnprotectedClassController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/unprotected-class/test',
+	params: [],
+	guards: [
+		{
+			type: 'class',
+			name: 'AnotherGuard',
+			resolvers: [],
+			params: [],
+			isAsync: false
+		}
+	],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UnprotectedClassAllController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/unprotected-class-all/test',
+	params: [],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UnprotectedMethodController',
+	methodName: 'getOne',
+	httpMethod: 'GET',
+	path: '/unprotected-method/one',
+	params: [],
+	guards: [
+		{
+			type: 'class',
+			name: 'AnotherGuard',
+			resolvers: [],
+			params: [],
+			isAsync: false
+		}
+	],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UnprotectedMethodController',
+	methodName: 'getAll',
+	httpMethod: 'GET',
+	path: '/unprotected-method/all',
+	params: [],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UninterceptedClassController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/unintercepted-class/test',
+	params: [],
+	guards: [],
+	interceptors: [
+		'AnotherInterceptor'
+	],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UninterceptedClassAllController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/unintercepted-class-all/test',
+	params: [],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UninterceptedMethodController',
+	methodName: 'getOne',
+	httpMethod: 'GET',
+	path: '/unintercepted-method/one',
+	params: [],
+	guards: [],
+	interceptors: [
+		'AnotherInterceptor'
+	],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'UninterceptedMethodController',
+	methodName: 'getAll',
+	httpMethod: 'GET',
+	path: '/unintercepted-method/all',
+	params: [],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MiddlewareTestController',
+	methodName: 'both',
+	httpMethod: 'GET',
+	path: '/middleware-test/both',
+	params: [
+		{
+			source: 'Request',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [
+		{
+			type: 'class',
+			name: 'MiddlewareCheckingGuard',
+			resolvers: [],
+			params: [
+				{
+					source: 'Request',
+					name: '',
+					validator: ''
+				}
+			],
+			isAsync: false
+		}
+	],
+	interceptors: [],
+	middlewares: [
+		'SimpleTestMiddleware',
+		'CallbackTestMiddleware'
+	],
+	meta: {},
+	returnTypeValidator: __val_8ee319793d943d85
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MiddlewareTestController',
+	methodName: 'override',
+	httpMethod: 'GET',
+	path: '/middleware-test/override',
+	params: [
+		{
+			source: 'Request',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	middlewares: [
+		'SimpleTestMiddleware'
+	],
+	meta: {},
+	returnTypeValidator: __val_8ee319793d943d85
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MiddlewareUnmiddlewareController',
+	methodName: 'removeOne',
+	httpMethod: 'GET',
+	path: '/middleware-unmiddleware/remove-one',
+	params: [
+		{
+			source: 'Request',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	middlewares: [
+		'CallbackTestMiddleware'
+	],
+	meta: {},
+	returnTypeValidator: __val_8ee319793d943d85
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MiddlewareUnmiddlewareController',
+	methodName: 'removeAll',
+	httpMethod: 'GET',
+	path: '/middleware-unmiddleware/remove-all',
+	params: [
+		{
+			source: 'Request',
+			name: '',
+			validator: ''
+		}
+	],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_8ee319793d943d85
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'GuardInterceptorOrderController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/guard-interceptor-order/test',
+	params: [],
+	guards: [
+		{
+			type: 'class',
+			name: 'FailingGuard',
+			resolvers: [],
+			params: [],
+			isAsync: false
+		}
+	],
+	interceptors: [
+		'CountingInterceptor'
+	],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'ClassPublicController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/class-public/test',
+	params: [],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
+});
+
+MetadataStore.registerEndpoint({
+	controller: 'MethodPublicController',
+	methodName: 'test',
+	httpMethod: 'GET',
+	path: '/method-public/test',
+	params: [],
+	guards: [],
+	interceptors: [],
+	middlewares: [],
+	meta: {},
+	returnTypeValidator: __val_473287f8298dba71
 });
 

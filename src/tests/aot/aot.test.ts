@@ -589,6 +589,75 @@ describe( 'Actual AOT Integration Test', () =>
                 MetadataStore.setDefaultResponseMode( 'strip' );
             });
         });
+
+        describe( 'Unprotect Decorator', () => 
+        {
+            it( 'should support class-level Unprotect removing a specific inherited guard', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-class/test' )!;
+                expect( ep ).toBeDefined();
+                const guardNames = ep.guards.map( g => g.name );
+                expect( guardNames ).not.toContain( 'SimpleGuard' );
+                expect( guardNames ).toContain( 'AnotherGuard' );
+            });
+
+            it( 'should support class-level Unprotect (no params) removing all inherited guards', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-class-all/test' )!;
+                expect( ep ).toBeDefined();
+                expect( ep.guards ).toHaveLength( 0 );
+            });
+
+            it( 'should support method-level Unprotect removing a specific inherited guard', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-method/one' )!;
+                expect( ep ).toBeDefined();
+                const guardNames = ep.guards.map( g => g.name );
+                expect( guardNames ).not.toContain( 'SimpleGuard' );
+                expect( guardNames ).toContain( 'AnotherGuard' );
+            });
+
+            it( 'should support method-level Unprotect (no params) removing all inherited guards', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-method/all' )!;
+                expect( ep ).toBeDefined();
+                expect( ep.guards ).toHaveLength( 0 );
+            });
+        });
+
+        describe( 'Unintercept Decorator', () => 
+        {
+            it( 'should support class-level Unintercept removing a specific inherited interceptor', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-class/test' )!;
+                expect( ep ).toBeDefined();
+                expect( ep.interceptors ).not.toContain( 'SimpleInterceptor' );
+                expect( ep.interceptors ).toContain( 'AnotherInterceptor' );
+            });
+
+            it( 'should support class-level Unintercept (no params) removing all inherited interceptors', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-class-all/test' )!;
+                expect( ep ).toBeDefined();
+                expect( ep.interceptors ).toHaveLength( 0 );
+            });
+
+            it( 'should support method-level Unintercept removing a specific inherited interceptor', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-method/one' )!;
+                expect( ep ).toBeDefined();
+                expect( ep.interceptors ).not.toContain( 'SimpleInterceptor' );
+                expect( ep.interceptors ).toContain( 'AnotherInterceptor' );
+            });
+
+            it( 'should support method-level Unintercept (no params) removing all inherited interceptors', () => 
+            {
+                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-method/all' )!;
+                expect( ep ).toBeDefined();
+                expect( ep.interceptors ).toHaveLength( 0 );
+            });
+        });
+
     });
 
     describe( 'WS & SSE Integration', () => 
@@ -750,6 +819,83 @@ describe( 'Actual AOT Integration Test', () =>
             });
 
             await closedPromise;
+        });
+    });
+
+    describe( 'Middleware Integration', () => 
+    {
+        it( 'should run simple and callback middlewares in order before guards, and copy headers to response', async () => 
+        {
+            const res = await server.fetch( new Request( 'http://localhost/middleware-test/both' ));
+            expect( res.status ).toBe( 200 );
+            const data = await res.json();
+            expect( data.one ).toBe( 'active' );
+            expect( data.two ).toBe( 'callback-active' );
+            expect( res.headers.get( 'x-middleware-res-one' )).toBe( 'response-active' );
+            expect( res.headers.get( 'x-middleware-res-two' )).toBe( 'response-callback-active' );
+        });
+
+        it( 'should support OverrideUse decorator on method level', async () => 
+        {
+            const res = await server.fetch( new Request( 'http://localhost/middleware-test/override' ));
+            expect( res.status ).toBe( 200 );
+            const data = await res.json();
+            expect( data.one ).toBe( 'active' );
+            expect( data.two ).toBeNull(); // callback middleware was overridden/removed
+            expect( res.headers.get( 'x-middleware-res-one' )).toBe( 'response-active' );
+            expect( res.headers.get( 'x-middleware-res-two' )).toBeNull();
+        });
+
+        it( 'should support Unuse on method level removing specific middlewares', async () => 
+        {
+            const res = await server.fetch( new Request( 'http://localhost/middleware-unmiddleware/remove-one' ));
+            expect( res.status ).toBe( 200 );
+            const data = await res.json();
+            expect( data.one ).toBeNull(); // simple middleware was removed
+            expect( data.two ).toBe( 'callback-active' );
+            expect( res.headers.get( 'x-middleware-res-one' )).toBeNull();
+            expect( res.headers.get( 'x-middleware-res-two' )).toBe( 'response-callback-active' );
+        });
+
+        it( 'should support Unuse on method level removing all middlewares', async () => 
+        {
+            const res = await server.fetch( new Request( 'http://localhost/middleware-unmiddleware/remove-all' ));
+            expect( res.status ).toBe( 200 );
+            const data = await res.json();
+            expect( data.one ).toBeNull();
+            expect( data.two ).toBeNull();
+            expect( res.headers.get( 'x-middleware-res-one' )).toBeNull();
+            expect( res.headers.get( 'x-middleware-res-two' )).toBeNull();
+        });
+    });
+
+    describe( 'Guard and Interceptor Execution Order', () => 
+    {
+        it( 'should run guards before interceptors and bypass interceptors on guard failure', async () => 
+        {
+            const { CountingInterceptor } = await import( './controllers.compiled.js' );
+            CountingInterceptor.callCount = 0;
+
+            const res = await server.fetch( new Request( 'http://localhost/guard-interceptor-order/test' ));
+            expect( res.status ).toBe( 403 );
+            expect( CountingInterceptor.callCount ).toBe( 0 ); // Interceptor was bypassed
+        });
+    });
+
+    describe( 'Public Decorator Guard Bypass', () => 
+    {
+        it( 'should bypass all class and method guards if controller has @Public', async () => 
+        {
+            const res = await server.fetch( new Request( 'http://localhost/class-public/test' ));
+            expect( res.status ).toBe( 200 );
+            expect( await res.text() ).toBe( 'ok' );
+        });
+
+        it( 'should bypass all class and method guards if method has @Public', async () => 
+        {
+            const res = await server.fetch( new Request( 'http://localhost/method-public/test' ));
+            expect( res.status ).toBe( 200 );
+            expect( await res.text() ).toBe( 'ok' );
         });
     });
 

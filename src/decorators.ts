@@ -1,6 +1,8 @@
 /**
  * PARAMETER DECORATORS (Strict - No Parentheses)
  */
+import { MiddlewareClass } from './core/types.js';
+
 export const Request = ( target: any, key: string | symbol, idx: number ) => {};
 export const Context = ( target: any, key: string | symbol, idx: number ) => {};
 export const Response = ( target: any, key: string | symbol, idx: number ) => {};
@@ -161,9 +163,66 @@ export function SetMetadata<K = any, V = any>( key: K, value: V ): any
     return Meta({ [key as any] : value });
 }
 
-export function Protect( guard: string | Function, ...guards: ( string | Function )[]): any { return () => {} }
-export function Intercept( ...interceptors: any[]): any { return () => {} }
+export type ClassConstructor = new (...args: any[]) => any;
+
+export function Protect( guard: ClassConstructor, ...params: any[]): any { return () => {} }
+export function OverrideProtect( guard: ClassConstructor, ...params: any[]): any { return () => {} }
+export function Unprotect( target: Function ): void;
+export function Unprotect( target: any, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<any> ): void;
+export function Unprotect( guard: ClassConstructor, ...moreGuards: ClassConstructor[]): any;
+export function Unprotect( ...args: any[]): any {
+    if( args.length === 3 && typeof args[1] === 'string' ) {
+        return args[2];
+    }
+    if( args.length === 1 && typeof args[0] === 'function' && typeof args[0].prototype?.use !== 'function' ) {
+        return args[0];
+    }
+    return ( target: any, propertyKey?: string | symbol, descriptor?: any ) => {
+        if( propertyKey === undefined ) {
+            return target;
+        }
+        return descriptor;
+    };
+}
+export function Intercept( interceptor: ClassConstructor, ...params: any[]): any { return () => {} }
+export function OverrideIntercept( interceptor: ClassConstructor, ...params: any[]): any { return () => {} }
+export function Unintercept( target: Function ): void;
+export function Unintercept( target: any, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<any> ): void;
+export function Unintercept( interceptor: ClassConstructor, ...moreInterceptors: ClassConstructor[]): any;
+export function Unintercept( ...args: any[]): any {
+    if( args.length === 3 && typeof args[1] === 'string' ) {
+        return args[2];
+    }
+    if( args.length === 1 && typeof args[0] === 'function' && typeof args[0].prototype?.intercept !== 'function' ) {
+        return args[0];
+    }
+    return ( target: any, propertyKey?: string | symbol, descriptor?: any ) => {
+        if( propertyKey === undefined ) {
+            return target;
+        }
+        return descriptor;
+    };
+}
 export function ResponseMode( mode: 'strict' | 'relaxed' | 'strip' ): any { return () => {} }
+export function Use( ...middlewares: MiddlewareClass[] ): any { return () => {} }
+export function OverrideUse( ...middlewares: MiddlewareClass[] ): any { return () => {} }
+export function Unuse( target: Function ): void;
+export function Unuse( target: any, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<any> ): void;
+export function Unuse( ...middlewares: MiddlewareClass[] ): any;
+export function Unuse( ...args: any[]): any {
+    if( args.length === 3 && typeof args[1] === 'string' ) {
+        return args[2];
+    }
+    if( args.length === 1 && typeof args[0] === 'function' && typeof args[0].prototype?.use !== 'function' && typeof args[0].prototype?.useCallback !== 'function' ) {
+        return args[0];
+    }
+    return ( target: any, propertyKey?: string | symbol, descriptor?: any ) => {
+        if( propertyKey === undefined ) {
+            return target;
+        }
+        return descriptor;
+    };
+}
 
 export interface CorsOptions {
     origin?         : string | string[] | boolean | Function

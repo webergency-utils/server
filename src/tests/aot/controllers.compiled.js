@@ -495,8 +495,8 @@ const __val_d9bb28ea073c815e = (v, path, ctx) => {
     ]);
     return data;
 };
-const __val_80b7d2052445f9d0 = validators.date;
-const __val_57fcbbdf9d78d32e = validators.regexp;
+const __val_ded42a1700b7a72c = validators.date;
+const __val_900e92cb086f9b10 = validators.regexp;
 const __val_75d012fe28656e0a = validators.bigint;
 const __val_dfd1002a464a1dbf = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "age", "active", "date", "pattern", "big"], "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }"))
@@ -675,7 +675,7 @@ const __val_1571502a4cf29710 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_e897736f203be74e = (v, path, ctx) => {
+const __val_00069fea01d8de1c = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "pass", "age"], "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }"))
         return v;
     let data = v;
@@ -830,7 +830,7 @@ const __val_c5049313b5648c12 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_5285fc4f32a80237 = (v, path, ctx) => {
+const __val_3e8eb7c863774273 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["min", "max", "mult"], "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }"))
         return v;
     let data = v;
@@ -892,7 +892,7 @@ const __val_40fff573e6b6d78e = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_b4e02c0ca2c6a67f = (v, path, ctx) => {
+const __val_7ce81cd8a307e08c = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["email", "uuid", "date"], "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string & Format<\"date\", string>; }"))
         return v;
     let data = v;
@@ -921,7 +921,7 @@ const __val_b4e02c0ca2c6a67f = (v, path, ctx) => {
     ]);
     return data;
 };
-const __val_b4e46058d2b7ed62 = (v, path, ctx) => {
+const __val_7d7a88865ea2e56a = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = __val_e5da2f9fabafe20e(v, path, ctx);
@@ -1056,8 +1056,64 @@ const __val_ccb10958b6aa7739 = (v, path, ctx) => {
     ]);
     return data;
 };
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode } from '../../index.js';
+const __val_74234e98afe7498f = validators.null;
+const __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [__val_74234e98afe7498f, __val_473287f8298dba71], "Type<string|null>");
+const __val_8ee319793d943d85 = (v, path, ctx) => {
+    if (!validators.object(v, path, ctx, ["one", "two"], "{ one: string | null; two: string | null; }"))
+        return v;
+    let data = v;
+    if (ctx.mode === "strip") {
+        let hasAdditional = false;
+        const keys = Object.keys(v);
+        const allowed = ["one", "two"];
+        if (keys.length > allowed.length) {
+            hasAdditional = true;
+        }
+        else {
+            for (let i = 0; i < keys.length; i++) {
+                if (!allowed.includes(keys[i])) {
+                    hasAdditional = true;
+                    break;
+                }
+            }
+        }
+        if (hasAdditional)
+            data = {};
+    }
+    validators.props(v, data, path, ctx, [
+        ["one", false, __val_6bd4d7da4d0dd205],
+        ["two", false, __val_6bd4d7da4d0dd205]
+    ]);
+    return data;
+};
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public } from '../../index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
+export class GlobalErrorSanitizer {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    async intercept(req, next) {
+        const response = await next();
+        if (response.status === 400) {
+            const clone = response.clone();
+            try {
+                const data = await clone.json();
+                if (data.success === false && data.errors) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        message: 'Internal Server Error'
+                    }), {
+                        status: 500,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+            }
+            catch (e) { }
+        }
+        return response;
+    }
+}
 let TypeSafetyController = class TypeSafetyController {
     static __injections__ = {
         constructorDeps: [],
@@ -1130,7 +1186,7 @@ __decorate([
 ], TypeSafetyController.prototype, "strict", null);
 __decorate([
     Post('/strict-intercepted'),
-    Intercept('GlobalErrorSanitizer'),
+    Intercept(GlobalErrorSanitizer),
     __param(0, Body('strict'))
 ], TypeSafetyController.prototype, "strictIntercepted", null);
 __decorate([
@@ -1452,6 +1508,9 @@ let DiTestController = class DiTestController {
     guarded() {
         return { success: true };
     }
+    guardedWithParams() {
+        return { success: true };
+    }
 };
 __decorate([
     Inject(LoggerService)
@@ -1467,6 +1526,10 @@ __decorate([
     Get('/guarded'),
     Protect(DiGuard)
 ], DiTestController.prototype, "guarded", null);
+__decorate([
+    Get('/guarded-with-params'),
+    Protect(DiGuard, 'admin', 123)
+], DiTestController.prototype, "guardedWithParams", null);
 DiTestController = __decorate([
     Controller('/di')
 ], DiTestController);
@@ -1668,8 +1731,410 @@ InheritedResponseController = __decorate([
     Controller('/response-mode-inherited')
 ], InheritedResponseController);
 export { InheritedResponseController };
+let SimpleGuard = class SimpleGuard {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    use() {
+        return true;
+    }
+};
+SimpleGuard = __decorate([
+    Injectable()
+], SimpleGuard);
+export { SimpleGuard };
+let AnotherGuard = class AnotherGuard {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    use() {
+        return true;
+    }
+};
+AnotherGuard = __decorate([
+    Injectable()
+], AnotherGuard);
+export { AnotherGuard };
+let UnprotectedBaseController = class UnprotectedBaseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+};
+UnprotectedBaseController = __decorate([
+    Controller('/unprotected-class-base'),
+    Protect(SimpleGuard),
+    Protect(AnotherGuard)
+], UnprotectedBaseController);
+export { UnprotectedBaseController };
+let UnprotectedClassController = class UnprotectedClassController extends UnprotectedBaseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test')
+], UnprotectedClassController.prototype, "test", null);
+UnprotectedClassController = __decorate([
+    Controller('/unprotected-class'),
+    Unprotect(SimpleGuard)
+], UnprotectedClassController);
+export { UnprotectedClassController };
+let UnprotectedClassAllController = class UnprotectedClassAllController extends UnprotectedBaseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test')
+], UnprotectedClassAllController.prototype, "test", null);
+UnprotectedClassAllController = __decorate([
+    Controller('/unprotected-class-all'),
+    Unprotect
+], UnprotectedClassAllController);
+export { UnprotectedClassAllController };
+let UnprotectedMethodController = class UnprotectedMethodController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    getOne() {
+        return 'ok';
+    }
+    getAll() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/one'),
+    Unprotect(SimpleGuard)
+], UnprotectedMethodController.prototype, "getOne", null);
+__decorate([
+    Get('/all'),
+    Unprotect
+], UnprotectedMethodController.prototype, "getAll", null);
+UnprotectedMethodController = __decorate([
+    Controller('/unprotected-method'),
+    Protect(SimpleGuard),
+    Protect(AnotherGuard)
+], UnprotectedMethodController);
+export { UnprotectedMethodController };
+export class SimpleInterceptor {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    intercept(req, next) { return next(); }
+}
+export class AnotherInterceptor {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    intercept(req, next) { return next(); }
+}
+let UninterceptedBaseController = class UninterceptedBaseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+};
+UninterceptedBaseController = __decorate([
+    Controller('/unintercepted-class-base'),
+    Intercept(SimpleInterceptor),
+    Intercept(AnotherInterceptor)
+], UninterceptedBaseController);
+export { UninterceptedBaseController };
+let UninterceptedClassController = class UninterceptedClassController extends UninterceptedBaseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test')
+], UninterceptedClassController.prototype, "test", null);
+UninterceptedClassController = __decorate([
+    Controller('/unintercepted-class'),
+    Unintercept(SimpleInterceptor)
+], UninterceptedClassController);
+export { UninterceptedClassController };
+let UninterceptedClassAllController = class UninterceptedClassAllController extends UninterceptedBaseController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test')
+], UninterceptedClassAllController.prototype, "test", null);
+UninterceptedClassAllController = __decorate([
+    Controller('/unintercepted-class-all'),
+    Unintercept
+], UninterceptedClassAllController);
+export { UninterceptedClassAllController };
+let UninterceptedMethodController = class UninterceptedMethodController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    getOne() {
+        return 'ok';
+    }
+    getAll() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/one'),
+    Unintercept(SimpleInterceptor)
+], UninterceptedMethodController.prototype, "getOne", null);
+__decorate([
+    Get('/all'),
+    Unintercept
+], UninterceptedMethodController.prototype, "getAll", null);
+UninterceptedMethodController = __decorate([
+    Controller('/unintercepted-method'),
+    Intercept(SimpleInterceptor),
+    Intercept(AnotherInterceptor)
+], UninterceptedMethodController);
+export { UninterceptedMethodController };
+// --- Middleware Integration Tests ---
+let SimpleTestMiddleware = class SimpleTestMiddleware {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    use(req, res) {
+        req.headers.set('x-middleware-one', 'active');
+        res.headers.set('x-middleware-res-one', 'response-active');
+    }
+};
+SimpleTestMiddleware = __decorate([
+    Injectable()
+], SimpleTestMiddleware);
+export { SimpleTestMiddleware };
+let CallbackTestMiddleware = class CallbackTestMiddleware {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    async useCallback(req, res, next) {
+        req.headers.set('x-middleware-two', 'callback-active');
+        res.headers.set('x-middleware-res-two', 'response-callback-active');
+        await next();
+    }
+};
+CallbackTestMiddleware = __decorate([
+    Injectable()
+], CallbackTestMiddleware);
+export { CallbackTestMiddleware };
+let MiddlewareCheckingGuard = class MiddlewareCheckingGuard {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    use(req) {
+        const one = req.headers.get('x-middleware-one');
+        if (!one) {
+            throw { status: 403, message: 'Middleware did not run before Guard' };
+        }
+    }
+};
+MiddlewareCheckingGuard = __decorate([
+    Injectable()
+], MiddlewareCheckingGuard);
+export { MiddlewareCheckingGuard };
+let MiddlewareTestController = class MiddlewareTestController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    both(req) {
+        return {
+            one: req.headers.get('x-middleware-one'),
+            two: req.headers.get('x-middleware-two')
+        };
+    }
+    override(req) {
+        return {
+            one: req.headers.get('x-middleware-one'),
+            two: req.headers.get('x-middleware-two')
+        };
+    }
+};
+__decorate([
+    Get('/both'),
+    Protect(MiddlewareCheckingGuard)
+], MiddlewareTestController.prototype, "both", null);
+__decorate([
+    Get('/override'),
+    OverrideUse(SimpleTestMiddleware)
+], MiddlewareTestController.prototype, "override", null);
+MiddlewareTestController = __decorate([
+    Controller('/middleware-test'),
+    Use(SimpleTestMiddleware, CallbackTestMiddleware)
+], MiddlewareTestController);
+export { MiddlewareTestController };
+let MiddlewareUnmiddlewareController = class MiddlewareUnmiddlewareController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    removeOne(req) {
+        return {
+            one: req.headers.get('x-middleware-one'),
+            two: req.headers.get('x-middleware-two')
+        };
+    }
+    removeAll(req) {
+        return {
+            one: req.headers.get('x-middleware-one'),
+            two: req.headers.get('x-middleware-two')
+        };
+    }
+};
+__decorate([
+    Get('/remove-one'),
+    Unuse(SimpleTestMiddleware)
+], MiddlewareUnmiddlewareController.prototype, "removeOne", null);
+__decorate([
+    Get('/remove-all'),
+    Unuse
+], MiddlewareUnmiddlewareController.prototype, "removeAll", null);
+MiddlewareUnmiddlewareController = __decorate([
+    Controller('/middleware-unmiddleware'),
+    Use(SimpleTestMiddleware, CallbackTestMiddleware)
+], MiddlewareUnmiddlewareController);
+export { MiddlewareUnmiddlewareController };
+let FailingGuard = class FailingGuard {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    use() {
+        throw { status: 403, message: 'Guard Failed' };
+    }
+};
+FailingGuard = __decorate([
+    Injectable()
+], FailingGuard);
+export { FailingGuard };
+export class CountingInterceptor {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    static callCount = 0;
+    async intercept(req, next) {
+        CountingInterceptor.callCount++;
+        return next();
+    }
+}
+let GuardInterceptorOrderController = class GuardInterceptorOrderController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test'),
+    Protect(FailingGuard),
+    Intercept(CountingInterceptor)
+], GuardInterceptorOrderController.prototype, "test", null);
+GuardInterceptorOrderController = __decorate([
+    Controller('/guard-interceptor-order')
+], GuardInterceptorOrderController);
+export { GuardInterceptorOrderController };
+let PublicDenyGuard = class PublicDenyGuard {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    use() {
+        throw { status: 403, message: 'Denied by PublicDenyGuard' };
+    }
+};
+PublicDenyGuard = __decorate([
+    Injectable()
+], PublicDenyGuard);
+export { PublicDenyGuard };
+let ClassPublicController = class ClassPublicController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test'),
+    Protect(PublicDenyGuard)
+], ClassPublicController.prototype, "test", null);
+ClassPublicController = __decorate([
+    Controller('/class-public'),
+    Public,
+    Protect(PublicDenyGuard)
+], ClassPublicController);
+export { ClassPublicController };
+let MethodPublicController = class MethodPublicController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    test() {
+        return 'ok';
+    }
+};
+__decorate([
+    Get('/test'),
+    Public
+], MethodPublicController.prototype, "test", null);
+MethodPublicController = __decorate([
+    Controller('/method-public'),
+    Protect(PublicDenyGuard)
+], MethodPublicController);
+export { MethodPublicController };
 __server_metadata_store.providers.set("DiGuard", DiGuard);
 __server_metadata_store.guardClasses.add("DiGuard");
+__server_metadata_store.providers.set("SimpleGuard", SimpleGuard);
+__server_metadata_store.guardClasses.add("SimpleGuard");
+__server_metadata_store.providers.set("AnotherGuard", AnotherGuard);
+__server_metadata_store.guardClasses.add("AnotherGuard");
+__server_metadata_store.providers.set("MiddlewareCheckingGuard", MiddlewareCheckingGuard);
+__server_metadata_store.guardClasses.add("MiddlewareCheckingGuard");
+__server_metadata_store.providers.set("FailingGuard", FailingGuard);
+__server_metadata_store.guardClasses.add("FailingGuard");
+__server_metadata_store.providers.set("PublicDenyGuard", PublicDenyGuard);
+__server_metadata_store.guardClasses.add("PublicDenyGuard");
+__server_metadata_store.providers.set("GlobalErrorSanitizer", GlobalErrorSanitizer);
+__server_metadata_store.interceptorClasses.add("GlobalErrorSanitizer");
+__server_metadata_store.providers.set("SimpleInterceptor", SimpleInterceptor);
+__server_metadata_store.interceptorClasses.add("SimpleInterceptor");
+__server_metadata_store.providers.set("AnotherInterceptor", AnotherInterceptor);
+__server_metadata_store.interceptorClasses.add("AnotherInterceptor");
+__server_metadata_store.providers.set("CountingInterceptor", CountingInterceptor);
+__server_metadata_store.interceptorClasses.add("CountingInterceptor");
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
     methodName: "strict",
@@ -1683,6 +2148,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1699,6 +2165,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: ["GlobalErrorSanitizer"],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1715,6 +2182,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1731,6 +2199,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_c67915707769fcf5
 });
@@ -1747,6 +2216,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_d74cefa44e345d17
 });
@@ -1763,6 +2233,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_2d6ea820a293bacf
 });
@@ -1779,6 +2250,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_a042f9877fc2376a
 });
@@ -1795,6 +2267,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_f0ac6e3a29009cf1
 });
@@ -1811,6 +2284,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_0d157d33684c0018
 });
@@ -1827,6 +2301,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_0084393b0d7248e4
 });
@@ -1843,6 +2318,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_d9bb28ea073c815e
 });
@@ -1864,12 +2340,12 @@ __server_metadata_store.endpoints.push({
         }, {
             source: "Query",
             name: "date",
-            validator: __val_80b7d2052445f9d0,
+            validator: __val_ded42a1700b7a72c,
             mode: undefined
         }, {
             source: "Query",
             name: "pattern",
-            validator: __val_57fcbbdf9d78d32e,
+            validator: __val_900e92cb086f9b10,
             mode: undefined
         }, {
             source: "Query",
@@ -1879,6 +2355,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_dfd1002a464a1dbf
 });
@@ -1895,6 +2372,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_d979aa00a685cb05
 });
@@ -1911,6 +2389,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_87e266a791052d41
 });
@@ -1927,6 +2406,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_6b50e5736cb6bb55
 });
@@ -1948,8 +2428,9 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
-    returnTypeValidator: __val_e897736f203be74e
+    returnTypeValidator: __val_00069fea01d8de1c
 });
 __server_metadata_store.endpoints.push({
     controller: "TypeSafetyController",
@@ -1964,6 +2445,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_6fb78ae896df3d55
 });
@@ -1975,6 +2457,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {}
 });
 __server_metadata_store.endpoints.push({
@@ -1985,6 +2468,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_b237870e8da1ad64
 });
@@ -1996,6 +2480,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_b237870e8da1ad64
 });
@@ -2022,8 +2507,9 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
-    returnTypeValidator: __val_5285fc4f32a80237
+    returnTypeValidator: __val_3e8eb7c863774273
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -2048,8 +2534,9 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
-    returnTypeValidator: __val_b4e02c0ca2c6a67f
+    returnTypeValidator: __val_7ce81cd8a307e08c
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -2059,13 +2546,14 @@ __server_metadata_store.endpoints.push({
     params: [{
             source: "Body",
             name: "",
-            validator: __val_b4e46058d2b7ed62,
+            validator: __val_7d7a88865ea2e56a,
             mode: undefined
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
-    returnTypeValidator: __val_b4e46058d2b7ed62
+    returnTypeValidator: __val_7d7a88865ea2e56a
 });
 __server_metadata_store.endpoints.push({
     controller: "TagParityController",
@@ -2080,6 +2568,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_5a6f5d9e825bc197
 });
@@ -2091,6 +2580,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_473287f8298dba71,
     security: {
@@ -2105,6 +2595,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_473287f8298dba71,
     security: {
@@ -2119,6 +2610,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_473287f8298dba71,
     security: {
@@ -2134,6 +2626,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_473287f8298dba71,
     security: {
@@ -2148,6 +2641,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_d6749fa8772de8dd
 });
@@ -2164,6 +2658,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_ab68d46bd18d4a0a
 });
@@ -2186,6 +2681,30 @@ __server_metadata_store.endpoints.push({
             isAsync: false
         }],
     interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_e955dd67e417e2f5
+});
+__server_metadata_store.endpoints.push({
+    controller: "DiTestController",
+    methodName: "guardedWithParams",
+    httpMethod: "GET",
+    path: "/di/guarded-with-params",
+    params: [],
+    guards: [{
+            type: "class",
+            name: "DiGuard",
+            resolvers: ["admin", 123],
+            params: [{
+                    source: "Inject",
+                    name: "DatabaseService",
+                    validator: "",
+                    mode: undefined
+                }],
+            isAsync: false
+        }],
+    interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_e955dd67e417e2f5
 });
@@ -2202,6 +2721,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         ws: true
     }
@@ -2229,6 +2749,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         ws: true
     }
@@ -2246,6 +2767,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         ws: true,
         wsOptions: {
@@ -2266,6 +2788,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         ws: true,
         wsOptions: {
@@ -2282,6 +2805,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         sse: true
     }
@@ -2299,6 +2823,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         rpc: true
     },
@@ -2317,6 +2842,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         rpc: true
     },
@@ -2335,6 +2861,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         rpc: true,
         event: true
@@ -2348,6 +2875,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -2359,6 +2887,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -2370,6 +2899,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -2386,6 +2916,7 @@ __server_metadata_store.endpoints.push({
         }],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeValidator: __val_04c78f82f98a8cf4
 });
@@ -2397,6 +2928,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         rpc: true
     },
@@ -2410,6 +2942,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         rpc: true
     },
@@ -2423,6 +2956,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {
         rpc: true
     },
@@ -2436,6 +2970,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeMode: "strict",
     returnTypeValidator: __val_04c78f82f98a8cf4
@@ -2448,6 +2983,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeMode: "relaxed",
     returnTypeValidator: __val_04c78f82f98a8cf4
@@ -2460,6 +2996,7 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeMode: "relaxed",
     returnTypeValidator: __val_04c78f82f98a8cf4
@@ -2472,9 +3009,239 @@ __server_metadata_store.endpoints.push({
     params: [],
     guards: [],
     interceptors: [],
+    middlewares: [],
     meta: {},
     returnTypeMode: "strict",
     returnTypeValidator: __val_04c78f82f98a8cf4
+});
+__server_metadata_store.endpoints.push({
+    controller: "UnprotectedClassController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/unprotected-class/test",
+    params: [],
+    guards: [{
+            type: "class",
+            name: "AnotherGuard",
+            resolvers: [],
+            params: [],
+            isAsync: false
+        }],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UnprotectedClassAllController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/unprotected-class-all/test",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UnprotectedMethodController",
+    methodName: "getOne",
+    httpMethod: "GET",
+    path: "/unprotected-method/one",
+    params: [],
+    guards: [{
+            type: "class",
+            name: "AnotherGuard",
+            resolvers: [],
+            params: [],
+            isAsync: false
+        }],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UnprotectedMethodController",
+    methodName: "getAll",
+    httpMethod: "GET",
+    path: "/unprotected-method/all",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UninterceptedClassController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/unintercepted-class/test",
+    params: [],
+    guards: [],
+    interceptors: ["AnotherInterceptor"],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UninterceptedClassAllController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/unintercepted-class-all/test",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UninterceptedMethodController",
+    methodName: "getOne",
+    httpMethod: "GET",
+    path: "/unintercepted-method/one",
+    params: [],
+    guards: [],
+    interceptors: ["AnotherInterceptor"],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "UninterceptedMethodController",
+    methodName: "getAll",
+    httpMethod: "GET",
+    path: "/unintercepted-method/all",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "MiddlewareTestController",
+    methodName: "both",
+    httpMethod: "GET",
+    path: "/middleware-test/both",
+    params: [{
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [{
+            type: "class",
+            name: "MiddlewareCheckingGuard",
+            resolvers: [],
+            params: [{
+                    source: "Request",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }],
+            isAsync: false
+        }],
+    interceptors: [],
+    middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
+    meta: {},
+    returnTypeValidator: __val_8ee319793d943d85
+});
+__server_metadata_store.endpoints.push({
+    controller: "MiddlewareTestController",
+    methodName: "override",
+    httpMethod: "GET",
+    path: "/middleware-test/override",
+    params: [{
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    middlewares: ["SimpleTestMiddleware"],
+    meta: {},
+    returnTypeValidator: __val_8ee319793d943d85
+});
+__server_metadata_store.endpoints.push({
+    controller: "MiddlewareUnmiddlewareController",
+    methodName: "removeOne",
+    httpMethod: "GET",
+    path: "/middleware-unmiddleware/remove-one",
+    params: [{
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    middlewares: ["CallbackTestMiddleware"],
+    meta: {},
+    returnTypeValidator: __val_8ee319793d943d85
+});
+__server_metadata_store.endpoints.push({
+    controller: "MiddlewareUnmiddlewareController",
+    methodName: "removeAll",
+    httpMethod: "GET",
+    path: "/middleware-unmiddleware/remove-all",
+    params: [{
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_8ee319793d943d85
+});
+__server_metadata_store.endpoints.push({
+    controller: "GuardInterceptorOrderController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/guard-interceptor-order/test",
+    params: [],
+    guards: [{
+            type: "class",
+            name: "FailingGuard",
+            resolvers: [],
+            params: [],
+            isAsync: false
+        }],
+    interceptors: ["CountingInterceptor"],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "ClassPublicController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/class-public/test",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
+});
+__server_metadata_store.endpoints.push({
+    controller: "MethodPublicController",
+    methodName: "test",
+    httpMethod: "GET",
+    path: "/method-public/test",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {},
+    returnTypeValidator: __val_473287f8298dba71
 });
 __server_metadata_store.providers.set("TypeSafetyController", TypeSafetyController);
 __server_metadata_store.controllerClasses.add("TypeSafetyController");
@@ -2500,9 +3267,42 @@ __server_metadata_store.providers.set("BaseRelaxedController", BaseRelaxedContro
 __server_metadata_store.controllerClasses.add("BaseRelaxedController");
 __server_metadata_store.providers.set("InheritedResponseController", InheritedResponseController);
 __server_metadata_store.controllerClasses.add("InheritedResponseController");
+__server_metadata_store.providers.set("UnprotectedBaseController", UnprotectedBaseController);
+__server_metadata_store.controllerClasses.add("UnprotectedBaseController");
+__server_metadata_store.providers.set("UnprotectedClassController", UnprotectedClassController);
+__server_metadata_store.controllerClasses.add("UnprotectedClassController");
+__server_metadata_store.providers.set("UnprotectedClassAllController", UnprotectedClassAllController);
+__server_metadata_store.controllerClasses.add("UnprotectedClassAllController");
+__server_metadata_store.providers.set("UnprotectedMethodController", UnprotectedMethodController);
+__server_metadata_store.controllerClasses.add("UnprotectedMethodController");
+__server_metadata_store.providers.set("UninterceptedBaseController", UninterceptedBaseController);
+__server_metadata_store.controllerClasses.add("UninterceptedBaseController");
+__server_metadata_store.providers.set("UninterceptedClassController", UninterceptedClassController);
+__server_metadata_store.controllerClasses.add("UninterceptedClassController");
+__server_metadata_store.providers.set("UninterceptedClassAllController", UninterceptedClassAllController);
+__server_metadata_store.controllerClasses.add("UninterceptedClassAllController");
+__server_metadata_store.providers.set("UninterceptedMethodController", UninterceptedMethodController);
+__server_metadata_store.controllerClasses.add("UninterceptedMethodController");
+__server_metadata_store.providers.set("MiddlewareTestController", MiddlewareTestController);
+__server_metadata_store.controllerClasses.add("MiddlewareTestController");
+__server_metadata_store.providers.set("MiddlewareUnmiddlewareController", MiddlewareUnmiddlewareController);
+__server_metadata_store.controllerClasses.add("MiddlewareUnmiddlewareController");
+__server_metadata_store.providers.set("GuardInterceptorOrderController", GuardInterceptorOrderController);
+__server_metadata_store.controllerClasses.add("GuardInterceptorOrderController");
+__server_metadata_store.providers.set("ClassPublicController", ClassPublicController);
+__server_metadata_store.controllerClasses.add("ClassPublicController");
+__server_metadata_store.providers.set("MethodPublicController", MethodPublicController);
+__server_metadata_store.controllerClasses.add("MethodPublicController");
 __server_metadata_store.providers.set("ConfigService", ConfigService);
 __server_metadata_store.providers.set("DatabaseService", DatabaseService);
 __server_metadata_store.providers.set("LoggerService", LoggerService);
 __server_metadata_store.providers.set("BaseService", BaseService);
 __server_metadata_store.providers.set("ChildService", ChildService);
 __server_metadata_store.providers.set("DiGuard", DiGuard);
+__server_metadata_store.providers.set("SimpleGuard", SimpleGuard);
+__server_metadata_store.providers.set("AnotherGuard", AnotherGuard);
+__server_metadata_store.providers.set("SimpleTestMiddleware", SimpleTestMiddleware);
+__server_metadata_store.providers.set("CallbackTestMiddleware", CallbackTestMiddleware);
+__server_metadata_store.providers.set("MiddlewareCheckingGuard", MiddlewareCheckingGuard);
+__server_metadata_store.providers.set("FailingGuard", FailingGuard);
+__server_metadata_store.providers.set("PublicDenyGuard", PublicDenyGuard);
