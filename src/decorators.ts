@@ -294,7 +294,7 @@ export function Injectable( options?: InjectableOptions ): ClassDecorator
     };
 }
 
-export function Inject( target: any, key: string | symbol, index?: number ): void;
+export function Inject( target: any, key: string | symbol | undefined, index?: number ): void;
 export function Inject( token?: any ): any;
 export function Inject( arg1?: any, arg2?: any, arg3?: any ): any 
 {
