@@ -1900,8 +1900,9 @@ export default function compilerPlugin( program: ts.Program )
             }
 
             // Register Guards
-            for( const name of registry.guards.keys()) 
+            for( const [name, info] of registry.guards.entries()) 
             {
+                if( info.path !== sourceFile.fileName ) { continue }
                 appends.push(
                     ts.factory.createExpressionStatement(
                         ts.factory.createCallExpression(
@@ -1938,8 +1939,9 @@ export default function compilerPlugin( program: ts.Program )
             }
 
             // Register Interceptors
-            for( const name of registry.interceptors.keys()) 
+            for( const [name, info] of registry.interceptors.entries()) 
             {
+                if( info.path !== sourceFile.fileName ) { continue }
                 appends.push(
                     ts.factory.createExpressionStatement(
                         ts.factory.createCallExpression(
@@ -1996,8 +1998,9 @@ export default function compilerPlugin( program: ts.Program )
             }
 
             // Register Controllers
-            for( const name of registry.controllers.keys()) 
+            for( const [name, info] of registry.controllers.entries()) 
             {
+                if( info.path !== sourceFile.fileName ) { continue }
                 appends.push(
                     ts.factory.createExpressionStatement(
                         ts.factory.createCallExpression(
@@ -2034,8 +2037,9 @@ export default function compilerPlugin( program: ts.Program )
             }
 
             // Register Providers
-            for( const name of registry.providers.keys()) 
+            for( const [name, info] of registry.providers.entries()) 
             {
+                if( info.path !== sourceFile.fileName ) { continue }
                 appends.push(
                     ts.factory.createExpressionStatement(
                         ts.factory.createCallExpression(
@@ -2057,8 +2061,9 @@ export default function compilerPlugin( program: ts.Program )
             }
 
             // Register Modules
-            for( const name of registry.modules.keys()) 
+            for( const [name, info] of registry.modules.entries()) 
             {
+                if( info.path !== sourceFile.fileName ) { continue }
                 appends.push(
                     ts.factory.createExpressionStatement(
                         ts.factory.createCallExpression(
