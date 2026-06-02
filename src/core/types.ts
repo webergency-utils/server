@@ -38,7 +38,7 @@ export interface PeerCert {
 }
 
 export interface ParamMetadata {
-    source     : 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer'
+    source     : 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer' | 'Cookies' | 'Cookie'
     name?      : string
     validator? : string | Validator
     mode?      : ValidationMode

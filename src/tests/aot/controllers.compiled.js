@@ -495,8 +495,8 @@ const __val_d9bb28ea073c815e = (v, path, ctx) => {
     ]);
     return data;
 };
-const __val_ded42a1700b7a72c = validators.date;
-const __val_900e92cb086f9b10 = validators.regexp;
+const __val_52806c84462812de = validators.date;
+const __val_b6e780bc51fff07e = validators.regexp;
 const __val_75d012fe28656e0a = validators.bigint;
 const __val_dfd1002a464a1dbf = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "age", "active", "date", "pattern", "big"], "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }"))
@@ -2340,12 +2340,12 @@ __server_metadata_store.endpoints.push({
         }, {
             source: "Query",
             name: "date",
-            validator: __val_ded42a1700b7a72c,
+            validator: __val_52806c84462812de,
             mode: undefined
         }, {
             source: "Query",
             name: "pattern",
-            validator: __val_900e92cb086f9b10,
+            validator: __val_b6e780bc51fff07e,
             mode: undefined
         }, {
             source: "Query",

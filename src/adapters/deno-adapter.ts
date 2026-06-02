@@ -3,32 +3,41 @@ import { EventEmitter } from 'node:events';
 
 export class DenoAdapter implements ServerAdapter 
 {
+    private server? : any;
+    private abortController? : AbortController;
+    private isNodeCompat = false;
+    private nodeAdapterInstance? : any;
+
     async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void> 
     {
-        const options: any = { port };
-
         if( tls ) 
         {
-            if( tls.ciphers || tls.minVersion || tls.maxVersion || tls.sniCallback || tls.requestCert || tls.rejectUnauthorized ) 
-            {
-                console.warn( 'Warning: ciphers, minVersion, maxVersion, sniCallback, requestCert, and rejectUnauthorized are not supported by the Deno adapter.' );
-            }
+            this.isNodeCompat = true;
+            const { NodeAdapter } = await import( './node-adapter.js' );
+            this.nodeAdapterInstance = new NodeAdapter();
+            await this.nodeAdapterInstance.listen( port, handler, tls );
+            this.server = this.nodeAdapterInstance.nodeServer;
 
-            if( tls.cert ) 
-            {
-                options.cert = typeof tls.cert === 'string' ? tls.cert : new TextDecoder().decode( tls.cert as any );
-            }
-
-            if( tls.key ) 
-            {
-                options.key = typeof tls.key === 'string' ? tls.key : new TextDecoder().decode( tls.key as any );
-            }
+            return;
         }
-        ( globalThis as any ).Deno.serve( options, handler );
+
+        this.isNodeCompat = false;
+        this.abortController = new AbortController();
+        const options: any = { 
+            port,
+            signal: this.abortController.signal
+        };
+
+        this.server = ( globalThis as any ).Deno.serve( options, handler );
     }
 
     async upgrade( request: Request, metadata: any, params: any ): Promise<Response> 
     {
+        if( this.isNodeCompat && this.nodeAdapterInstance ) 
+        {
+            return this.nodeAdapterInstance.upgrade( request, metadata, params );
+        }
+
         const url = new URL( request.url );
         const query = Object.fromEntries( url.searchParams.entries());
         const { socket, response } = ( globalThis as any ).Deno.upgradeWebSocket( request );
@@ -40,7 +49,29 @@ export class DenoAdapter implements ServerAdapter
         return response;
     }
 
-    async close(): Promise<void> {}
+    async close(): Promise<void> 
+    {
+        if( this.isNodeCompat && this.nodeAdapterInstance ) 
+        {
+            await this.nodeAdapterInstance.close();
+
+            return;
+        }
+
+        if( this.abortController ) 
+        {
+            this.abortController.abort();
+        }
+
+        if( this.server ) 
+        {
+            if( typeof this.server.shutdown === 'function' ) 
+            {
+                await this.server.shutdown();
+            }
+            await this.server.finished;
+        }
+    }
 }
 
 class DenoServerWebSocket 

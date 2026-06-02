@@ -4,6 +4,31 @@ import { RequestReader } from '../helpers/request-reader.js';
 import { EndpointMetadata, ParamMetadata, AugmentedRequest } from './types.js';
 import { SecurityOptions } from '../decorators.js';
 
+function parseCookies( cookieHeader: string | null ): Record<string, string> 
+{
+    const cookies: Record<string, string> = {};
+
+    if( !cookieHeader ) { return cookies }
+
+    const pairs = cookieHeader.split( ';' );
+
+    for( const pair of pairs ) 
+    {
+        const idx = pair.indexOf( '=' );
+
+        if( idx === -1 ) { continue }
+        const key = pair.substring( 0, idx ).trim();
+        const val = pair.substring( idx + 1 ).trim();
+
+        if( cookies[key] === undefined ) 
+        {
+            cookies[key] = val;
+        }
+    }
+
+    return cookies;
+}
+
 export class RequestProcessor 
 {
     public static async resolveParam(
@@ -36,6 +61,17 @@ export class RequestProcessor
                 val = ( req as any ).clientCert;
                 break;
             }
+            case 'Cookies': {
+                const cookieHeader = req.headers.get( 'cookie' );
+                val = parseCookies( cookieHeader );
+                break;
+            }
+            case 'Cookie': {
+                const cookieHeader = req.headers.get( 'cookie' );
+                const cookies = parseCookies( cookieHeader );
+                val = p.name ? cookies[p.name] : cookies;
+                break;
+            }
         }
 
         if( p.validator && typeof p.validator === 'function' ) 
@@ -45,7 +81,7 @@ export class RequestProcessor
       
             if( p.mode ) { ctx.mode = p.mode }
 
-            if( p.source === 'Query' || p.source === 'Param' ) 
+            if( p.source === 'Query' || p.source === 'Param' || p.source === 'Cookie' ) 
             {
                 ctx.tryConvert = true;
                 ctx.wrapArrays = true;

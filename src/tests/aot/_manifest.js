@@ -598,9 +598,9 @@ var __val_d9bb28ea073c815e = (v, path, ctx) => {
     return data;
 };
 
-var __val_ded42a1700b7a72c = validators.date;
+var __val_52806c84462812de = validators.date;
 
-var __val_900e92cb086f9b10 = validators.regexp;
+var __val_b6e780bc51fff07e = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
@@ -1474,12 +1474,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_ded42a1700b7a72c
+			validator: __val_52806c84462812de
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_900e92cb086f9b10
+			validator: __val_b6e780bc51fff07e
 		},
 		{
 			source: 'Query',

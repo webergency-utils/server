@@ -119,10 +119,12 @@ The server is built on the Fetch API, allowing it to run natively anywhere:
 | `@Param(name)` | Injects a path parameter. |
 | `@Query(name?, mode?)` | Injects a specific query parameter or the whole object. |
 | `@Header(name)` | Injects a specific request header. |
-| `@Ip()` | Injects the client IP address. |
-| `@Request()` | Injects the standard Web `Request` object. |
-| `@RawBody()` | Injects the body as an `ArrayBuffer` (lazy/cached). |
-| `@Peer()` | Injects client certificate info (as `PeerCert`) for mTLS connections. |
+| `@Cookies` | Injects all parsed cookies as a `Record<string, string>` (must be used without parentheses). |
+| `@Cookie(name)` | Injects a specific request cookie value (follows RFC 6265 first-match wins). |
+| `@Ip` | Injects the client IP address (must be used without parentheses). |
+| `@Request` | Injects the standard Web `Request` object (must be used without parentheses). |
+| `@RawBody` | Injects the body as an `ArrayBuffer` (lazy/cached) (must be used without parentheses). |
+| `@Peer` | Injects client certificate info (as `PeerCert`) for mTLS connections (must be used without parentheses). |
 
 ---
 
@@ -161,7 +163,7 @@ import { Controller, Get, Peer, PeerCert } from '@webergency-utils/server';
 @Controller('/secure')
 export class SecureController {
   @Get('/profile')
-  getSecureProfile(@Peer() cert: PeerCert) {
+  getSecureProfile(@Peer cert: PeerCert) {
     return {
       message: `Hello ${cert.subject.CN}!`,
       organization: cert.subject.O,

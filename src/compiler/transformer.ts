@@ -22,7 +22,9 @@ const PARAM_DECORATORS: Record<string, string> = {
   'Context'         : 'Context',
   'ConnectedSocket' : 'WebSocket',
   'Payload'         : 'Body',
-  'Peer'            : 'Peer'
+  'Peer'            : 'Peer',
+  'Cookies'         : 'Cookies',
+  'Cookie'          : 'Cookie'
 };
 
 export interface ProjectRegistry {
@@ -416,6 +418,30 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
     {
         return ( sourceFile: ts.SourceFile ) => 
         {
+            // Check for invalid decorator usages
+            const checkDecorators = ( node: ts.Node ) => 
+            {
+                if( ts.canHaveDecorators( node ))
+                {
+                    const decorators = ts.getDecorators( node );
+
+                    if( decorators ) 
+                    {
+                        for( const dec of decorators ) 
+                        {
+                            const expr = dec.expression;
+
+                            if( ts.isCallExpression( expr ) && ts.isIdentifier( expr.expression ) && expr.expression.text === 'Inject' && expr.arguments.length === 0 ) 
+                            {
+                                const { line, character } = ts.getLineAndCharacterOfPosition( sourceFile, expr.getStart());
+                                throw new Error( `[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Decorator "@Inject" must not be called with empty parentheses. Use "@Inject" instead of "@Inject()".` );
+                            }
+                        }
+                    }
+                }
+                ts.forEachChild( node, checkDecorators );
+            };
+            checkDecorators( sourceFile );
 
             const resolveParamsMetadata = ( params: ts.NodeArray<ts.ParameterDeclaration>, isWsMethod: boolean = false, skipCount: number = 0 ) => 
             {
@@ -496,10 +522,10 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
 
                                 if( ts.isCallExpression( e )) 
                                 {
-                                    if( dName === 'Peer' ) 
+                                    if( dName === 'Peer' || dName === 'Cookies' ) 
                                     {
                                         const { line, character } = ts.getLineAndCharacterOfPosition( sourceFile, e.getStart());
-                                        throw new Error( `[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Decorator "@Peer" must not be called with parentheses. Use "@Peer" instead of "@Peer()".` );
+                                        throw new Error( `[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Decorator "@${dName}" must not be called with parentheses. Use "@${dName}" instead of "@${dName}()".` );
                                     }
 
                                     if( dName === 'Body' ) 
@@ -521,7 +547,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                                             vMode = e.arguments[1].text as any;
                                         }
                                     }
-                                    else if( dName !== 'Peer' && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
+                                    else if( dName !== 'Peer' && dName !== 'Cookies' && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
                                     {
                                         pName = e.arguments[0].text;
                                     }
@@ -553,7 +579,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                         const type = checker.getTypeAtLocation( p );
                         const hash = generateHash( type, checker );
 
-                        if(['Body', 'Query', 'Param'].includes( dName )) 
+                        if(['Body', 'Query', 'Param', 'Cookie'].includes( dName )) 
                         {
                             if( !registry.validators.has( hash )) 
                             {

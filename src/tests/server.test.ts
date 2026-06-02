@@ -499,19 +499,31 @@ describe( 'Server & Metadata', () =>
         it( 'should start Bun server', async () => 
         {
             ( globalThis as any ).Bun = { serve : vi.fn() };
-            const server = new Server({ port : 3001 });
-            await server.start();
-            expect(( globalThis as any ).Bun.serve ).toHaveBeenCalledWith({ port : 3001, fetch : expect.any( Function ) });
-            delete ( globalThis as any ).Bun;
+            try 
+            {
+                const server = new Server({ port : 3001 });
+                await server.start();
+                expect(( globalThis as any ).Bun.serve ).toHaveBeenCalledWith({ port : 3001, fetch : expect.any( Function ) });
+            }
+            finally 
+            {
+                delete ( globalThis as any ).Bun;
+            }
         });
 
         it( 'should start Deno server', async () => 
         {
             ( globalThis as any ).Deno = { serve : vi.fn() };
-            const server = new Server({ port : 3002 });
-            await server.start();
-            expect(( globalThis as any ).Deno.serve ).toHaveBeenCalledWith({ port : 3002 }, expect.any( Function ));
-            delete ( globalThis as any ).Deno;
+            try 
+            {
+                const server = new Server({ port : 3002 });
+                await server.start();
+                expect(( globalThis as any ).Deno.serve ).toHaveBeenCalledWith( expect.objectContaining({ port : 3002 }), expect.any( Function ));
+            }
+            finally 
+            {
+                delete ( globalThis as any ).Deno;
+            }
         });
 
         it( 'should handle Node.js bridge with empty body', async () => 
@@ -1515,6 +1527,109 @@ describe( 'Server & Metadata', () =>
             expect( res.status ).toBe( 200 );
             const body = await res.json();
             expect( body.peer ).toBeNull();
+        });
+    });
+
+    describe( 'Cookies Decorators & Deno Adapter Extensions', () => 
+    {
+        it( 'should parse Cookies and specific Cookie with first-match wins and coercion', async () => 
+        {
+            class CookieTestController 
+            {
+                async handle( cookies: any, session: any, age: any ) 
+                {
+                    return { cookies, session, age };
+                }
+            }
+
+            MetadataStore.registerController( 'CookieTestController', CookieTestController );
+            MetadataStore.registerEndpoint({
+                controller : 'CookieTestController',
+                methodName : 'handle',
+                httpMethod : 'GET',
+                path       : '/cookie-test',
+                params     : [
+                    { source : 'Cookies' },
+                    { source : 'Cookie', name : 'sessionId' },
+                    { source : 'Cookie', name : 'age', validator : validators.number }
+                ],
+                guards       : [],
+                interceptors : [],
+                meta         : {}
+            });
+
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+
+            // Send multiple sessionId cookies to test RFC 6265 first-match wins, and an age cookie to test coercion
+            const req = new Request( 'http://localhost/cookie-test', {
+                headers : {
+                    'Cookie' : 'sessionId=first; age=28; sessionId=second'
+                }
+            });
+
+            const res = await server.fetch( req );
+            expect( res.status ).toBe( 200 );
+            const body = await res.json();
+
+            // All cookies parsed
+            expect( body.cookies ).toEqual({ sessionId : 'first', age : '28' });
+            // RFC 6265: First-match wins for sessionId
+            expect( body.session ).toBe( 'first' );
+            // Coercion works via validator
+            expect( body.age ).toBe( 28 );
+        });
+
+        it( 'should delegate to NodeAdapter in DenoAdapter when TLS is provided', async () => 
+        {
+            const { DenoAdapter } = await import( '../adapters/deno-adapter.js' );
+            const adapter = new DenoAdapter();
+            
+            const serveMock = vi.fn();
+            ( globalThis as any ).Deno = { serve : serveMock };
+
+            const tlsOptions = { key : 'key', cert : 'cert' };
+            
+            // Should not call Deno.serve but delegate to NodeAdapter (which uses node:https createServer)
+            const mockNodeServer = { listen : vi.fn(( p, cb ) => cb()), close : vi.fn( cb => cb()) };
+            const { createServer } = await import( 'https' );
+            const mockCreateServer = vi.mocked( createServer ).mockReturnValue( mockNodeServer as any );
+
+            await adapter.listen( 3002, async () => new Response(), tlsOptions );
+
+            expect( serveMock ).not.toHaveBeenCalled();
+            expect( mockCreateServer ).toHaveBeenCalled();
+
+            await adapter.close();
+            expect( mockNodeServer.close ).toHaveBeenCalled();
+
+            delete ( globalThis as any ).Deno;
+        });
+
+        it( 'should close Deno native server gracefully when no TLS is provided', async () => 
+        {
+            const { DenoAdapter } = await import( '../adapters/deno-adapter.js' );
+            const adapter = new DenoAdapter();
+
+            const abortMock = vi.fn();
+            const shutdownMock = vi.fn().mockResolvedValue( undefined );
+            const finishedPromise = Promise.resolve();
+
+            const serveMock = vi.fn().mockReturnValue({
+                shutdown : shutdownMock,
+                finished : finishedPromise
+            });
+
+            ( globalThis as any ).Deno = { serve : serveMock };
+
+            await adapter.listen( 3002, async () => new Response() );
+            expect( serveMock ).toHaveBeenCalled();
+
+            await adapter.close();
+
+            expect( shutdownMock ).toHaveBeenCalled();
+
+            delete ( globalThis as any ).Deno;
         });
     });
 });

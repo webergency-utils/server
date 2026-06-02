@@ -83,7 +83,9 @@ server.start();
 - **@Protected(Guard)**: Statically wired security.
 - **@Intercept(Interceptor)**: Zero-overhead middleware chains.
 - **Mutual TLS (mTLS)**: Setup secure connections with client certificates by configuring `tls.requestCert: true` and `tls.rejectUnauthorized: true`.
-- **@Peer()**: Inject client certificate metadata (matching the exportable `PeerCert` interface) into guards, controller endpoints, or other injected parameters.
+- **@Peer**: Inject client certificate metadata (matching the exportable `PeerCert` interface) into guards, controller endpoints, or other injected parameters (must be used without parentheses).
+- **@Cookies**: Inject all parsed cookies as a `Record<string, string>` (must be used without parentheses).
+- **@Cookie(name)**: Inject a specific request cookie value (following RFC 6265 first-match wins).
 - **Automatic Validation**: DTOs are analyzed and validators are pre-compiled into the manifest.
 - **Graceful Shutdown**: Built-in support for `SIGTERM`/`SIGINT`.
 - **Cross-Runtime**: Identical code works on Node, Bun, and Deno.

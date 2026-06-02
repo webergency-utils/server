@@ -20,8 +20,12 @@ import {
     Protect, 
     Intercept, 
     Cors,
-    Peer
+    Peer,
+    Cookies,
+    Cookie,
+    Inject
 } from '../decorators.js';
+
 
 describe( 'Decorators', () => 
 {
@@ -44,6 +48,15 @@ describe( 'Decorators', () =>
         Header( 'h' )({}, 'test', 0 );
         
         Peer({}, 'test', 0 );
+        Cookies({}, 'test', 0 );
+        Cookie( 'c' )({}, 'test', 0 );
+
+        // Direct decorator usage (paren-free)
+        Inject({}, 'test', 0 );
+        Inject({}, 'test' );
+
+        // Factory decorator usage
+        Inject( 'token' )({}, 'test', 0 );
     });
 
     it( 'should call method and class decorators (no-ops at runtime)', () => 
