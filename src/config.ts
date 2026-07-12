@@ -6,7 +6,7 @@ let isLoaded = false;
  * Automatically discovers and loads the nearest _metadata.webergency-server.js file.
  * Only searches in the current project hierarchy (climbing up), never scans node_modules.
  */
-export async function loadAutoMetadata() 
+export async function loadAutoMetadata( enableLogs = true ) 
 {
     if( isLoaded ) { return }
   
@@ -30,7 +30,10 @@ export async function loadAutoMetadata()
             }
             catch ( e: any ) 
             {
-                console.error( `❌ Failed to load metadata: ${e.message}` );
+                if( enableLogs ) 
+                {
+                    console.error( `❌ Failed to load metadata: ${e.message}` );
+                }
             }
         }
     

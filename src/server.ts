@@ -38,6 +38,14 @@ export class ConsoleLogger implements Logger
     }
 }
 
+export class NoOpLogger implements Logger 
+{
+    info( message: any, context?: LogContext ) {}
+    warn( message: any, context?: LogContext ) {}
+    error( message: any, context?: LogContext ) {}
+    debug( message: any, context?: LogContext ) {}
+}
+
 export interface ServerOptions {
     port             : number
     cors?            : CorsOptions
@@ -110,7 +118,10 @@ export class Server extends EventEmitter
     constructor( private options: ServerOptions ) 
     {
         super();
-        this.logger = options.logger || new ConsoleLogger();
+        this.options.logs = options.logs === true || ( options.logger !== undefined && options.logs !== false );
+        this.logger = this.options.logs
+            ? ( options.logger || new ConsoleLogger() )
+            : new NoOpLogger();
         this.setupSignals();
 
         if( options.responseMode ) 
@@ -425,7 +436,7 @@ export class Server extends EventEmitter
     {
         if( MetadataStore.getEndpoints().length === 0 ) 
         {
-            await loadAutoMetadata();
+            await loadAutoMetadata( !!this.options.logs );
         }
         this.init();
         await MetadataStore.invokeHook( 'onModuleInit' );

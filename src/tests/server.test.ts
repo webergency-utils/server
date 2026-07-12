@@ -386,7 +386,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle shutdown timeout', async () => 
         {
-            const server = new Server({ port : 3004, shutdownTimeout : 10 });
+            const server = new Server({ port : 3004, shutdownTimeout : 10, logs : true });
             ( server as any ).activeRequests = 1;
             
             const spy = vi.spyOn( process, 'exit' ).mockImplementation(() => { return undefined as never });
