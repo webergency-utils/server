@@ -340,10 +340,13 @@ export class Server extends EventEmitter
     {
         const handleSignal = ( signal: string ) => 
         {
-            this.logger.warn( `\nReceived ${signal}. Starting graceful shutdown...`, {
-                type   : 'server_shutdown',
-                reason : signal
-            });
+            if( this.options.logs ) 
+            {
+                this.logger.warn( `\nReceived ${signal}. Starting graceful shutdown...`, {
+                    type   : 'server_shutdown',
+                    reason : signal
+                });
+            }
             this.shutdown( signal );
         };
 
@@ -377,11 +380,14 @@ export class Server extends EventEmitter
         const timeout = this.options.shutdownTimeout || 10000;
         const startTime = Date.now();
 
-        this.logger.info( `Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
-            type           : 'server_shutdown',
-            activeRequests : this.activeRequests,
-            timeout
-        });
+        if( this.options.logs ) 
+        {
+            this.logger.info( `Waiting for ${this.activeRequests} active requests to finish (Timeout: ${timeout}ms)...`, {
+                type           : 'server_shutdown',
+                activeRequests : this.activeRequests,
+                timeout
+            });
+        }
 
         const checkActive = async () => 
         {
@@ -389,11 +395,14 @@ export class Server extends EventEmitter
             {
                 if( Date.now() - startTime > timeout ) 
                 {
-                    this.logger.warn( `Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
-                        type           : 'server_shutdown',
-                        reason         : 'timeout',
-                        activeRequests : this.activeRequests
-                    });
+                    if( this.options.logs ) 
+                    {
+                        this.logger.warn( `Shutdown timed out after ${timeout}ms. Force killing ${this.activeRequests} remaining requests.`, {
+                            type           : 'server_shutdown',
+                            reason         : 'timeout',
+                            activeRequests : this.activeRequests
+                        });
+                    }
                     break;
                 }
                 await new Promise( r => setTimeout( r, 100 ));
@@ -403,10 +412,13 @@ export class Server extends EventEmitter
         await checkActive();
         await MetadataStore.invokeHook( 'onApplicationShutdown', signal );
 
-        this.logger.info( 'Shutdown complete. Goodbye!', {
-            type   : 'server_shutdown',
-            reason : 'complete'
-        });
+        if( this.options.logs ) 
+        {
+            this.logger.info( 'Shutdown complete. Goodbye!', {
+                type   : 'server_shutdown',
+                reason : 'complete'
+            });
+        }
 
         this.internalEmit( 'shutdown' );
     
@@ -444,20 +456,26 @@ export class Server extends EventEmitter
         const { port } = this.options;
         const runtime = this.detectRuntime();
 
-        this.logger.info( `📡 Runtime Detected: ${runtime}`, {
-            type : 'server_start',
-            runtime
-        });
+        if( this.options.logs ) 
+        {
+            this.logger.info( `📡 Runtime Detected: ${runtime}`, {
+                type : 'server_start',
+                runtime
+            });
+        }
 
         this.serverAdapter = this.selectAdapter( runtime );
         await this.serverAdapter.listen( port, this.fetch, this.options.tls );
 
         const protocol = this.options.tls ? 'https' : 'http';
-        this.logger.info( `${runtime} server running at ${protocol}://localhost:${port}`, {
-            type : 'server_start',
-            runtime,
-            port
-        });
+        if( this.options.logs ) 
+        {
+            this.logger.info( `${runtime} server running at ${protocol}://localhost:${port}`, {
+                type : 'server_start',
+                runtime,
+                port
+            });
+        }
 
         await MetadataStore.invokeHook( 'onApplicationBootstrap' );
         this.internalEmit( 'start', port );
@@ -775,10 +793,13 @@ export class Server extends EventEmitter
         catch ( err: any ) 
         {
             this.internalEmit( 'error', err );
-            this.logger.error( `Server Error: ${err.message}`, {
-                type  : 'error',
-                error : err
-            });
+            if( this.options.logs ) 
+            {
+                this.logger.error( `Server Error: ${err.message}`, {
+                    type  : 'error',
+                    error : err
+                });
+            }
 
             if( this.options.logs ) 
             {
