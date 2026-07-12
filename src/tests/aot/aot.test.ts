@@ -904,7 +904,7 @@ describe( 'Actual AOT Integration Test', () =>
         it( 'should throw compile error if @Peer is called with parentheses', async () => 
         {
             const { transformer, createRegistry } = await import( '../../compiler/transformer.js' );
-            const ts = await import( 'typescript' );
+            const ts = (await import( '../../compiler/ts.js' )).default;
             const fs = await import( 'fs' );
             const path = await import( 'path' );
 

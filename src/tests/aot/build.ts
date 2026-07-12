@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import ts from '../../compiler/ts.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import compilerPlugin, { transformer, createRegistry, generateManifestCode } from '../../compiler/transformer.js';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import ts from 'typescript';
+import ts from '../compiler/ts.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import compilerPlugin from '../compiler/transformer.js';
