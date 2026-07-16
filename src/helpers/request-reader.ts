@@ -6,8 +6,10 @@ export class RequestReader
 {
     public static async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
     {
-        if( req._json !== undefined ) { return req._json }
+        if( '_json' in req ) { return req._json }
         const raw = await this.getRawBody( req, securityConfig );
+
+        if( !raw.byteLength ){ return req._json = undefined }
 
         return req._json = JSON.parse( new TextDecoder().decode( raw ));
     }

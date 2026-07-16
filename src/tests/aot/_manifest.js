@@ -98,25 +98,7 @@ var __val_12886f9d00055adf = validators.number;
 var __val_04c78f82f98a8cf4 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["name", "age"], "User"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["name", "age"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["age", false, __val_12886f9d00055adf]
@@ -133,25 +115,7 @@ var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_c67915707769fcf5 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: User; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_04c78f82f98a8cf4]
@@ -164,25 +128,7 @@ var __val_6d1570e5b8d6d45a = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_2258654cc0f69d37 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["type", "val"], "{ type: \"simple\"; val: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["type", "val"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["type", false, __val_6d1570e5b8d6d45a],
         ["val", false, __val_473287f8298dba71]
@@ -197,25 +143,7 @@ var __val_e5da2f9fabafe20e = (v, path, ctx) => validators.array(v, path, ctx, __
 var __val_b421a9236dfde58e = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["id", "tags"], "{ id: number; tags: string[]; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["id", "tags"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["tags", false, __val_e5da2f9fabafe20e]
@@ -226,25 +154,7 @@ var __val_b421a9236dfde58e = (v, path, ctx) => {
 var __val_5c5ed695091ba342 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["type", "data"], "{ type: \"complex\"; data: { id: number; tags: string[]; }; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["type", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["type", false, __val_68056e96638382b6],
         ["data", false, __val_b421a9236dfde58e]
@@ -257,25 +167,7 @@ var __val_a41824426b6b1ede = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_d74cefa44e345d17 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MyUnion; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_a41824426b6b1ede]
@@ -286,25 +178,7 @@ var __val_d74cefa44e345d17 = (v, path, ctx) => {
 var __val_55e3fcb8d722f805 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["reason"], "{ reason: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["reason"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["reason", false, __val_473287f8298dba71]
     ]);
@@ -320,25 +194,7 @@ var __val_857204a536cb022c = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_2d6ea820a293bacf = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "s"], "{ success: boolean; s: Status; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "s"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["s", false, __val_857204a536cb022c]
@@ -353,25 +209,7 @@ var __val_8c1c1b2d325f9de6 = (v, path, ctx) => validators.array(v, path, ctx, __
 var __val_a042f9877fc2376a = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MixedArray; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_8c1c1b2d325f9de6]
@@ -386,25 +224,7 @@ var __val_ca383f8818520f0b = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_68aecd6fa646cade = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["id", "user", "tags"], "Nested"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["id", "user", "tags"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["user", true, __val_ca383f8818520f0b],
@@ -416,25 +236,7 @@ var __val_68aecd6fa646cade = (v, path, ctx) => {
 var __val_f0ac6e3a29009cf1 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Nested; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_68aecd6fa646cade]
@@ -445,25 +247,7 @@ var __val_f0ac6e3a29009cf1 = (v, path, ctx) => {
 var __val_1ecb4c157494e4eb = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["a"], "{ a: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["a"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["a", false, __val_473287f8298dba71]
     ]);
@@ -473,25 +257,7 @@ var __val_1ecb4c157494e4eb = (v, path, ctx) => {
 var __val_5a59b4127f6bdb93 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["b"], "{ b: number; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["b"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["b", false, __val_12886f9d00055adf]
     ]);
@@ -512,25 +278,7 @@ var __val_f28f8acf7e68cbfd = (v, path, ctx) => {
 var __val_0d157d33684c0018 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Intersection; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_f28f8acf7e68cbfd]
@@ -543,25 +291,7 @@ var __val_85a41b63d9a32b8b = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_0084393b0d7248e4 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "status"], "{ success: boolean; status: \"active\" | \"inactive\"; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "status"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["status", false, __val_85a41b63d9a32b8b]
@@ -572,25 +302,7 @@ var __val_0084393b0d7248e4 = (v, path, ctx) => {
 var __val_d9bb28ea073c815e = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "tags"], "{ success: boolean; tags: string[]; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "tags"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["tags", false, __val_e5da2f9fabafe20e]
@@ -607,25 +319,7 @@ var __val_75d012fe28656e0a = validators.bigint;
 var __val_dfd1002a464a1dbf = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "age", "active", "date", "pattern", "big"], "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "age", "active", "date", "pattern", "big"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["age", false, __val_12886f9d00055adf],
@@ -640,25 +334,7 @@ var __val_dfd1002a464a1dbf = (v, path, ctx) => {
 var __val_91d782a2d0de1354 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["name", "active"], "{ name: string; active: boolean; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["name", "active"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["active", false, __val_ced862ef1505bc73]
@@ -669,25 +345,7 @@ var __val_91d782a2d0de1354 = (v, path, ctx) => {
 var __val_d979aa00a685cb05 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "user"], "{ success: boolean; user: { name: string; active: boolean; }; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "user"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["user", false, __val_91d782a2d0de1354]
@@ -716,25 +374,7 @@ var __val_1e1a258db2184d0e = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_87e266a791052d41 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "val", "type"], "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "val", "type"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["val", false, __val_affb28566d707e35],
@@ -748,25 +388,7 @@ var __val_9a141e74a6c02429 = (v, path, ctx) => validators.templateLiteral(v, pat
 var __val_6b50e5736cb6bb55 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "id"], "{ success: boolean; id: `id-${number}`; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "id"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["id", false, __val_9a141e74a6c02429]
@@ -801,25 +423,7 @@ var __val_1571502a4cf29710 = (v, path, ctx) => {
 var __val_00069fea01d8de1c = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "pass", "age"], "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "pass", "age"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["pass", false, __val_0caecfe8699f25b8],
@@ -843,25 +447,7 @@ var __val_deea648a08085b8a = (v, path, ctx) => {
 var __val_bfe717a7435044d9 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["val"], "CustomUser"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["val"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["val", false, __val_deea648a08085b8a]
     ]);
@@ -871,25 +457,7 @@ var __val_bfe717a7435044d9 = (v, path, ctx) => {
 var __val_6fb78ae896df3d55 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: CustomUser; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success", "data"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_bfe717a7435044d9]
@@ -900,25 +468,7 @@ var __val_6fb78ae896df3d55 = (v, path, ctx) => {
 var __val_b237870e8da1ad64 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["message"], "{ message: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["message"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["message", false, __val_473287f8298dba71]
     ]);
@@ -964,25 +514,7 @@ var __val_c5049313b5648c12 = (v, path, ctx) => {
 var __val_3e8eb7c863774273 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["min", "max", "mult"], "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["min", "max", "mult"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["min", false, __val_f5cefde6f4184d0a],
         ["max", false, __val_8a71b293078b363b],
@@ -1030,25 +562,7 @@ var __val_40fff573e6b6d78e = (v, path, ctx) => {
 var __val_7ce81cd8a307e08c = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["email", "uuid", "date"], "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string & Format<\"date\", string>; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["email", "uuid", "date"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["email", false, __val_6fa566a829e910e4],
         ["uuid", false, __val_f1fa4c95a2fd1510],
@@ -1087,25 +601,7 @@ var __val_5a6f5d9e825bc197 = (v, path, ctx) => {
 var __val_d6749fa8772de8dd = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["msg", "dbUrl", "logged"], "{ msg: string; dbUrl: string; logged: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["msg", "dbUrl", "logged"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["msg", false, __val_473287f8298dba71],
         ["dbUrl", false, __val_473287f8298dba71],
@@ -1117,25 +613,7 @@ var __val_d6749fa8772de8dd = (v, path, ctx) => {
 var __val_ab68d46bd18d4a0a = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["dbUrl"], "{ dbUrl: string; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["dbUrl"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["dbUrl", false, __val_473287f8298dba71]
     ]);
@@ -1145,25 +623,7 @@ var __val_ab68d46bd18d4a0a = (v, path, ctx) => {
 var __val_e955dd67e417e2f5 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["success"], "{ success: boolean; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["success"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73]
     ]);
@@ -1173,25 +633,7 @@ var __val_e955dd67e417e2f5 = (v, path, ctx) => {
 var __val_ccb10958b6aa7739 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["a", "b"], "SumPayload"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["a", "b"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["a", false, __val_12886f9d00055adf],
         ["b", false, __val_12886f9d00055adf]
@@ -1206,25 +648,7 @@ var __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_8ee319793d943d85 = (v, path, ctx) => {
     if (!validators.object(v, path, ctx, ["one", "two"], "{ one: string | null; two: string | null; }"))
         return v;
-    let data = v;
-    if (ctx.mode === "strip") {
-        let hasAdditional = false;
-        const keys = Object.keys(v);
-        const allowed = ["one", "two"];
-        if (keys.length > allowed.length) {
-            hasAdditional = true;
-        }
-        else {
-            for (let i = 0; i < keys.length; i++) {
-                if (!allowed.includes(keys[i])) {
-                    hasAdditional = true;
-                    break;
-                }
-            }
-        }
-        if (hasAdditional)
-            data = {};
-    }
+    const data = ctx.mode === "strip" ? {} : v;
     validators.props(v, data, path, ctx, [
         ["one", false, __val_6bd4d7da4d0dd205],
         ["two", false, __val_6bd4d7da4d0dd205]

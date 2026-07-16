@@ -290,6 +290,111 @@ describe( 'Server & Metadata', () =>
             expect( body1 ).toBe( body2 ); // Should be the same reference (cached)
         });
 
+        it( 'should return undefined for empty body instead of throwing JSON.parse error', async () => 
+        {
+            const server = new Server({ port : 3000 });
+            const req: any = new Request( 'http://localhost/', { method : 'POST' });
+            
+            const body = await ( server as any ).getBody( req );
+
+            expect( body ).toBeUndefined();
+        });
+
+        it( 'should cache undefined body on repeated calls', async () => 
+        {
+            const server = new Server({ port : 3000 });
+            const req: any = new Request( 'http://localhost/', { method : 'POST' });
+            
+            const body1 = await ( server as any ).getBody( req );
+            const body2 = await ( server as any ).getBody( req );
+
+            expect( body1 ).toBeUndefined();
+            expect( body2 ).toBeUndefined();
+        });
+
+        it( 'should pass undefined to handler when body param has no validator and no body is sent', async () => 
+        {
+            const ctrl = { echo : vi.fn(( body: any ) => ({ received : body })) };
+            MetadataStore.registerController( 'EmptyBodyCtrl', ctrl );
+            MetadataStore.registerEndpoint({
+                controller   : 'EmptyBodyCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/empty-body',
+                params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
+            });
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+            
+            const res = await server.fetch( new Request( 'http://localhost/empty-body', { method : 'POST' }));
+
+            expect( res.status ).toBe( 200 );
+            expect( ctrl.echo ).toHaveBeenCalledWith( undefined );
+        });
+
+        it( 'should pass validation when optional body (union with undefined) is not sent', async () => 
+        {
+            const optionalBodyValidator = ( v: any, path: string, ctx: any ) => 
+            {
+                return validators.union( v, path, ctx, [
+                    ( v: any, p: string, c: any ) => 
+                    {
+                        if( !validators.object( v, p, c, ['name'])) { return v }
+                        validators.props( v, v, p, c, [
+                            ['name', false, validators.string]
+                        ]);
+
+                        return v;
+                    },
+                    validators.undefined
+                ]);
+            };
+
+            MetadataStore.registerController( 'OptBodyCtrl', {
+                test : ( body: any ) => ({ received : body })
+            });
+            MetadataStore.registerEndpoint({
+                controller   : 'OptBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/opt-body',
+                params       : [{ source : 'Body', validator : optionalBodyValidator, mode : 'strict' }],
+                guards       : [], interceptors : [], meta         : {}
+            });
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+
+            const res = await server.fetch( new Request( 'http://localhost/opt-body', { method : 'POST' }));
+
+            expect( res.status ).toBe( 200 );
+            const data = await res.json();
+            expect( data.received ).toBeUndefined(); // undefined values are omitted from JSON
+        });
+
+        it( 'should return 400 when required body validator fails on empty body', async () => 
+        {
+            const requiredBodyValidator = ( v: any, path: string, ctx: any ) => 
+            {
+                if( !validators.object( v, path, ctx, ['name'])) { return v }
+                validators.props( v, v, path, ctx, [
+                    ['name', false, validators.string]
+                ]);
+
+                return v;
+            };
+
+            MetadataStore.registerController( 'ReqBodyCtrl', {
+                test : ( body: any ) => body
+            });
+            MetadataStore.registerEndpoint({
+                controller   : 'ReqBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/req-body',
+                params       : [{ source : 'Body', validator : requiredBodyValidator, mode : 'strict' }],
+                guards       : [], interceptors : [], meta         : {}
+            });
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+
+            const res = await server.fetch( new Request( 'http://localhost/req-body', { method : 'POST' }));
+
+            expect( res.status ).toBe( 400 );
+            const data = await res.json();
+            expect( data.success ).toBe( false );
+        });
+
         it( 'should handle server errors gracefully', async () => 
         {
             const ctrl = { boom : () => { throw new Error( 'Boom' ) } };
