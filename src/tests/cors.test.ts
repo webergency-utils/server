@@ -174,4 +174,150 @@ describe( 'CORS Integration & Runtime Tests', () =>
         expect( preflightRes.status ).toBe( 204 );
         expect( preflightRes.headers.get( 'Access-Control-Allow-Headers' )).toBe( 'content-type, x-custom-token, x-custom-user' );
     });
+
+    it( 'should handle additional CORS options such as exposedHeaders, maxAge, and fallback allowedHeaders', async () => 
+    {
+        class AdditionalCorsController 
+        {
+            getData() { return 'ok' }
+        }
+        MetadataStore.registerController( 'AdditionalCorsController', new AdditionalCorsController());
+
+        MetadataStore.registerEndpoint({
+            controller   : 'AdditionalCorsController',
+            methodName   : 'getData',
+            httpMethod   : 'GET',
+            path         : '/additional-cors',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            cors         : {
+                origin         : '*',
+                allowedHeaders : ['Content-Type', 'X-Allowed-Fallback'],
+                exposedHeaders : ['X-Exposed-1', 'X-Exposed-2'],
+                maxAge         : 86400
+            },
+            meta : {}
+        });
+
+        MetadataStore.registerEndpoint({
+            controller   : 'AdditionalCorsController',
+            methodName   : 'getData',
+            httpMethod   : 'POST',
+            path         : '/additional-cors-string',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            cors         : {
+                origin         : '*',
+                exposedHeaders : 'X-Single-Exposed'
+            },
+            meta : {}
+        });
+
+        MetadataStore.registerEndpoint({
+            controller   : 'AdditionalCorsController',
+            methodName   : 'getData',
+            httpMethod   : 'PUT',
+            path         : '/additional-cors-specific-origin',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            cors         : {
+                origin : 'https://specific.com'
+            },
+            meta : {}
+        });
+
+        MetadataStore.registerEndpoint({
+            controller   : 'AdditionalCorsController',
+            methodName   : 'getData',
+            httpMethod   : 'DELETE',
+            path         : '/additional-cors-credentials-wildcard',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            cors         : {
+                origin      : '*',
+                credentials : true
+            },
+            meta : {}
+        });
+
+        MetadataStore.registerEndpoint({
+            controller   : 'AdditionalCorsController',
+            methodName   : 'getData',
+            httpMethod   : 'POST',
+            path         : '/additional-cors-methods-fn',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            cors         : {
+                origin  : '*',
+                methods : ( m: string ) => m === 'POST'
+            },
+            meta : {}
+        });
+
+        const server = new Server({ port : 0 });
+        ( server as any ).init();
+
+        // 1. Preflight OPTIONS request without Access-Control-Request-Headers
+        const preflight = new Request( 'http://localhost/additional-cors', {
+            method  : 'OPTIONS',
+            headers : {
+                'Origin'                         : 'https://any.com',
+                'Access-Control-Request-Method'  : 'GET'
+            }
+        });
+        const preflightRes = await server.fetch( preflight );
+        expect( preflightRes.status ).toBe( 204 );
+        expect( preflightRes.headers.get( 'Access-Control-Allow-Headers' )).toBe( 'Content-Type, X-Allowed-Fallback' );
+        expect( preflightRes.headers.get( 'Access-Control-Max-Age' )).toBe( '86400' );
+
+        // 2. Actual request checking exposedHeaders as array
+        const req = new Request( 'http://localhost/additional-cors', {
+            headers : { 'Origin' : 'https://any.com' }
+        });
+        const res = await server.fetch( req );
+        expect( res.status ).toBe( 200 );
+        expect( res.headers.get( 'Access-Control-Expose-Headers' )).toBe( 'X-Exposed-1, X-Exposed-2' );
+
+        // 3. Actual request checking exposedHeaders as string
+        const req2 = new Request( 'http://localhost/additional-cors-string', {
+            method  : 'POST',
+            headers : { 'Origin' : 'https://any.com' }
+        });
+        const res2 = await server.fetch( req2 );
+        expect( res2.status ).toBe( 200 );
+        expect( res2.headers.get( 'Access-Control-Expose-Headers' )).toBe( 'X-Single-Exposed' );
+
+        // 4. Request with no Origin header when origin config is '*' (should fallback to '*')
+        const reqNoOriginWildcard = new Request( 'http://localhost/additional-cors' );
+        const resNoOriginWildcard = await server.fetch( reqNoOriginWildcard );
+        expect( resNoOriginWildcard.headers.get( 'Access-Control-Allow-Origin' )).toBe( '*' );
+
+        // 5. Request with no Origin header when origin config is a specific string
+        const reqNoOriginSpecific = new Request( 'http://localhost/additional-cors-specific-origin', { method : 'PUT' });
+        const resNoOriginSpecific = await server.fetch( reqNoOriginSpecific );
+        expect( resNoOriginSpecific.headers.get( 'Access-Control-Allow-Origin' )).toBe( 'https://specific.com' );
+
+        // 6. Request with credentials and origin '*' without origin header
+        const reqCredentialsNoOrigin = new Request( 'http://localhost/additional-cors-credentials-wildcard', { method : 'DELETE' });
+        const resCredentialsNoOrigin = await server.fetch( reqCredentialsNoOrigin );
+        expect( resCredentialsNoOrigin.headers.get( 'Access-Control-Allow-Origin' )).toBeNull();
+
+        // 7. Preflight OPTIONS request where methods config is a function
+        const preflightMethodsFn = new Request( 'http://localhost/additional-cors-methods-fn', {
+            method  : 'OPTIONS',
+            headers : {
+                'Origin'                         : 'https://any.com',
+                'Access-Control-Request-Method'  : 'POST'
+            }
+        });
+        const resMethodsFn = await server.fetch( preflightMethodsFn );
+        expect( resMethodsFn.status ).toBe( 204 );
+        expect( resMethodsFn.headers.get( 'Access-Control-Allow-Methods' )).toBe( 'POST' );
+    });
 });
+

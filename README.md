@@ -1,31 +1,60 @@
 # @webergency-utils/server
 
-**Zero-Reflection AOT Server Engine.**
+[![npm version](https://img.shields.io/npm/v/@webergency-utils/server.svg)](https://www.npmjs.com/package/@webergency-utils/server)
+[![Maintenance](https://img.shields.io/badge/maintenance-active-brightgreen.svg)](#maintenance)
+[![npm downloads](https://img.shields.io/npm/dm/@webergency-utils/server.svg)](https://www.npmjs.com/package/@webergency-utils/server)
+[![License](https://img.shields.io/npm/l/@webergency-utils/server.svg)](LICENSE)
 
 A high-performance, industrial-grade web server framework designed for the modern JavaScript ecosystem. Built on a "Zero-Reflection" philosophy, it offloads metadata discovery and validation to a compile-time transformer, resulting in near-instant startups and zero runtime overhead.
 
 ---
 
-## 🚀 Key Features
+## TL;DR
 
-- **Ahead-of-Time (AOT) Transformation**: No `reflect-metadata` required. Routing and validation are "baked" into the code at build time.
-- **Zero Runtime Overhead**: Validation is unrolled into optimized, zero-allocation property checks via `@webergency-utils/typechecker`.
-- **Multi-Runtime Native**: Run the same codebase on **Node.js**, **Bun**, and **Deno** with automatic runtime detection.
-- **Web Standard Foundation**: Built on the standard **Fetch API** (`Request`/`Response`).
-- **Full Data Streaming**: Native support for request and response streaming across all runtimes.
-- **Strict Validation Modes**: Granular control over data integrity with `strict`, `relaxed`, and `strip` modes.
+```typescript
+import { Controller, Get, Post, Body, Param, Server } from '@webergency-utils/server';
+
+interface User {
+  id: string;
+  name: string;
+}
+
+@Controller('/users')
+export class UserController {
+  @Get('/:id')
+  getUser(@Param('id') id: string) {
+    return { id, name: 'Alice' };
+  }
+
+  @Post()
+  createUser(@Body('strip') user: User) {
+    return user;
+  }
+}
+
+// Start the server (automatically detects runtimes like Bun, Deno, or Node.js)
+const server = new Server({
+  port: 3000,
+  controllers: [UserController]
+});
+
+await server.start();
+```
 
 ---
 
-## 📦 Installation
+## Installation & Setup
+
+Install the core package along with development dependencies (TypeScript compiler transformer components):
 
 ```bash
 npm install @webergency-utils/server
 npm install -D typescript ts-patch @webergency-utils/typechecker
 ```
 
-### ⚙️ tsconfig.json Setup
-Enable AOT routing and validation by adding `@webergency-utils/server/transformer` to your compiler plugins:
+### `tsconfig.json` Configuration
+
+Enable ahead-of-time (AOT) routing and validation by registering the server plugin transformer in your compiler options:
 
 ```json
 {
@@ -43,49 +72,81 @@ Enable AOT routing and validation by adding `@webergency-utils/server/transforme
 
 ---
 
-## 🛠️ Usage
+## Architecture & Internals
 
-### 1. Define your Controller
-Write standard, type-safe controllers using decorators. Route mapping and parameter validations are injected in-flight at compile time.
+The framework is built on a clean decoupling of compile-time logic and runtime abstraction:
+
+1. **Ahead-of-Time (AOT) Compiler Transformer:** AST transformations run during build/transpilation time. The transformer unrolls decorator metadata, registers routes, and compiles `@webergency-utils/typechecker` validators into inline binary/property checks directly. This eliminates dynamic reflection (`reflect-metadata`) and minimizes runtime startup latency.
+2. **Runtime HTTP Adapters:** The framework natively adopts Web Standard `Request` and `Response` fetch boundaries. A thin native bridge maps routing requests to runtime-specific server utilities (`Bun.serve`, `Deno.serve`, or Node's `http.createServer`).
+3. **Execution Pipeline:** Incoming requests are routed via a highly-optimized radix router, passed through middlewares, checked against class and method-level guards, intercepted by response adapters, and finally handled by controller endpoints.
+
+---
+
+## Glossary
+
+* **Controller:** A decorated class that groups related HTTP routes and provides Dependency Injection scopes.
+* **Endpoint:** An individual handler method within a controller mapped to an HTTP verb and path.
+* **Validation Mode:** A setting (`strict`, `strip`, or `relaxed`) controlling how type mismatches and extra body/query parameters are validated.
+* **Radix Router:** The underlying tree-structured matcher used for fast parameter route resolution.
+* **Server Adapter:** A bridge mapping web standard Fetch API objects to native runtime socket/HTTP engines.
+
+---
+
+## API Reference
+
+### Classes
+
+#### `Server`
+The main class to orchestrate, initialize, and start the application server.
+
+**Options Config Interface (`ServerOptions`):**
+* `port` (`number`): Port to bind the server to.
+* `controllers` (`any[]`): Array of controller classes to register.
+* `cors?` (`CorsOptions`): Server-wide Cross-Origin Resource Sharing rules.
+* `security?` (`SecurityOptions | boolean`): Global security settings (e.g. allowed content types).
+* `tls?` (`TlsOptions`): mTLS cert configuration keys.
 
 ```typescript
-import { Controller, Get, Post, Body, Param } from '@webergency-utils/server';
-
-interface User {
-  id: string;
-  name: string;
-}
-
-@Controller('/users')
-export class UserController {
-  @Get('/:id')
-  getUser(@Param('id') id: string) {
-    return { id, name: 'Alice' };
-  }
-
-  @Post()
-  // 'strip' mode automatically removes unknown properties from the body
-  createUser(@Body('strip') user: User) {
-    return user;
-  }
-}
-```
-
-### 2. Start the Server
-The `Server` class automatically picks up the in-flight self-registered controllers at load time. Simply import your controllers and start the server!
-
-```typescript
-import { Server } from '@webergency-utils/server';
-import { UserController } from './UserController.js';
-
-const server = new Server({
-  port: 3000,
-  controllers: [UserController]
-});
-
+const server = new Server({ port: 3000, controllers: [UserController] });
 await server.start();
+await server.shutdown();
 ```
 
+---
+
+### Parameter Decorators (Strict - Parentheses-Free)
+
+These decorators inject context variables directly into endpoint handler arguments. **Must be called without parentheses.**
+
+* **`@Request`**: Injects the raw web standard `Request` object.
+* **`@Context`**: Injects the current request execution context.
+* **`@Response`**: Injects the custom response mapping wrapper.
+* **`@Headers`**: Injects the request headers map.
+* **`@Ip`**: Injects the caller IP address.
+* **`@Peer`**: Injects the TLS client certificate information (`PeerCert`) for secure connections.
+* **`@Cookies`**: Injects parsed request cookies as a `Record<string, string>`.
+
+---
+
+### Parameter Decorators (Hybrid / With Arguments)
+
+* **`@Body(mode?)`**: Injects the validated request body. Supports `strict`, `strip` (removes undeclared keys), and `relaxed` validation modes.
+* **`@Query(name?, mode?)`**: Injects a specific query parameter or parses the entire query object.
+* **`@Param(name)`**: Injects a named route path parameter.
+* **`@Header(name)`**: Injects a specific header value.
+* **`@Cookie(name)`**: Injects a specific cookie value.
+* **`@ConnectedSocket()`**: Injects the raw websocket instance for `@Ws` channels.
+
+---
+
+### Route Decorators
+
+Class and method-level route endpoints:
+
+* **`@Controller(path)`**: Declares the base path and scopes for all nested endpoints in the class.
+* **`@Get(path?)` / `@Post(path?)` / `@Put(path?)` / `@Delete(path?)` / `@Patch(path?)` / `@Head(path?)` / `@All(path?)`**: Maps methods to standard HTTP route verbs.
+* **`@Ws(path?, options?)`**: Binds endpoint to a WebSocket connection channel.
+* **`@Sse(path?)`**: Binds endpoint to a Server-Sent Events stream.
 
 ---
 
@@ -93,9 +154,9 @@ await server.start();
 
 Our AOT engine supports three distinct validation modes for `@Body` and `@Query`:
 
-- **`strict` (Default)**: Rejects the request if it contains any properties not defined in your TypeScript interface.
-- **`strip`**: Automatically removes unknown properties, ensuring your controller only receives exactly what's defined in the type.
-- **`relaxed`**: Validates required fields but allows extra properties to pass through.
+* **`strict` (Default)**: Rejects the request if it contains any properties not defined in your TypeScript interface.
+* **`strip`**: Automatically removes unknown properties, ensuring your controller only receives exactly what's defined in the type.
+* **`relaxed`**: Validates required fields but allows extra properties to pass through.
 
 ---
 
@@ -103,28 +164,9 @@ Our AOT engine supports three distinct validation modes for `@Body` and `@Query`
 
 The server is built on the Fetch API, allowing it to run natively anywhere:
 
-- **Bun**: Uses `Bun.serve` for maximum throughput.
-- **Deno**: Uses `Deno.serve` with native Fetch support.
-- **Node.js**: Uses a high-performance bridge to adapt Node's HTTP module to the Fetch API (requires Node 18+).
-
----
-
-## 🔍 Decorator Reference
-
-| Decorator | Description |
-| :--- | :--- |
-| `@Controller(path)` | Defines a base path for the class. |
-| `@Get/Post/Put/Delete(path)` | Defines an HTTP route. |
-| `@Body(mode?)` | Injects and validates the request body. |
-| `@Param(name)` | Injects a path parameter. |
-| `@Query(name?, mode?)` | Injects a specific query parameter or the whole object. |
-| `@Header(name)` | Injects a specific request header. |
-| `@Cookies` | Injects all parsed cookies as a `Record<string, string>` (must be used without parentheses). |
-| `@Cookie(name)` | Injects a specific request cookie value (follows RFC 6265 first-match wins). |
-| `@Ip` | Injects the client IP address (must be used without parentheses). |
-| `@Request` | Injects the standard Web `Request` object (must be used without parentheses). |
-| `@RawBody` | Injects the body as an `ArrayBuffer` (lazy/cached) (must be used without parentheses). |
-| `@Peer` | Injects client certificate info (as `PeerCert`) for mTLS connections (must be used without parentheses). |
+* **Bun**: Uses `Bun.serve` for maximum throughput.
+* **Deno**: Uses `Deno.serve` with native Fetch support.
+* **Node.js**: Uses a high-performance bridge to adapt Node's HTTP module to the Fetch API (requires Node 18+).
 
 ---
 
@@ -168,7 +210,7 @@ export class SecureController {
       message: `Hello ${cert.subject.CN}!`,
       organization: cert.subject.O,
       validTo: cert.valid.to,
-      serial: cert.serial // or cert.serialNumber
+      serial: cert.serial
     };
   }
 }
@@ -176,6 +218,10 @@ export class SecureController {
 
 ---
 
-## 📜 License
+## Maintenance
 
-MIT
+This package is actively maintained.
+
+Bug reports and pull requests are welcome. Security issues and critical
+regressions are prioritized. New features are considered when they align
+with the package's existing scope.

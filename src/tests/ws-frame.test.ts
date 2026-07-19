@@ -7,17 +7,22 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
     {
         const buffer = new SimpleMultibuffer();
         expect( buffer.length ).toBe( 0 );
+        expect(() => buffer.get( 0 )).toThrowError( 'Index out of bounds' );
 
         buffer.append( Buffer.from([1, 2, 3]));
         expect( buffer.length ).toBe( 3 );
         expect( buffer.get( 0 )).toBe( 1 );
         expect( buffer.get( 1 )).toBe( 2 );
         expect( buffer.get( 2 )).toBe( 3 );
+        expect(() => buffer.get( 3 )).toThrowError( 'Index out of bounds' );
 
         buffer.append( Buffer.from([4, 5]));
         expect( buffer.length ).toBe( 5 );
         expect( buffer.get( 3 )).toBe( 4 );
         expect( buffer.get( 4 )).toBe( 5 );
+
+        expect(() => buffer.spliceConcat( 1, 2 )).toThrowError( 'Only spliceConcat starting at 0 is supported' );
+        expect(() => buffer.spliceConcat( 0, 10 )).toThrowError( 'Not enough bytes in buffer' );
 
         const spliced = buffer.spliceConcat( 0, 3 );
         expect( spliced ).toEqual( Buffer.from([1, 2, 3]));
@@ -130,5 +135,64 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
 
         expect( events ).toHaveLength( 1 );
         expect( events[0]).toEqual({ event : 'message', data : largeMessage });
+    });
+
+    it( 'should handle large payloads (length >= 65536) and binary frames', () => 
+    {
+        // Arrange
+        const tx = new SimpleMultibuffer();
+        const payload = Buffer.alloc( 65536 );
+        WebsocketFrame.write( tx, payload, { mask : true });
+
+        const rx = new SimpleMultibuffer();
+        rx.append( tx.spliceConcat( 0, tx.length ));
+
+        // Act
+        const events: any[] = [];
+        WebsocketFrame.read( rx, ( event, data ) => 
+        {
+            events.push({ event, data });
+        });
+
+        // Assert
+        expect( events ).toHaveLength( 1 );
+        expect( events[0].event ).toBe( 'message' );
+        expect( events[0].data ).toBeInstanceOf( Buffer );
+        expect(( events[0].data as Buffer ).length ).toBe( 65536 );
+    });
+
+    it( 'should wait for full payload if header is parsed but payload is incomplete', () => 
+    {
+        // Arrange
+        const tx = new SimpleMultibuffer();
+        WebsocketFrame.write( tx, 'hello', { mask : false });
+
+        // Slice only the header (2 bytes) and part of the payload (2 bytes out of 5)
+        const partial = tx.spliceConcat( 0, 4 );
+
+        const rx = new SimpleMultibuffer();
+        rx.append( partial );
+
+        // Act & Assert 1: Incomplete payload
+        const events: any[] = [];
+        WebsocketFrame.read( rx, ( event, data ) => 
+        {
+            events.push({ event, data });
+        });
+
+        expect( events ).toHaveLength( 0 );
+        expect( rx.length ).toBe( 4 );
+
+        // Act & Assert 2: Remaining payload appended
+        const rest = tx.spliceConcat( 0, tx.length );
+        rx.append( rest );
+
+        WebsocketFrame.read( rx, ( event, data ) => 
+        {
+            events.push({ event, data });
+        });
+
+        expect( events ).toHaveLength( 1 );
+        expect( events[0]).toEqual({ event : 'message', data : 'hello' });
     });
 });

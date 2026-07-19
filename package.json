@@ -1,7 +1,8 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
+  "license": "MIT",
   "type": "module",
   "author": "radixxko",
   "main": "dist/index.js",
@@ -19,13 +20,13 @@
     "README.md"
   ],
   "scripts": {
-    "clean": "rm -rf ./dist/* node_modules package-lock.json && npm i",
-    "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\"",
-    "build": "npm run clean && tsc -p tsconfig.build.json && node update_imports.js",
+    "lint": "eslint .",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "version": "npm run build && npm publish --access public && npm run commit && git push",
-    "lint": "eslint ."
+    "coverage": "vitest run --coverage",
+    "clean": "rm -rf ./dist/* node_modules package-lock.json && npm i",
+    "build": "npm run clean && tsc -p tsconfig.build.json && node update_imports.js",
+    "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\"",
+    "version": "npm run build && npm publish --access public && npm run commit && git push"
   },
   "repository": {
     "type": "git",
@@ -36,7 +37,7 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.1.9"
+    "@webergency-utils/typechecker": "^0.1.10"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
