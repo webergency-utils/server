@@ -677,7 +677,10 @@ export class Server extends EventEmitter
                             const { RequestProcessor } = await import( './core/request-processor.js' );
                             guardArgs.push( await RequestProcessor.resolveParam( p, req, ctx, undefined, guardModule ));
                         }
-                        else if( p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject' ) 
+                        else if([
+                            'Param', 'Body', 'Header', 'Headers', 'Cookies', 'Cookie',
+                            'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
+                        ].includes( p.source )) 
                         {
                             const { RequestProcessor } = await import( './core/request-processor.js' );
                             guardArgs.push( await RequestProcessor.resolveParam( p, req, ctx, undefined, guardModule ));

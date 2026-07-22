@@ -522,7 +522,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
 
                                 if( ts.isCallExpression( e )) 
                                 {
-                                    if( dName === 'Peer' || dName === 'Cookies' ) 
+                                    if([ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'Request', 'Context', 'Response' ].includes( dName )) 
                                     {
                                         const { line, character } = ts.getLineAndCharacterOfPosition( sourceFile, e.getStart());
                                         throw new Error( `[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Decorator "@${dName}" must not be called with parentheses. Use "@${dName}" instead of "@${dName}()".` );
@@ -547,7 +547,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                                             vMode = e.arguments[1].text as any;
                                         }
                                     }
-                                    else if( dName !== 'Peer' && dName !== 'Cookies' && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
+                                    else if( ![ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'Request', 'Context', 'Response' ].includes( dName ) && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
                                     {
                                         pName = e.arguments[0].text;
                                     }

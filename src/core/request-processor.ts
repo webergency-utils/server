@@ -288,7 +288,10 @@ export class RequestProcessor
                         {
                             guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
                         }
-                        else if( p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject' ) 
+                        else if([
+                            'Param', 'Body', 'Header', 'Headers', 'Cookies', 'Cookie',
+                            'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
+                        ].includes( p.source )) 
                         {
                             guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
                         }
@@ -416,7 +419,10 @@ export class RequestProcessor
                     {
                         guardArgs.push( await this.resolveParam( p, req, ctx, undefined, guardModule ));
                     }
-                    else if( p.source === 'Param' || p.source === 'Body' || p.source === 'Header' || p.source === 'Query' || p.source === 'Context' || p.source === 'Inject' ) 
+                    else if([
+                        'Param', 'Body', 'Header', 'Headers', 'Cookies', 'Cookie',
+                        'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
+                    ].includes( p.source )) 
                     {
                         guardArgs.push( await this.resolveParam( p, req, ctx, undefined, guardModule ));
                     }

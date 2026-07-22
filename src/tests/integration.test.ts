@@ -207,4 +207,78 @@ describe( 'Actual Server & Controllers Integration', () =>
             expect( await res.json()).toBe( 100 );
         });
     });
+
+    describe( 'Guard Parameter Resolution', () => 
+    {
+        it( 'should resolve @Cookies, @Cookie, @Headers, @Ip, @Url, @Hostname, @Path in guards', async () => 
+        {
+            let capturedGuardArgs: any[] = [];
+
+            class ParameterGuard 
+            {
+                async use( cookies: any, cookieSession: any, headers: any, ip: any, url: any, hostname: any, path: any ) 
+                {
+                    capturedGuardArgs = [cookies, cookieSession, headers, ip, url, hostname, path];
+
+                    return true;
+                }
+            }
+
+            class GuardTestController 
+            {
+                @Get( '/guarded-endpoint' )
+                testEndpoint() 
+                {
+                    return { ok : true };
+                }
+            }
+
+            const ctrl = new GuardTestController();
+            MetadataStore.registerController( 'GuardTestController', ctrl );
+            MetadataStore.registerGuard( 'ParameterGuard', ParameterGuard );
+
+            MetadataStore.registerEndpoint({
+                controller   : 'GuardTestController',
+                methodName   : 'testEndpoint',
+                httpMethod   : 'GET',
+                path         : '/guarded-endpoint',
+                params       : [],
+                guards       : [{
+                    name      : 'ParameterGuard',
+                    type      : 'class',
+                    params    : [
+                        { source : 'Cookies' },
+                        { source : 'Cookie', name : 'session' },
+                        { source : 'Headers' },
+                        { source : 'Ip' },
+                        { source : 'Url' },
+                        { source : 'Hostname' },
+                        { source : 'Path' }
+                    ],
+                    resolvers : []
+                }],
+                interceptors : [],
+                meta         : {}
+            });
+
+            ( server as any ).init();
+
+            const res = await server.fetch( new Request( 'http://localhost/guarded-endpoint', {
+                headers : {
+                    'Cookie'          : 'session=abc123xyz; theme=dark',
+                    'X-Custom-Header' : 'test-val'
+                }
+            }));
+
+            expect( res.status ).toBe( 200 );
+            expect( capturedGuardArgs ).toHaveLength( 7 );
+            expect( capturedGuardArgs[0] ).toEqual({ session : 'abc123xyz', theme : 'dark' });
+            expect( capturedGuardArgs[1] ).toBe( 'abc123xyz' );
+            expect( capturedGuardArgs[2]['x-custom-header'] ).toBe( 'test-val' );
+            expect( capturedGuardArgs[3] ).toBe( '127.0.0.1' );
+            expect( capturedGuardArgs[4] ).toBe( 'http://localhost/guarded-endpoint' );
+            expect( capturedGuardArgs[5] ).toBe( 'localhost' );
+            expect( capturedGuardArgs[6] ).toBe( '/guarded-endpoint' );
+        });
+    });
 });
