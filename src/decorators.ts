@@ -112,6 +112,19 @@ export function Payload( arg1?: any, arg2?: any, arg3?: any ): any
     return ( target: any, key: string | symbol, idx: number ) => {}; 
 }
 
+const METADATA_BAG = Symbol.for( 'webergency.server.metadata' );
+
+function ensureMetaBag( host: any ): Record<string | symbol, any>
+{
+    if( !host[METADATA_BAG])
+    {
+        host[METADATA_BAG] = host.__metadata__ || {};
+    }
+    host.__metadata__ = host[METADATA_BAG];
+
+    return host[METADATA_BAG];
+}
+
 export function Meta( ...metas: Record<string, any>[]): any 
 {
     return ( target: any, propertyKey?: string | symbol, descriptor?: TypedPropertyDescriptor<any> ) => 
@@ -121,11 +134,7 @@ export function Meta( ...metas: Record<string, any>[]): any
         // Class decorator
         if( propertyKey === undefined ) 
         {
-            if( !target.__metadata__ ) 
-            {
-                target.__metadata__ = {};
-            }
-            Object.assign( target.__metadata__, mergedMeta );
+            Object.assign( ensureMetaBag( target ), mergedMeta );
 
             return target;
         }
@@ -140,24 +149,17 @@ export function Meta( ...metas: Record<string, any>[]): any
 
         if( targetMethod && typeof targetMethod === 'function' ) 
         {
-            if( !targetMethod.__metadata__ ) 
-            {
-                targetMethod.__metadata__ = {};
-            }
-            Object.assign( targetMethod.__metadata__, mergedMeta );
+            Object.assign( ensureMetaBag( targetMethod ), mergedMeta );
         }
         else 
         {
-            if( !target.__metadata__ ) 
-            {
-                target.__metadata__ = {};
-            }
+            const bag = ensureMetaBag( target );
 
-            if( !target.__metadata__[propertyKey]) 
+            if( !bag[propertyKey as any])
             {
-                target.__metadata__[propertyKey] = {};
+                bag[propertyKey as any] = {};
             }
-            Object.assign( target.__metadata__[propertyKey], mergedMeta );
+            Object.assign( bag[propertyKey as any], mergedMeta );
         }
 
         return descriptor;
@@ -322,6 +324,10 @@ export function Module( metadata: ModuleMetadata ): ClassDecorator
     return ( target: any ) => 
     {
         target.__moduleMetadata__ = metadata;
+        target[Symbol.for( 'webergency.server.module' )] = {
+            ...metadata,
+            global : !!target.__isGlobal__
+        };
     };
 }
 
@@ -333,6 +339,12 @@ export function Global(): ClassDecorator
     return ( target: any ) => 
     {
         target.__isGlobal__ = true;
+        const existing = target[Symbol.for( 'webergency.server.module' )] || target.__moduleMetadata__;
+
+        if( existing )
+        {
+            target[Symbol.for( 'webergency.server.module' )] = { ...existing, global : true };
+        }
     };
 }
 

@@ -1,41 +1,37 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { Server, MetadataStore, Interceptor } from '../../index.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { Server } from '../../index.js';
 import { runAot } from './build.js';
+import { getControllerMeta, getInjectableMeta } from '../../core/symbols.js';
 
-
-
-describe( 'AOT Interceptor Error Sanitization', () => 
+describe( 'AOT Interceptor Error Sanitization', () =>
 {
     let server: Server;
 
-    beforeAll( async () => 
+    beforeAll( async () =>
     {
-        // Build AOT
-        const manifestPath = runAot();
-        MetadataStore.clear();
-
-        // Import manifest
-        await import( `file://${manifestPath}?t=${Date.now()}` );
-        
-        server = new Server({ port : 3001 });
-        ( server as any ).init();
+        const compiled = runAot();
+        const mod = await import( `file://${compiled}?t=${Date.now()}` );
+        const classes = Object.values( mod ).filter( v => typeof v === 'function' ) as any[];
+        const controllers = classes.filter( c => getControllerMeta( c ));
+        const guards = classes.filter( c => getInjectableMeta( c )?.kind === 'guard' );
+        const interceptors = classes.filter( c => getInjectableMeta( c )?.kind === 'interceptor' );
+        const providers = classes.filter( c => getInjectableMeta( c )?.kind === 'provider' );
+        server = new Server({ port : 3001, controllers, guards, interceptors, providers });
     });
 
-    it( 'should sanitize validation errors using interceptor', async () => 
+    it( 'should sanitize validation errors using interceptor', async () =>
     {
-        // Send invalid data to an endpoint that usually returns 400 with details
         const res = await server.fetch( new Request( 'http://localhost/type-safety/strict-intercepted', {
             method  : 'POST',
-            body    : JSON.stringify({ name : 'John', age : 'invalid' }), // Should be number
+            body    : JSON.stringify({ name : 'John', age : 'invalid' }),
             headers : { 'Content-Type' : 'application/json' }
         }));
 
-        // The interceptor should have caught the 400 and returned 500
         expect( res.status ).toBe( 500 );
-        
+
         const data = await res.json();
         expect( data.success ).toBe( false );
         expect( data.message ).toBe( 'Internal Server Error' );
-        expect( data.errors ).toBeUndefined(); // Details are hidden!
+        expect( data.errors ).toBeUndefined();
     });
 });

@@ -1,24 +1,44 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { Server } from '../../server.js';
-import { MetadataStore } from '../../core/metadata.js';
+import { runWithRegistry } from '../../testing.js';
 import { runAot } from './build.js';
+import { getControllerMeta, getInjectableMeta } from '../../core/symbols.js';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname( fileURLToPath( import.meta.url ));
 
-describe( 'Actual AOT Integration Test', () => 
+async function loadAotHosts()
+{
+    const compiled = runAot();
+    const mod = await import( `file://${compiled}?t=${Date.now()}` );
+    const classes = Object.values( mod ).filter( v => typeof v === 'function' ) as any[];
+
+    return {
+        controllers  : classes.filter( c => getControllerMeta( c )),
+        guards       : classes.filter( c => getInjectableMeta( c )?.kind === 'guard' ),
+        interceptors : classes.filter( c => getInjectableMeta( c )?.kind === 'interceptor' ),
+        providers    : classes.filter( c => getInjectableMeta( c )?.kind === 'provider' )
+    };
+}
+
+describe( 'Actual AOT Integration Test', () =>
 {
     let server: Server;
+    let aotHosts: Awaited<ReturnType<typeof loadAotHosts>>;
 
-    beforeAll( async () => 
+    beforeAll( async () =>
     {
-        const manifestPath = runAot();
-        MetadataStore.clear();
-        await import( `file://${manifestPath}?t=${Date.now()}` );
-        server = new Server({ port : 3000 });
-        ( server as any ).init();
+        aotHosts = await loadAotHosts();
+        server = new Server({
+            port         : 3000,
+            controllers  : aotHosts.controllers,
+            guards       : aotHosts.guards,
+            interceptors : aotHosts.interceptors,
+            providers    : aotHosts.providers
+        });
+        server.ensureReady();
     });
 
     it( 'should validate User in STRICT mode', async () => 
@@ -441,14 +461,17 @@ describe( 'Actual AOT Integration Test', () =>
                     getValue() { return 'B' }
                 };
 
-                MetadataStore.registerProvider( 'CircA', CircA );
-                MetadataStore.registerProvider( 'CircB', CircB );
+                runWithRegistry( server.registry, () =>
+                {
+                    server.registry.registerProvider( 'CircA', CircA );
+                    server.registry.registerProvider( 'CircB', CircB );
 
-                const circA = MetadataStore.resolve( 'CircA' );
-                expect( circA ).toBeDefined();
-                expect( circA.b ).toBeDefined();
-                expect( circA.b.a ).toBeDefined();
-                expect( circA.b.a.getValue()).toBe( 'A' );
+                    const circA = server.registry.resolve( 'CircA' );
+                    expect( circA ).toBeDefined();
+                    expect( circA.b ).toBeDefined();
+                    expect( circA.b.a ).toBeDefined();
+                    expect( circA.b.a.getValue()).toBe( 'A' );
+                });
             });
         });
 
@@ -529,18 +552,19 @@ describe( 'Actual AOT Integration Test', () =>
             it( 'should validate and strip RPC return values', async () => 
             {
                 const { RequestProcessor } = await import( '../../core/request-processor.js' );
-                const exactMeta = MetadataStore.getEndpoints().find( ep => ep.methodName === 'rpcExact' )!;
-                const stripMeta = MetadataStore.getEndpoints().find( ep => ep.methodName === 'rpcStrip' )!;
-                const invalidMeta = MetadataStore.getEndpoints().find( ep => ep.methodName === 'rpcInvalid' )!;
+                const exactMeta = server.registry.getEndpoints().find( ep => ep.methodName === 'rpcExact' )!;
+                const stripMeta = server.registry.getEndpoints().find( ep => ep.methodName === 'rpcStrip' )!;
+                const invalidMeta = server.registry.getEndpoints().find( ep => ep.methodName === 'rpcInvalid' )!;
 
-                const resExact = await RequestProcessor.executeRpc( exactMeta, {});
+                const resExact = await runWithRegistry( server.registry, () => RequestProcessor.executeRpc( exactMeta, {}));
                 expect( resExact ).toEqual({ name : 'Dave', age : 40 });
 
-                const resStrip = await RequestProcessor.executeRpc( stripMeta, {});
+                const resStrip = await runWithRegistry( server.registry, () => RequestProcessor.executeRpc( stripMeta, {}));
                 expect( resStrip ).toEqual({ name : 'Eve', age : 45 });
                 expect( resStrip.secret ).toBeUndefined();
 
-                await expect( RequestProcessor.executeRpc( invalidMeta, {})).rejects.toThrow( 'Response validation failed' );
+                await expect( runWithRegistry( server.registry, () => RequestProcessor.executeRpc( invalidMeta, {})))
+                    .rejects.toThrow( 'Response validation failed' );
             });
 
             it( 'should fail validation in strict mode if extra properties are returned', async () => 
@@ -577,13 +601,11 @@ describe( 'Actual AOT Integration Test', () =>
                 expect( data.error ).toContain( 'Response validation failed' );
             });
 
-            it( 'should configure defaultResponseMode when initializing Server', () => 
+            it( 'should configure defaultResponseMode when initializing Server', () =>
             {
                 const s = new Server({ port : 3999, responseMode : 'strict' });
-                expect( MetadataStore.getDefaultResponseMode()).toBe( 'strict' );
-
-                // Reset default response mode
-                MetadataStore.setDefaultResponseMode( 'strip' );
+                s.ensureReady();
+                expect( s.registry.getDefaultResponseMode()).toBe( 'strict' );
             });
         });
 
@@ -591,7 +613,7 @@ describe( 'Actual AOT Integration Test', () =>
         {
             it( 'should support class-level Unprotect removing a specific inherited guard', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-class/test' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unprotected-class/test' )!;
                 expect( ep ).toBeDefined();
                 const guardNames = ep.guards.map( g => g.name );
                 expect( guardNames ).not.toContain( 'SimpleGuard' );
@@ -600,14 +622,14 @@ describe( 'Actual AOT Integration Test', () =>
 
             it( 'should support class-level Unprotect (no params) removing all inherited guards', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-class-all/test' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unprotected-class-all/test' )!;
                 expect( ep ).toBeDefined();
                 expect( ep.guards ).toHaveLength( 0 );
             });
 
             it( 'should support method-level Unprotect removing a specific inherited guard', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-method/one' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unprotected-method/one' )!;
                 expect( ep ).toBeDefined();
                 const guardNames = ep.guards.map( g => g.name );
                 expect( guardNames ).not.toContain( 'SimpleGuard' );
@@ -616,7 +638,7 @@ describe( 'Actual AOT Integration Test', () =>
 
             it( 'should support method-level Unprotect (no params) removing all inherited guards', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unprotected-method/all' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unprotected-method/all' )!;
                 expect( ep ).toBeDefined();
                 expect( ep.guards ).toHaveLength( 0 );
             });
@@ -626,7 +648,7 @@ describe( 'Actual AOT Integration Test', () =>
         {
             it( 'should support class-level Unintercept removing a specific inherited interceptor', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-class/test' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unintercepted-class/test' )!;
                 expect( ep ).toBeDefined();
                 expect( ep.interceptors ).not.toContain( 'SimpleInterceptor' );
                 expect( ep.interceptors ).toContain( 'AnotherInterceptor' );
@@ -634,14 +656,14 @@ describe( 'Actual AOT Integration Test', () =>
 
             it( 'should support class-level Unintercept (no params) removing all inherited interceptors', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-class-all/test' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unintercepted-class-all/test' )!;
                 expect( ep ).toBeDefined();
                 expect( ep.interceptors ).toHaveLength( 0 );
             });
 
             it( 'should support method-level Unintercept removing a specific inherited interceptor', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-method/one' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unintercepted-method/one' )!;
                 expect( ep ).toBeDefined();
                 expect( ep.interceptors ).not.toContain( 'SimpleInterceptor' );
                 expect( ep.interceptors ).toContain( 'AnotherInterceptor' );
@@ -649,7 +671,7 @@ describe( 'Actual AOT Integration Test', () =>
 
             it( 'should support method-level Unintercept (no params) removing all inherited interceptors', () => 
             {
-                const ep = MetadataStore.getEndpoints().find( e => e.path === '/unintercepted-method/all' )!;
+                const ep = server.registry.getEndpoints().find( e => e.path === '/unintercepted-method/all' )!;
                 expect( ep ).toBeDefined();
                 expect( ep.interceptors ).toHaveLength( 0 );
             });
@@ -662,9 +684,16 @@ describe( 'Actual AOT Integration Test', () =>
         let testServer: Server;
         const port = 3888;
 
-        beforeAll( async () => 
+        beforeAll( async () =>
         {
-            testServer = new Server({ port, logs : false });
+            testServer = new Server({
+                port         : port,
+                logs         : false,
+                controllers  : aotHosts.controllers,
+                guards       : aotHosts.guards,
+                interceptors : aotHosts.interceptors,
+                providers    : aotHosts.providers
+            });
             await testServer.start();
         });
 

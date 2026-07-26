@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestProcessor } from '../core/request-processor.js';
-import { MetadataStore } from '../core/metadata.js';
 import { validators } from '@webergency-utils/typechecker';
 import type { AugmentedRequest, ParamMetadata } from '../core/types.js';
 
@@ -42,13 +41,11 @@ describe( 'RequestProcessor.resolveParam', () =>
 {
     beforeEach(() =>
     {
-        MetadataStore.clear();
         vi.clearAllMocks();
     });
 
     it( 'should set from:query for Query params and restore prior from', async () =>
     {
-        // Arrange
         const seen: { from?: unknown, mode?: unknown } = {};
         const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown, mode?: unknown }) =>
         {
@@ -61,10 +58,8 @@ describe( 'RequestProcessor.resolveParam', () =>
         const req = createRequest({ query : { a : '42' } });
         const ctx = { success : true, errors : [], mode : 'strict', from : 'json' };
 
-        // Act
         const result = await RequestProcessor.resolveParam( param, req, ctx );
 
-        // Assert
         expect( result ).toBe( 42 );
         expect( seen.from ).toBe( 'query' );
         expect( ctx.from ).toBe( 'json' );
@@ -73,7 +68,6 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set from:query for Param and Cookie sources', async () =>
     {
-        // Arrange
         const fromValues: unknown[] = [];
         const capture = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
         {
@@ -87,7 +81,6 @@ describe( 'RequestProcessor.resolveParam', () =>
         });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         await RequestProcessor.resolveParam(
             { source : 'Param', name : 'id', validator : capture },
             req,
@@ -99,14 +92,12 @@ describe( 'RequestProcessor.resolveParam', () =>
             ctx
         );
 
-        // Assert
         expect( fromValues ).toEqual([ 'query', 'query' ]);
         expect( ctx.from ).toBeUndefined();
     });
 
     it( 'should set from:json for JSON Body and revive Date values', async () =>
     {
-        // Arrange
         const seen: { from?: unknown } = {};
         const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown }) =>
         {
@@ -121,10 +112,8 @@ describe( 'RequestProcessor.resolveParam', () =>
         const ctx = { success : true, errors : [], mode : 'strict' };
         const param: ParamMetadata = { source : 'Body', validator };
 
-        // Act
         const result = await RequestProcessor.resolveParam( param, req, ctx );
 
-        // Assert
         expect( seen.from ).toBe( 'json' );
         expect( result ).toBeInstanceOf( Date );
         expect(( result as Date ).toISOString()).toBe( '2024-01-01T00:00:00.000Z' );
@@ -133,7 +122,6 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set from:query for urlencoded Body and coerce numbers', async () =>
     {
-        // Arrange
         const seen: { from?: unknown } = {};
         const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown, success: boolean, errors: unknown[], mode: string }) =>
         {
@@ -157,10 +145,8 @@ describe( 'RequestProcessor.resolveParam', () =>
         const ctx = { success : true, errors : [], mode : 'strict' };
         const param: ParamMetadata = { source : 'Body', validator };
 
-        // Act
         const result = await RequestProcessor.resolveParam( param, req, ctx );
 
-        // Assert
         expect( seen.from ).toBe( 'query' );
         expect( result ).toEqual({ age : 25 });
         expect( ctx.success ).toBe( true );
@@ -168,7 +154,6 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should sniff JSON Body when content-type is missing', async () =>
     {
-        // Arrange
         const seen: { from?: unknown } = {};
         const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
         {
@@ -179,14 +164,12 @@ describe( 'RequestProcessor.resolveParam', () =>
         const req = createRequest({ body : '{"ok":true}' });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         const result = await RequestProcessor.resolveParam(
             { source : 'Body', validator },
             req,
             ctx
         );
 
-        // Assert
         expect( seen.from ).toBe( 'json' );
         expect( result ).toEqual({ ok : true });
     });
@@ -224,7 +207,6 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set Body from to json for application/json', async () =>
     {
-        // Arrange
         const seen: { from?: unknown } = {};
         const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
         {
@@ -238,21 +220,18 @@ describe( 'RequestProcessor.resolveParam', () =>
         });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         const result = await RequestProcessor.resolveParam(
             { source : 'Body', validator },
             req,
             ctx
         );
 
-        // Assert
         expect( seen.from ).toBe( 'json' );
         expect( result ).toEqual({ ok : true });
     });
 
     it( 'should apply param mode for the validator then restore ctx.mode', async () =>
     {
-        // Arrange
         const seen: { mode?: unknown } = {};
         const validator = vi.fn(( v: unknown, _path: string, ctx: { mode?: unknown }) =>
         {
@@ -263,32 +242,27 @@ describe( 'RequestProcessor.resolveParam', () =>
         const req = createRequest({ query : { q : 'x' } });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         await RequestProcessor.resolveParam(
             { source : 'Query', name : 'q', mode : 'strip', validator },
             req,
             ctx
         );
 
-        // Assert
         expect( seen.mode ).toBe( 'strip' );
         expect( ctx.mode ).toBe( 'strict' );
     });
 
     it( 'should not mutate from when no validator is present', async () =>
     {
-        // Arrange
         const req = createRequest({ query : { a : '1' } });
         const ctx = { success : true, errors : [], mode : 'strict', from : undefined };
 
-        // Act
         const result = await RequestProcessor.resolveParam(
             { source : 'Query', name : 'a' },
             req,
             ctx
         );
 
-        // Assert
         expect( result ).toBe( '1' );
         expect( ctx.from ).toBeUndefined();
     });
@@ -349,13 +323,11 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should parse Cookies with first-match-wins and named Cookie lookup', async () =>
     {
-        // Arrange
         const req = createRequest({
             headers : { cookie : 'session=first; age=1; session=second' }
         });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         const all = await RequestProcessor.resolveParam({ source : 'Cookies' }, req, ctx );
         const session = await RequestProcessor.resolveParam(
             { source : 'Cookie', name : 'session' },
@@ -368,7 +340,6 @@ describe( 'RequestProcessor.resolveParam', () =>
             ctx
         );
 
-        // Assert
         expect( all ).toEqual({ session : 'first', age : '1' });
         expect( session ).toBe( 'first' );
         expect( missing ).toBeUndefined();
@@ -376,16 +347,13 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should skip cookie pairs without equals and ignore empty cookie header', async () =>
     {
-        // Arrange
         const empty = createRequest({});
         const malformed = createRequest({ headers : { cookie : 'lone; a=b' } });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         const a = await RequestProcessor.resolveParam({ source : 'Cookies' }, empty, ctx );
         const b = await RequestProcessor.resolveParam({ source : 'Cookies' }, malformed, ctx );
 
-        // Assert
         expect( a ).toEqual({});
         expect( b ).toEqual({ a : 'b' });
     });

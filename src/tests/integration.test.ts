@@ -1,53 +1,38 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Server } from '../server.js';
-import { MetadataStore } from '../core/metadata.js';
+import { seedInstanceController, runWithRegistry } from '../testing.js';
 import { validators } from '@webergency-utils/typechecker';
 import { Controller, Post, Body, Get, Query } from '../decorators.js';
 
-// --- Fixtures ---
-
-class TypeSafetyController 
+class TypeSafetyController
 {
-    // These methods are just for "actual" looking code
     @Post( '/union' )
-    testUnion( @Body() data: any ) 
+    testUnion( @Body() data: any )
     {
         return data;
     }
 
     @Post( '/nested' )
-    testNested( @Body() data: any ) 
+    testNested( @Body() data: any )
     {
         return data;
     }
 
     @Get( '/query-union' )
-    testQueryUnion( @Query( 'q' ) q: any ) 
+    testQueryUnion( @Query( 'q' ) q: any )
     {
         return q;
     }
 }
 
-// --- Manual Registry Mocking (Simulating AOT) ---
-
-const registerTypeSafetyEndpoints = ( mode: 'strict' | 'relaxed' | 'strip' ) => 
+const registerTypeSafetyEndpoints = ( server: Server, mode: 'strict' | 'relaxed' | 'strip' ) =>
 {
     const ctrl = new TypeSafetyController();
-    MetadataStore.registerController( 'TypeSafetyController', ctrl );
-
-    // 1. Simple Union: string | number
-    const primitiveUnion = ( v: any, p: string, c: any ) => 
+    const primitiveUnion = ( v: any, p: string, c: any ) =>
         validators.union( v, p, c, [validators.string, validators.number]);
 
-    MetadataStore.registerEndpoint({
-        controller   : 'TypeSafetyController', methodName   : 'testUnion', httpMethod   : 'POST', path         : '/union-primitive',
-        params       : [{ source : 'Body', validator : primitiveUnion, mode }],
-        guards       : [], interceptors : [], meta         : {}
-    });
-
-    // 2. Object Union: { type: 'a', a: string } | { type: 'b', b: number }
     const objectUnion = ( v: any, p: string, c: any ) => validators.union( v, p, c, [
-        ( v: any, p: string, c: any ) => 
+        ( v: any, p: string, c: any ) =>
         {
             if( !validators.object( v, p, c, ['type', 'a'])) { return v }
             const d = c.mode === 'strip' ? {} : v;
@@ -58,7 +43,7 @@ const registerTypeSafetyEndpoints = ( mode: 'strict' | 'relaxed' | 'strip' ) =>
 
             return d;
         },
-        ( v: any, p: string, c: any ) => 
+        ( v: any, p: string, c: any ) =>
         {
             if( !validators.object( v, p, c, ['type', 'b'])) { return v }
             const d = c.mode === 'strip' ? {} : v;
@@ -71,20 +56,12 @@ const registerTypeSafetyEndpoints = ( mode: 'strict' | 'relaxed' | 'strip' ) =>
         }
     ]);
 
-    MetadataStore.registerEndpoint({
-        controller   : 'TypeSafetyController', methodName   : 'testUnion', httpMethod   : 'POST', path         : '/union-object',
-        params       : [{ source : 'Body', validator : objectUnion, mode }],
-        guards       : [], interceptors : [], meta         : {}
-    });
-
-    // 3. Deeply Nested Union & Strip
-    // { user: { id: string | number }, status: 'ok' | 'fail' }
-    const nestedValidator = ( v: any, p: string, c: any ) => 
+    const nestedValidator = ( v: any, p: string, c: any ) =>
     {
         if( !validators.object( v, p, c, ['user', 'status'])) { return v }
         const d = c.mode === 'strip' ? {} : v;
         validators.props( v, d, p, c, [
-            ['user', false, ( v: any, p: string, c: any ) => 
+            ['user', false, ( v: any, p: string, c: any ) =>
             {
                 if( !validators.object( v, p, c, ['id'])) { return v }
                 const d2 = c.mode === 'strip' ? {} : v;
@@ -103,30 +80,42 @@ const registerTypeSafetyEndpoints = ( mode: 'strict' | 'relaxed' | 'strip' ) =>
         return d;
     };
 
-    MetadataStore.registerEndpoint({
-        controller   : 'TypeSafetyController', methodName   : 'testNested', httpMethod   : 'POST', path         : '/nested',
-        params       : [{ source : 'Body', validator : nestedValidator, mode }],
-        guards       : [], interceptors : [], meta         : {}
-    });
+    seedInstanceController( server.registry, 'TypeSafetyController', ctrl, [
+        {
+            methodName : 'testUnion',
+            httpMethod : 'POST',
+            path       : '/union-primitive',
+            params     : [{ source : 'Body', validator : primitiveUnion, mode }]
+        },
+        {
+            methodName : 'testUnion',
+            httpMethod : 'POST',
+            path       : '/union-object',
+            params     : [{ source : 'Body', validator : objectUnion, mode }]
+        },
+        {
+            methodName : 'testNested',
+            httpMethod : 'POST',
+            path       : '/nested',
+            params     : [{ source : 'Body', validator : nestedValidator, mode }]
+        }
+    ]);
 };
 
-describe( 'Actual Server & Controllers Integration', () => 
+describe( 'Actual Server & Controllers Integration', () =>
 {
-    let server: Server;
-
-    beforeEach(() => 
+    describe( 'STRICT MODE', () =>
     {
-        MetadataStore.clear();
-        server = new Server({ port : 3000 });
-    });
+        let server: Server;
 
-    describe( 'STRICT MODE', () => 
-    {
-        beforeEach(() => registerTypeSafetyEndpoints( 'strict' ));
-
-        it( 'should reject unknown properties in object union', async () => 
+        beforeEach(() =>
         {
-            ( server as any ).init();
+            server = new Server({ port : 3000 });
+            registerTypeSafetyEndpoints( server, 'strict' );
+        });
+
+        it( 'should reject unknown properties in object union', async () =>
+        {
             const res = await server.fetch( new Request( 'http://localhost/union-object', {
                 method  : 'POST',
                 body    : JSON.stringify({ type : 'a', a : 'hello', unknown : 1 }),
@@ -141,9 +130,8 @@ describe( 'Actual Server & Controllers Integration', () =>
             expect( hasError ).toBe( true );
         });
 
-        it( 'should accept valid union members', async () => 
+        it( 'should accept valid union members', async () =>
         {
-            ( server as any ).init();
             const res = await server.fetch( new Request( 'http://localhost/union-primitive', {
                 method  : 'POST',
                 body    : JSON.stringify( 'hello' ),
@@ -154,13 +142,18 @@ describe( 'Actual Server & Controllers Integration', () =>
         });
     });
 
-    describe( 'RELAXED MODE', () => 
+    describe( 'RELAXED MODE', () =>
     {
-        beforeEach(() => registerTypeSafetyEndpoints( 'relaxed' ));
+        let server: Server;
 
-        it( 'should allow and keep unknown properties', async () => 
+        beforeEach(() =>
         {
-            ( server as any ).init();
+            server = new Server({ port : 3000 });
+            registerTypeSafetyEndpoints( server, 'relaxed' );
+        });
+
+        it( 'should allow and keep unknown properties', async () =>
+        {
             const res = await server.fetch( new Request( 'http://localhost/union-object', {
                 method  : 'POST',
                 body    : JSON.stringify({ type : 'b', b : 42, extra : 'prop' }),
@@ -173,13 +166,18 @@ describe( 'Actual Server & Controllers Integration', () =>
         });
     });
 
-    describe( 'STRIP MODE', () => 
+    describe( 'STRIP MODE', () =>
     {
-        beforeEach(() => registerTypeSafetyEndpoints( 'strip' ));
+        let server: Server;
 
-        it( 'should strip unknown properties deeply', async () => 
+        beforeEach(() =>
         {
-            ( server as any ).init();
+            server = new Server({ port : 3000 });
+            registerTypeSafetyEndpoints( server, 'strip' );
+        });
+
+        it( 'should strip unknown properties deeply', async () =>
+        {
             const payload = {
                 user   : { id : 123, secret : 'hide-me' },
                 status : 'ok',
@@ -198,9 +196,8 @@ describe( 'Actual Server & Controllers Integration', () =>
             expect( data.other ).toBeUndefined();
         });
 
-        it( 'should work with primitive unions and stripping', async () => 
+        it( 'should work with primitive unions and stripping', async () =>
         {
-            ( server as any ).init();
             const res = await server.fetch( new Request( 'http://localhost/union-primitive', {
                 method  : 'POST',
                 body    : JSON.stringify( 100 ),
@@ -211,15 +208,15 @@ describe( 'Actual Server & Controllers Integration', () =>
         });
     });
 
-    describe( 'Guard Parameter Resolution', () => 
+    describe( 'Guard Parameter Resolution', () =>
     {
-        it( 'should resolve @Cookies, @Cookie, @Headers, @Ip, @Url, @Hostname, @Path in guards', async () => 
+        it( 'should resolve @Cookies, @Cookie, @Headers, @Ip, @Url, @Hostname, @Path in guards', async () =>
         {
             let capturedGuardArgs: any[] = [];
 
-            class ParameterGuard 
+            class ParameterGuard
             {
-                async use( cookies: any, cookieSession: any, headers: any, ip: any, url: any, hostname: any, path: any ) 
+                async use( cookies: any, cookieSession: any, headers: any, ip: any, url: any, hostname: any, path: any )
                 {
                     capturedGuardArgs = [cookies, cookieSession, headers, ip, url, hostname, path];
 
@@ -227,44 +224,44 @@ describe( 'Actual Server & Controllers Integration', () =>
                 }
             }
 
-            class GuardTestController 
+            class GuardTestController
             {
                 @Get( '/guarded-endpoint' )
-                testEndpoint() 
+                testEndpoint()
                 {
                     return { ok : true };
                 }
             }
 
-            const ctrl = new GuardTestController();
-            MetadataStore.registerController( 'GuardTestController', ctrl );
-            MetadataStore.registerGuard( 'ParameterGuard', ParameterGuard );
-
-            MetadataStore.registerEndpoint({
-                controller   : 'GuardTestController',
-                methodName   : 'testEndpoint',
-                httpMethod   : 'GET',
-                path         : '/guarded-endpoint',
-                params       : [],
-                guards       : [{
-                    name      : 'ParameterGuard',
-                    type      : 'class',
-                    params    : [
-                        { source : 'Cookies' },
-                        { source : 'Cookie', name : 'session' },
-                        { source : 'Headers' },
-                        { source : 'Ip' },
-                        { source : 'Url' },
-                        { source : 'Hostname' },
-                        { source : 'Path' }
-                    ],
-                    resolvers : []
-                }],
-                interceptors : [],
-                meta         : {}
+            const server = new Server({ port : 3000 });
+            runWithRegistry( server.registry, () =>
+            {
+                server.registry.registerController( 'GuardTestController', new GuardTestController());
+                server.registry.registerGuard( 'ParameterGuard', ParameterGuard );
+                server.registry.registerEndpoint({
+                    controller   : 'GuardTestController',
+                    methodName   : 'testEndpoint',
+                    httpMethod   : 'GET',
+                    path         : '/guarded-endpoint',
+                    params       : [],
+                    guards       : [{
+                        name      : 'ParameterGuard',
+                        type      : 'class',
+                        params    : [
+                            { source : 'Cookies' },
+                            { source : 'Cookie', name : 'session' },
+                            { source : 'Headers' },
+                            { source : 'Ip' },
+                            { source : 'Url' },
+                            { source : 'Hostname' },
+                            { source : 'Path' }
+                        ],
+                        resolvers : []
+                    }],
+                    interceptors : [],
+                    meta         : {}
+                });
             });
-
-            ( server as any ).init();
 
             const res = await server.fetch( new Request( 'http://localhost/guarded-endpoint', {
                 headers : {

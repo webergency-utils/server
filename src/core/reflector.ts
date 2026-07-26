@@ -1,3 +1,5 @@
+const METADATA_BAG = Symbol.for( 'webergency.server.metadata' );
+
 export class Reflector 
 {
     /**
@@ -5,11 +7,13 @@ export class Reflector
    */
     public get<TValue = any, TResult = TValue>( metadataKey: any, target: any ): TResult | undefined 
     {
-        if( !target ) { return undefined }
+        if( !target ){ return undefined }
 
-        if( target.__metadata__ && target.__metadata__[metadataKey] !== undefined ) 
+        const bag = target[METADATA_BAG] || target.__metadata__;
+
+        if( bag && bag[metadataKey] !== undefined )
         {
-            return target.__metadata__[metadataKey] as TResult;
+            return bag[metadataKey] as TResult;
         }
 
         return undefined;

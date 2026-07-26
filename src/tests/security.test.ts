@@ -1,30 +1,25 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Server } from '../server.js';
-import { MetadataStore } from '../core/metadata.js';
+import { seedInstanceController } from '../testing.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from '../helpers/security.js';
 
-describe( 'Security Helper & Integration Tests', () => 
+describe( 'Security Helper & Integration Tests', () =>
 {
-    beforeEach(() => 
+    describe( 'mergeSecurityConfigs helper', () =>
     {
-        MetadataStore.clear();
-    });
-
-    describe( 'mergeSecurityConfigs helper', () => 
-    {
-        it( 'should return undefined if all configs are undefined', () => 
+        it( 'should return undefined if all configs are undefined', () =>
         {
             const merged = mergeSecurityConfigs([undefined, undefined]);
             expect( merged ).toBeUndefined();
         });
 
-        it( 'should initialize empty object if config is true', () => 
+        it( 'should initialize empty object if config is true', () =>
         {
             const merged = mergeSecurityConfigs([true]);
             expect( merged ).toEqual({});
         });
 
-        it( 'should propagate false overrides to disable all headers', () => 
+        it( 'should propagate false overrides to disable all headers', () =>
         {
             const merged = mergeSecurityConfigs([true, false]);
             expect( merged ).toEqual({
@@ -42,7 +37,7 @@ describe( 'Security Helper & Integration Tests', () =>
             });
         });
 
-        it( 'should merge objects hierarchically', () => 
+        it( 'should merge objects hierarchically', () =>
         {
             const merged = mergeSecurityConfigs([
                 { frameguard : 'deny', hsts : { maxAge : 100 } },
@@ -56,9 +51,9 @@ describe( 'Security Helper & Integration Tests', () =>
         });
     });
 
-    describe( 'generateSecurityHeaders helper', () => 
+    describe( 'generateSecurityHeaders helper', () =>
     {
-        it( 'should generate default headers when config is true or empty object', () => 
+        it( 'should generate default headers when config is true or empty object', () =>
         {
             const headers = generateSecurityHeaders( true );
             expect( headers['X-Frame-Options']).toBe( 'SAMEORIGIN' );
@@ -71,7 +66,7 @@ describe( 'Security Helper & Integration Tests', () =>
             expect( headers['Content-Security-Policy']).toBeUndefined();
         });
 
-        it( 'should respect false to omit specific headers', () => 
+        it( 'should respect false to omit specific headers', () =>
         {
             const headers = generateSecurityHeaders({
                 frameguard : false,
@@ -84,32 +79,25 @@ describe( 'Security Helper & Integration Tests', () =>
         });
     });
 
-    describe( 'Server integration - Request Protections', () => 
+    describe( 'Server integration - Request Protections', () =>
     {
-        it( 'should enforce maxBodySize limits and return 413', async () => 
+        it( 'should enforce maxBodySize limits and return 413', async () =>
         {
             const server = new Server({
                 port     : 0,
                 security : { maxBodySize : '10b' }
             });
-            class DummyController 
+            class DummyController
             {
                 index( body: any ) { return 'ok' }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'index',
-                httpMethod   : 'POST',
-                path         : '/body-test',
-                params       : [{ source : 'Body' }],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'index',
+                httpMethod : 'POST',
+                path       : '/body-test',
+                params     : [{ source : 'Body' }]
+            }]);
 
-            // Within limit (7 bytes)
             const resOk = await server.fetch( new Request( 'http://localhost/body-test', {
                 method  : 'POST',
                 body    : '"hello"',
@@ -117,7 +105,6 @@ describe( 'Security Helper & Integration Tests', () =>
             }));
             expect( resOk.status ).toBe( 200 );
 
-            // Exceeds limit (13 bytes)
             const resTooBig = await server.fetch( new Request( 'http://localhost/body-test', {
                 method  : 'POST',
                 body    : '"hello world"',
@@ -126,31 +113,24 @@ describe( 'Security Helper & Integration Tests', () =>
             expect( resTooBig.status ).toBe( 413 );
         });
 
-        it( 'should enforce timeout limits and return 408', async () => 
+        it( 'should enforce timeout limits and return 408', async () =>
         {
             const server = new Server({ port : 0 });
-            class DummyController 
+            class DummyController
             {
-                async delay() 
+                async delay()
                 {
                     await new Promise( r => setTimeout( r, 50 ));
 
                     return 'done';
                 }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'delay',
-                httpMethod   : 'GET',
-                path         : '/timeout-test',
-                params       : [],
-                guards       : [],
-                interceptors : [],
-                security     : { timeout : 10 },
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'delay',
+                httpMethod : 'GET',
+                path       : '/timeout-test',
+                security   : { timeout : 10 }
+            }]);
 
             const res = await server.fetch( new Request( 'http://localhost/timeout-test' ));
             expect( res.status ).toBe( 408 );
@@ -179,19 +159,13 @@ describe( 'Security Helper & Integration Tests', () =>
                     return 'done';
                 }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'delay',
-                httpMethod   : 'GET',
-                path         : '/timeout-abort',
-                params       : [{ source : 'Request' }],
-                guards       : [],
-                interceptors : [],
-                security     : { timeout : 10 },
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'delay',
+                httpMethod : 'GET',
+                path       : '/timeout-abort',
+                params     : [{ source : 'Request' }],
+                security   : { timeout : 10 }
+            }]);
 
             const res = await server.fetch( new Request( 'http://localhost/timeout-abort' ));
             expect( res.status ).toBe( 408 );
@@ -214,77 +188,59 @@ describe( 'Security Helper & Integration Tests', () =>
             expect( body.error ).toContain( 'missing route internals' );
         });
 
-        it( 'should enforce allowedContentTypes and return 415', async () => 
+        it( 'should enforce allowedContentTypes and return 415', async () =>
         {
             const server = new Server({
                 port     : 0,
                 security : { allowedContentTypes : ['application/json'] }
             });
-            class DummyController 
+            class DummyController
             {
-                index() { return 'ok' }
+                index(){ return 'ok' }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'index',
-                httpMethod   : 'POST',
-                path         : '/type-test',
-                params       : [],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'index',
+                httpMethod : 'POST',
+                path       : '/type-test'
+            }]);
 
-            // Correct content type
             const resOk = await server.fetch( new Request( 'http://localhost/type-test', {
                 method  : 'POST',
                 headers : { 'Content-Type' : 'application/json' }
             }));
             expect( resOk.status ).toBe( 200 );
 
-            // Incorrect content type
             const resBad = await server.fetch( new Request( 'http://localhost/type-test', {
                 method  : 'POST',
                 headers : { 'Content-Type' : 'text/plain' }
             }));
             expect( resBad.status ).toBe( 415 );
 
-            // Body present without Content-Type
             const resMissing = await server.fetch( new Request( 'http://localhost/type-test', {
                 method : 'POST',
                 body   : '{"a":1}'
             }));
             expect( resMissing.status ).toBe( 415 );
 
-            // Empty body without Content-Type is allowed
             const resEmpty = await server.fetch( new Request( 'http://localhost/type-test', {
                 method : 'POST'
             }));
             expect( resEmpty.status ).toBe( 200 );
         });
 
-        it( 'should enforce rateLimit and return 429', async () => 
+        it( 'should enforce rateLimit and return 429', async () =>
         {
             const server = new Server({ port : 0 });
-            class DummyController 
+            class DummyController
             {
-                index() { return 'ok' }
+                index(){ return 'ok' }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'index',
-                httpMethod   : 'GET',
-                path         : '/rate-test',
-                params       : [],
-                guards       : [],
-                interceptors : [],
-                security     : { rateLimit : { max : 2, window : '1s' } },
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'index',
+                httpMethod : 'GET',
+                path       : '/rate-test',
+                security   : { rateLimit : { max : 2, window : '1s' } }
+            }]);
 
             const res1 = await server.fetch( new Request( 'http://localhost/rate-test' ));
             expect( res1.status ).toBe( 200 );
@@ -303,19 +259,12 @@ describe( 'Security Helper & Integration Tests', () =>
             {
                 index(){ return 'ok' }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'index',
-                httpMethod   : 'GET',
-                path         : '/rate-xff',
-                params       : [],
-                guards       : [],
-                interceptors : [],
-                security     : { rateLimit : { max : 1, window : '1s' } },
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'index',
+                httpMethod : 'GET',
+                path       : '/rate-xff',
+                security   : { rateLimit : { max : 1, window : '1s' } }
+            }]);
 
             const first = await server.fetch( new Request( 'http://localhost/rate-xff', {
                 headers : { 'x-forwarded-for' : '203.0.113.1' }
@@ -338,19 +287,12 @@ describe( 'Security Helper & Integration Tests', () =>
             {
                 index(){ return 'ok' }
             }
-            MetadataStore.registerController( 'DummyController', new DummyController());
-            MetadataStore.registerEndpoint({
-                controller   : 'DummyController',
-                methodName   : 'index',
-                httpMethod   : 'GET',
-                path         : '/rate-trusted',
-                params       : [],
-                guards       : [],
-                interceptors : [],
-                security     : { rateLimit : { max : 1, window : '1s' } },
-                meta         : {}
-            });
-            ( server as any ).init();
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [{
+                methodName : 'index',
+                httpMethod : 'GET',
+                path       : '/rate-trusted',
+                security   : { rateLimit : { max : 1, window : '1s' } }
+            }]);
 
             const make = ( client: string ) =>
             {

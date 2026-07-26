@@ -1,21 +1,24 @@
 import ts from '../../compiler/ts.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import compilerPlugin, { transformer, createRegistry, generateManifestCode } from '../../compiler/transformer.js';
+import compilerPlugin, { transformer, createRegistry } from '../../compiler/transformer.js';
 import { SwaggerSpecGenerator } from '../../compiler/swagger.js';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname( fileURLToPath( import.meta.url ));
 
+/**
+ * Compile AOT controllers with the transformer (Symbol.for meta + inlined validators).
+ * Returns path to controllers.compiled.js for dynamic import.
+ */
 export function runAot() 
 {
     const controllerPath = path.resolve( __dirname, 'controllers.ts' );
-    const manifestPath = path.resolve( __dirname, '_manifest.js' );
+    const compiledControllersPath = path.resolve( __dirname, 'controllers.compiled.js' );
     const serverRoot = path.resolve( __dirname, '../../index.ts' );
 
     const registry = createRegistry();
     
-    // We include both the server root and the controller to ensure all types are resolvable
     const program = ts.createProgram([serverRoot, controllerPath], {
         experimentalDecorators : true,
         target                 : ts.ScriptTarget.ES2022,
@@ -31,8 +34,6 @@ export function runAot()
         throw new Error( `Could not find source file: ${controllerPath}` );
     }
 
-    // 1. Compile controllers.ts using the compiler plugin and emit to controllers.compiled.js
-    const compiledControllersPath = path.resolve( __dirname, 'controllers.compiled.js' );
     program.emit(
         source,
         ( fileName, data ) => 
@@ -42,44 +43,16 @@ export function runAot()
         undefined,
         false,
         {
-            before : [ compilerPlugin( program ) ]
+            before : [compilerPlugin( program )]
         }
     );
 
-    // 2. We also need to analyze the controller file to populate our registry
     const analyzer = transformer( program, registry )({} as any );
     analyzer( source );
 
-    // Generate swagger.json during AOT build of tests (using original paths in registry)
-    SwaggerSpecGenerator.generate( registry, program, path.dirname( manifestPath ));
+    SwaggerSpecGenerator.generate( registry, program, __dirname );
 
-    // 3. Mutate paths in registry so they point to the compiled file
-    const compiledVirtualTsPath = path.resolve( __dirname, 'controllers.compiled.ts' );
-
-    for( const key of registry.controllers.keys()) 
-    {
-        registry.controllers.get( key )!.path = compiledVirtualTsPath;
-    }
-
-    for( const key of registry.providers.keys()) 
-    {
-        registry.providers.get( key )!.path = compiledVirtualTsPath;
-    }
-
-    for( const key of registry.guards.keys()) 
-    {
-        registry.guards.get( key )!.path = compiledVirtualTsPath;
-    }
-
-    for( const key of registry.interceptors.keys()) 
-    {
-        registry.interceptors.get( key )!.path = compiledVirtualTsPath;
-    }
-
-    const manifestCode = generateManifestCode( registry, new Map(), manifestPath );
-    fs.writeFileSync( manifestPath, manifestCode );
-
-    return manifestPath;
+    return compiledControllersPath;
 }
 
 if( import.meta.url.endsWith( 'build.ts' )) 

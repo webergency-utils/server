@@ -7,19 +7,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-const __server_metadata_store = globalThis.__WEBERGENCY_SERVER_METADATA_STORE__ || (globalThis.__WEBERGENCY_SERVER_METADATA_STORE__ = {
-    endpoints: [],
-    controllers: new Map(),
-    guards: new Map(),
-    interceptors: new Map(),
-    providers: new Map(),
-    modules: new Map(),
-    instances: new Map(),
-    resolving: new Set(),
-    controllerClasses: new Set(),
-    guardClasses: new Set(),
-    interceptorClasses: new Set()
-});
 import "@webergency-utils/typechecker/runtime";
 const validators = globalThis.__WEBERGENCY_TYPECHECKER_VALIDATORS__;
 const __val_473287f8298dba71 = validators.string;
@@ -1611,1225 +1598,1406 @@ MethodPublicController = __decorate([
     Protect(PublicDenyGuard)
 ], MethodPublicController);
 export { MethodPublicController };
-__server_metadata_store.providers.set("DiGuard", DiGuard);
-__server_metadata_store.guardClasses.add("DiGuard");
-__server_metadata_store.providers.set("SimpleGuard", SimpleGuard);
-__server_metadata_store.guardClasses.add("SimpleGuard");
-__server_metadata_store.providers.set("AnotherGuard", AnotherGuard);
-__server_metadata_store.guardClasses.add("AnotherGuard");
-__server_metadata_store.providers.set("MiddlewareCheckingGuard", MiddlewareCheckingGuard);
-__server_metadata_store.guardClasses.add("MiddlewareCheckingGuard");
-__server_metadata_store.providers.set("FailingGuard", FailingGuard);
-__server_metadata_store.guardClasses.add("FailingGuard");
-__server_metadata_store.providers.set("PublicDenyGuard", PublicDenyGuard);
-__server_metadata_store.guardClasses.add("PublicDenyGuard");
-__server_metadata_store.providers.set("GlobalErrorSanitizer", GlobalErrorSanitizer);
-__server_metadata_store.interceptorClasses.add("GlobalErrorSanitizer");
-__server_metadata_store.providers.set("SimpleInterceptor", SimpleInterceptor);
-__server_metadata_store.interceptorClasses.add("SimpleInterceptor");
-__server_metadata_store.providers.set("AnotherInterceptor", AnotherInterceptor);
-__server_metadata_store.interceptorClasses.add("AnotherInterceptor");
-__server_metadata_store.providers.set("CountingInterceptor", CountingInterceptor);
-__server_metadata_store.interceptorClasses.add("CountingInterceptor");
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "strict",
-    httpMethod: "POST",
-    path: "/type-safety/strict",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_04c78f82f98a8cf4,
-            mode: "strict"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_c67915707769fcf5
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "strictIntercepted",
-    httpMethod: "POST",
-    path: "/type-safety/strict-intercepted",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_04c78f82f98a8cf4,
-            mode: "strict"
-        }],
-    guards: [],
-    interceptors: ["GlobalErrorSanitizer"],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_c67915707769fcf5
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "strip",
-    httpMethod: "POST",
-    path: "/type-safety/strip",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_04c78f82f98a8cf4,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_c67915707769fcf5
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "relaxed",
-    httpMethod: "POST",
-    path: "/type-safety/relaxed",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_04c78f82f98a8cf4,
-            mode: "relaxed"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_c67915707769fcf5
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "union",
-    httpMethod: "POST",
-    path: "/type-safety/union",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_a41824426b6b1ede,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_d74cefa44e345d17
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "status",
-    httpMethod: "GET",
-    path: "/type-safety/status",
-    params: [{
-            source: "Query",
-            name: "s",
-            validator: __val_857204a536cb022c,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_2d6ea820a293bacf
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "mixedArray",
-    httpMethod: "POST",
-    path: "/type-safety/mixed-array",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_8c1c1b2d325f9de6,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_a042f9877fc2376a
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "nested",
-    httpMethod: "POST",
-    path: "/type-safety/nested",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_68aecd6fa646cade,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_f0ac6e3a29009cf1
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "intersection",
-    httpMethod: "POST",
-    path: "/type-safety/intersection",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_f28f8acf7e68cbfd,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_0d157d33684c0018
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "queryUnion",
-    httpMethod: "GET",
-    path: "/type-safety/query-union",
-    params: [{
-            source: "Query",
-            name: "status",
-            validator: __val_85a41b63d9a32b8b,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_0084393b0d7248e4
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "arrayQuery",
-    httpMethod: "GET",
-    path: "/type-safety/array-query",
-    params: [{
-            source: "Query",
-            name: "tags",
-            validator: __val_e5da2f9fabafe20e,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_d9bb28ea073c815e
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "coerce",
-    httpMethod: "GET",
-    path: "/type-safety/coerce",
-    params: [{
-            source: "Query",
-            name: "age",
-            validator: __val_12886f9d00055adf,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "active",
-            validator: __val_ced862ef1505bc73,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "date",
-            validator: __val_99c40ab405926cb5,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "pattern",
-            validator: __val_eefd1c8d7e793bf3,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "big",
-            validator: __val_75d012fe28656e0a,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_dfd1002a464a1dbf
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "deepBoolean",
-    httpMethod: "GET",
-    path: "/type-safety/deep-boolean",
-    params: [{
-            source: "Query",
-            name: "user",
-            validator: __val_91d782a2d0de1354,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_d979aa00a685cb05
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "coerceUnion",
-    httpMethod: "GET",
-    path: "/type-safety/coerce-union",
-    params: [{
-            source: "Query",
-            name: "val",
-            validator: __val_affb28566d707e35,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_87e266a791052d41
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "templateLiteral",
-    httpMethod: "GET",
-    path: "/type-safety/template-literal",
-    params: [{
-            source: "Query",
-            name: "id",
-            validator: __val_9a141e74a6c02429,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_6b50e5736cb6bb55
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "tags",
-    httpMethod: "GET",
-    path: "/type-safety/tags",
-    params: [{
-            source: "Query",
-            name: "pass",
-            validator: __val_c615b105fba1f965,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "age",
-            validator: __val_ed601a97123e74a5,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_80803d497f4cbcc3
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "customValidator",
-    httpMethod: "POST",
-    path: "/type-safety/custom-validator",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_bf0f00a269610757,
-            mode: "strip"
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_70c31e2e47f17c8e
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "headExplicit",
-    httpMethod: "HEAD",
-    path: "/type-safety/head-explicit",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {}
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "getFallback",
-    httpMethod: "GET",
-    path: "/type-safety/get-fallback",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_b237870e8da1ad64
-});
-__server_metadata_store.endpoints.push({
-    controller: "TypeSafetyController",
-    methodName: "allVerbs",
-    httpMethod: "ALL",
-    path: "/type-safety/all-verbs",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_b237870e8da1ad64
-});
-__server_metadata_store.endpoints.push({
-    controller: "TagParityController",
-    methodName: "getNumber",
-    httpMethod: "GET",
-    path: "/tag-parity/number",
-    params: [{
-            source: "Query",
-            name: "min",
-            validator: __val_0cedac632a9d5281,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "max",
-            validator: __val_cfef021b8ec13350,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "mult",
-            validator: __val_51b5abe7e1ba2c24,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_a421e7e861811a22
-});
-__server_metadata_store.endpoints.push({
-    controller: "TagParityController",
-    methodName: "getString",
-    httpMethod: "GET",
-    path: "/tag-parity/string",
-    params: [{
-            source: "Query",
-            name: "email",
-            validator: __val_354ede58aec83f6c,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "uuid",
-            validator: __val_646f574aa5d2b8f1,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "date",
-            validator: __val_4c9f67db765233c6,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_3142ae88ce6e4c32
-});
-__server_metadata_store.endpoints.push({
-    controller: "TagParityController",
-    methodName: "postArray",
-    httpMethod: "POST",
-    path: "/tag-parity/array",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_669d5b02a3e3ee23,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_669d5b02a3e3ee23
-});
-__server_metadata_store.endpoints.push({
-    controller: "TagParityController",
-    methodName: "postUniqueArray",
-    httpMethod: "POST",
-    path: "/tag-parity/unique-array",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_68211ffefc1b2e01,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_68211ffefc1b2e01
-});
-__server_metadata_store.endpoints.push({
-    controller: "SecureController",
-    methodName: "getDefault",
-    httpMethod: "GET",
-    path: "/secure-controller/default",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71,
-    security: {
-        frameguard: "deny"
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "SecureController",
-    methodName: "getOverride",
-    httpMethod: "GET",
-    path: "/secure-controller/override",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71,
-    security: {
-        frameguard: false
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "InheritedController",
-    methodName: "getTest",
-    httpMethod: "GET",
-    path: "/inherited/test",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71,
-    security: {
-        frameguard: "deny",
-        timeout: 500
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "InheritedController",
-    methodName: "getOverride",
-    httpMethod: "GET",
-    path: "/inherited/override",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71,
-    security: {
-        frameguard: false
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "DiTestController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/di/test",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_d6749fa8772de8dd
-});
-__server_metadata_store.endpoints.push({
-    controller: "DiTestController",
-    methodName: "paramInject",
-    httpMethod: "GET",
-    path: "/di/param-inject",
-    params: [{
-            source: "Inject",
-            name: "DatabaseService",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_ab68d46bd18d4a0a
-});
-__server_metadata_store.endpoints.push({
-    controller: "DiTestController",
-    methodName: "guarded",
-    httpMethod: "GET",
-    path: "/di/guarded",
-    params: [],
-    guards: [{
-            type: "class",
-            name: "DiGuard",
-            resolvers: [],
+DiGuard[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "DiGuard"
+};
+SimpleGuard[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "SimpleGuard"
+};
+AnotherGuard[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "AnotherGuard"
+};
+MiddlewareCheckingGuard[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "MiddlewareCheckingGuard"
+};
+FailingGuard[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "FailingGuard"
+};
+PublicDenyGuard[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "PublicDenyGuard"
+};
+GlobalErrorSanitizer[Symbol.for("webergency.server.injectable")] = {
+    kind: "interceptor",
+    token: "GlobalErrorSanitizer"
+};
+SimpleInterceptor[Symbol.for("webergency.server.injectable")] = {
+    kind: "interceptor",
+    token: "SimpleInterceptor"
+};
+AnotherInterceptor[Symbol.for("webergency.server.injectable")] = {
+    kind: "interceptor",
+    token: "AnotherInterceptor"
+};
+CountingInterceptor[Symbol.for("webergency.server.injectable")] = {
+    kind: "interceptor",
+    token: "CountingInterceptor"
+};
+ConfigService[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "ConfigService"
+};
+DatabaseService[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "DatabaseService"
+};
+LoggerService[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "LoggerService"
+};
+BaseService[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "BaseService"
+};
+ChildService[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "ChildService"
+};
+SimpleTestMiddleware[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "SimpleTestMiddleware"
+};
+CallbackTestMiddleware[Symbol.for("webergency.server.injectable")] = {
+    kind: "provider",
+    token: "CallbackTestMiddleware"
+};
+TypeSafetyController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "TypeSafetyController",
+            methodName: "strict",
+            httpMethod: "POST",
+            path: "/type-safety/strict",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_04c78f82f98a8cf4,
+                    mode: "strict"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_c67915707769fcf5
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "strictIntercepted",
+            httpMethod: "POST",
+            path: "/type-safety/strict-intercepted",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_04c78f82f98a8cf4,
+                    mode: "strict"
+                }],
+            guards: [],
+            interceptors: ["GlobalErrorSanitizer"],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_c67915707769fcf5
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "strip",
+            httpMethod: "POST",
+            path: "/type-safety/strip",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_04c78f82f98a8cf4,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_c67915707769fcf5
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "relaxed",
+            httpMethod: "POST",
+            path: "/type-safety/relaxed",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_04c78f82f98a8cf4,
+                    mode: "relaxed"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_c67915707769fcf5
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "union",
+            httpMethod: "POST",
+            path: "/type-safety/union",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_a41824426b6b1ede,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_d74cefa44e345d17
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "status",
+            httpMethod: "GET",
+            path: "/type-safety/status",
+            params: [{
+                    source: "Query",
+                    name: "s",
+                    validator: __val_857204a536cb022c,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_2d6ea820a293bacf
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "mixedArray",
+            httpMethod: "POST",
+            path: "/type-safety/mixed-array",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_8c1c1b2d325f9de6,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_a042f9877fc2376a
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "nested",
+            httpMethod: "POST",
+            path: "/type-safety/nested",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_68aecd6fa646cade,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_f0ac6e3a29009cf1
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "intersection",
+            httpMethod: "POST",
+            path: "/type-safety/intersection",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_f28f8acf7e68cbfd,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_0d157d33684c0018
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "queryUnion",
+            httpMethod: "GET",
+            path: "/type-safety/query-union",
+            params: [{
+                    source: "Query",
+                    name: "status",
+                    validator: __val_85a41b63d9a32b8b,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_0084393b0d7248e4
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "arrayQuery",
+            httpMethod: "GET",
+            path: "/type-safety/array-query",
+            params: [{
+                    source: "Query",
+                    name: "tags",
+                    validator: __val_e5da2f9fabafe20e,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_d9bb28ea073c815e
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "coerce",
+            httpMethod: "GET",
+            path: "/type-safety/coerce",
+            params: [{
+                    source: "Query",
+                    name: "age",
+                    validator: __val_12886f9d00055adf,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "active",
+                    validator: __val_ced862ef1505bc73,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "date",
+                    validator: __val_99c40ab405926cb5,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "pattern",
+                    validator: __val_eefd1c8d7e793bf3,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "big",
+                    validator: __val_75d012fe28656e0a,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_dfd1002a464a1dbf
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "deepBoolean",
+            httpMethod: "GET",
+            path: "/type-safety/deep-boolean",
+            params: [{
+                    source: "Query",
+                    name: "user",
+                    validator: __val_91d782a2d0de1354,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_d979aa00a685cb05
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "coerceUnion",
+            httpMethod: "GET",
+            path: "/type-safety/coerce-union",
+            params: [{
+                    source: "Query",
+                    name: "val",
+                    validator: __val_affb28566d707e35,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_87e266a791052d41
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "templateLiteral",
+            httpMethod: "GET",
+            path: "/type-safety/template-literal",
+            params: [{
+                    source: "Query",
+                    name: "id",
+                    validator: __val_9a141e74a6c02429,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_6b50e5736cb6bb55
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "tags",
+            httpMethod: "GET",
+            path: "/type-safety/tags",
+            params: [{
+                    source: "Query",
+                    name: "pass",
+                    validator: __val_c615b105fba1f965,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "age",
+                    validator: __val_ed601a97123e74a5,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_80803d497f4cbcc3
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "customValidator",
+            httpMethod: "POST",
+            path: "/type-safety/custom-validator",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_bf0f00a269610757,
+                    mode: "strip"
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_70c31e2e47f17c8e
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "headExplicit",
+            httpMethod: "HEAD",
+            path: "/type-safety/head-explicit",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {}
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "getFallback",
+            httpMethod: "GET",
+            path: "/type-safety/get-fallback",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_b237870e8da1ad64
+        },
+        {
+            controller: "TypeSafetyController",
+            methodName: "allVerbs",
+            httpMethod: "ALL",
+            path: "/type-safety/all-verbs",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_b237870e8da1ad64
+        }
+    ]
+};
+TypeSafetyController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "TypeSafetyController"
+};
+TagParityController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "TagParityController",
+            methodName: "getNumber",
+            httpMethod: "GET",
+            path: "/tag-parity/number",
+            params: [{
+                    source: "Query",
+                    name: "min",
+                    validator: __val_0cedac632a9d5281,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "max",
+                    validator: __val_cfef021b8ec13350,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "mult",
+                    validator: __val_51b5abe7e1ba2c24,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_a421e7e861811a22
+        },
+        {
+            controller: "TagParityController",
+            methodName: "getString",
+            httpMethod: "GET",
+            path: "/tag-parity/string",
+            params: [{
+                    source: "Query",
+                    name: "email",
+                    validator: __val_354ede58aec83f6c,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "uuid",
+                    validator: __val_646f574aa5d2b8f1,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "date",
+                    validator: __val_4c9f67db765233c6,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_3142ae88ce6e4c32
+        },
+        {
+            controller: "TagParityController",
+            methodName: "postArray",
+            httpMethod: "POST",
+            path: "/tag-parity/array",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_669d5b02a3e3ee23,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_669d5b02a3e3ee23
+        },
+        {
+            controller: "TagParityController",
+            methodName: "postUniqueArray",
+            httpMethod: "POST",
+            path: "/tag-parity/unique-array",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_68211ffefc1b2e01,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_68211ffefc1b2e01
+        }
+    ]
+};
+TagParityController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "TagParityController"
+};
+SecureController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "SecureController",
+            methodName: "getDefault",
+            httpMethod: "GET",
+            path: "/secure-controller/default",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71,
+            security: {
+                frameguard: "deny"
+            }
+        },
+        {
+            controller: "SecureController",
+            methodName: "getOverride",
+            httpMethod: "GET",
+            path: "/secure-controller/override",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71,
+            security: {
+                frameguard: false
+            }
+        }
+    ]
+};
+SecureController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "SecureController"
+};
+BaseController[Symbol.for("webergency.server.controller")] = {
+    endpoints: []
+};
+BaseController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "BaseController"
+};
+InheritedController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "InheritedController",
+            methodName: "getTest",
+            httpMethod: "GET",
+            path: "/inherited/test",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71,
+            security: {
+                frameguard: "deny",
+                timeout: 500
+            }
+        },
+        {
+            controller: "InheritedController",
+            methodName: "getOverride",
+            httpMethod: "GET",
+            path: "/inherited/override",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71,
+            security: {
+                frameguard: false
+            }
+        }
+    ]
+};
+InheritedController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "InheritedController"
+};
+DiTestController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "DiTestController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/di/test",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_d6749fa8772de8dd
+        },
+        {
+            controller: "DiTestController",
+            methodName: "paramInject",
+            httpMethod: "GET",
+            path: "/di/param-inject",
             params: [{
                     source: "Inject",
                     name: "DatabaseService",
                     validator: "",
                     mode: undefined
                 }],
-            isAsync: false
-        }],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_e955dd67e417e2f5
-});
-__server_metadata_store.endpoints.push({
-    controller: "DiTestController",
-    methodName: "guardedWithParams",
-    httpMethod: "GET",
-    path: "/di/guarded-with-params",
-    params: [],
-    guards: [{
-            type: "class",
-            name: "DiGuard",
-            resolvers: ["admin", 123],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_ab68d46bd18d4a0a
+        },
+        {
+            controller: "DiTestController",
+            methodName: "guarded",
+            httpMethod: "GET",
+            path: "/di/guarded",
+            params: [],
+            guards: [{
+                    type: "class",
+                    name: "DiGuard",
+                    resolvers: [],
+                    params: [{
+                            source: "Inject",
+                            name: "DatabaseService",
+                            validator: "",
+                            mode: undefined
+                        }],
+                    isAsync: false
+                }],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_e955dd67e417e2f5
+        },
+        {
+            controller: "DiTestController",
+            methodName: "guardedWithParams",
+            httpMethod: "GET",
+            path: "/di/guarded-with-params",
+            params: [],
+            guards: [{
+                    type: "class",
+                    name: "DiGuard",
+                    resolvers: ["admin", 123],
+                    params: [{
+                            source: "Inject",
+                            name: "DatabaseService",
+                            validator: "",
+                            mode: undefined
+                        }],
+                    isAsync: false
+                }],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_e955dd67e417e2f5
+        }
+    ]
+};
+DiTestController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "DiTestController"
+};
+RealtimeController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "RealtimeController",
+            methodName: "handleWs",
+            httpMethod: "WS",
+            path: "/realtime/ws",
             params: [{
-                    source: "Inject",
-                    name: "DatabaseService",
+                    source: "WebSocket",
+                    name: "",
                     validator: "",
                     mode: undefined
                 }],
-            isAsync: false
-        }],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_e955dd67e417e2f5
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleWs",
-    httpMethod: "WS",
-    path: "/realtime/ws",
-    params: [{
-            source: "WebSocket",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        ws: true
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleWsParams",
-    httpMethod: "WS",
-    path: "/realtime/ws-params/:room",
-    params: [{
-            source: "WebSocket",
-            name: "",
-            validator: "",
-            mode: undefined
-        }, {
-            source: "Param",
-            name: "room",
-            validator: __val_473287f8298dba71,
-            mode: undefined
-        }, {
-            source: "Query",
-            name: "token",
-            validator: __val_473287f8298dba71,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        ws: true
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleWsLimited",
-    httpMethod: "WS",
-    path: "/realtime/ws-limited",
-    params: [{
-            source: "WebSocket",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        ws: true,
-        wsOptions: {
-            maxPayload: 10
-        }
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleWsHeartbeat",
-    httpMethod: "WS",
-    path: "/realtime/ws-heartbeat",
-    params: [{
-            source: "WebSocket",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        ws: true,
-        wsOptions: {
-            pingInterval: 100,
-            pingTimeout: 50
-        }
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleSse",
-    httpMethod: "GET",
-    path: "/realtime/sse",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        sse: true
-    },
-    returnTypeValidator: __val_07a8cc3cc8aea7a1
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleSseStrip",
-    httpMethod: "GET",
-    path: "/realtime/sse-strip",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        sse: true
-    },
-    returnTypeMode: "strip",
-    returnTypeValidator: __val_07a8cc3cc8aea7a1
-});
-__server_metadata_store.endpoints.push({
-    controller: "RealtimeController",
-    methodName: "handleSseInvalid",
-    httpMethod: "GET",
-    path: "/realtime/sse-invalid",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        sse: true
-    },
-    returnTypeMode: "strict",
-    returnTypeValidator: __val_07a8cc3cc8aea7a1
-});
-__server_metadata_store.endpoints.push({
-    controller: "MathMicroserviceController",
-    methodName: "sum",
-    httpMethod: "RPC",
-    path: "math.sum",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_ccb10958b6aa7739,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        rpc: true
-    },
-    returnTypeValidator: __val_12886f9d00055adf
-});
-__server_metadata_store.endpoints.push({
-    controller: "MathMicroserviceController",
-    methodName: "greet",
-    httpMethod: "RPC",
-    path: "math.greet",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_473287f8298dba71,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        rpc: true
-    },
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "MathMicroserviceController",
-    methodName: "notify",
-    httpMethod: "RPC",
-    path: "logs.notify",
-    params: [{
-            source: "Body",
-            name: "",
-            validator: __val_473287f8298dba71,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        rpc: true,
-        event: true
-    }
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "getExact",
-    httpMethod: "GET",
-    path: "/return-type/exact",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "getStrip",
-    httpMethod: "GET",
-    path: "/return-type/strip",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "getInvalid",
-    httpMethod: "GET",
-    path: "/return-type/invalid",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "getInferredBranch",
-    httpMethod: "GET",
-    path: "/return-type/inferred-branch",
-    params: [{
-            source: "Query",
-            name: "branch",
-            validator: __val_473287f8298dba71,
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "rpcExact",
-    httpMethod: "RPC",
-    path: "/return-typerpc.exact",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        rpc: true
-    },
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "rpcStrip",
-    httpMethod: "RPC",
-    path: "/return-typerpc.strip",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        rpc: true
-    },
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "ReturnTypeController",
-    methodName: "rpcInvalid",
-    httpMethod: "RPC",
-    path: "/return-typerpc.invalid",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {
-        rpc: true
-    },
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "StrictResponseController",
-    methodName: "fail",
-    httpMethod: "GET",
-    path: "/response-mode-strict/fail",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeMode: "strict",
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "StrictResponseController",
-    methodName: "overrideRelaxed",
-    httpMethod: "GET",
-    path: "/response-mode-strict/override-relaxed",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeMode: "relaxed",
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "InheritedResponseController",
-    methodName: "inheritedRelaxed",
-    httpMethod: "GET",
-    path: "/response-mode-inherited/inherited-relaxed",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeMode: "relaxed",
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "InheritedResponseController",
-    methodName: "overrideStrict",
-    httpMethod: "GET",
-    path: "/response-mode-inherited/override-strict",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeMode: "strict",
-    returnTypeValidator: __val_04c78f82f98a8cf4
-});
-__server_metadata_store.endpoints.push({
-    controller: "UnprotectedClassController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/unprotected-class/test",
-    params: [],
-    guards: [{
-            type: "class",
-            name: "AnotherGuard",
-            resolvers: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                ws: true
+            }
+        },
+        {
+            controller: "RealtimeController",
+            methodName: "handleWsParams",
+            httpMethod: "WS",
+            path: "/realtime/ws-params/:room",
+            params: [{
+                    source: "WebSocket",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }, {
+                    source: "Param",
+                    name: "room",
+                    validator: __val_473287f8298dba71,
+                    mode: undefined
+                }, {
+                    source: "Query",
+                    name: "token",
+                    validator: __val_473287f8298dba71,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                ws: true
+            }
+        },
+        {
+            controller: "RealtimeController",
+            methodName: "handleWsLimited",
+            httpMethod: "WS",
+            path: "/realtime/ws-limited",
+            params: [{
+                    source: "WebSocket",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                ws: true,
+                wsOptions: {
+                    maxPayload: 10
+                }
+            }
+        },
+        {
+            controller: "RealtimeController",
+            methodName: "handleWsHeartbeat",
+            httpMethod: "WS",
+            path: "/realtime/ws-heartbeat",
+            params: [{
+                    source: "WebSocket",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                ws: true,
+                wsOptions: {
+                    pingInterval: 100,
+                    pingTimeout: 50
+                }
+            }
+        },
+        {
+            controller: "RealtimeController",
+            methodName: "handleSse",
+            httpMethod: "GET",
+            path: "/realtime/sse",
             params: [],
-            isAsync: false
-        }],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UnprotectedClassAllController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/unprotected-class-all/test",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UnprotectedMethodController",
-    methodName: "getOne",
-    httpMethod: "GET",
-    path: "/unprotected-method/one",
-    params: [],
-    guards: [{
-            type: "class",
-            name: "AnotherGuard",
-            resolvers: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                sse: true
+            },
+            returnTypeValidator: __val_07a8cc3cc8aea7a1
+        },
+        {
+            controller: "RealtimeController",
+            methodName: "handleSseStrip",
+            httpMethod: "GET",
+            path: "/realtime/sse-strip",
             params: [],
-            isAsync: false
-        }],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UnprotectedMethodController",
-    methodName: "getAll",
-    httpMethod: "GET",
-    path: "/unprotected-method/all",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UninterceptedClassController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/unintercepted-class/test",
-    params: [],
-    guards: [],
-    interceptors: ["AnotherInterceptor"],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UninterceptedClassAllController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/unintercepted-class-all/test",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UninterceptedMethodController",
-    methodName: "getOne",
-    httpMethod: "GET",
-    path: "/unintercepted-method/one",
-    params: [],
-    guards: [],
-    interceptors: ["AnotherInterceptor"],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "UninterceptedMethodController",
-    methodName: "getAll",
-    httpMethod: "GET",
-    path: "/unintercepted-method/all",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "MiddlewareTestController",
-    methodName: "both",
-    httpMethod: "GET",
-    path: "/middleware-test/both",
-    params: [{
-            source: "Request",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [{
-            type: "class",
-            name: "MiddlewareCheckingGuard",
-            resolvers: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                sse: true
+            },
+            returnTypeMode: "strip",
+            returnTypeValidator: __val_07a8cc3cc8aea7a1
+        },
+        {
+            controller: "RealtimeController",
+            methodName: "handleSseInvalid",
+            httpMethod: "GET",
+            path: "/realtime/sse-invalid",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                sse: true
+            },
+            returnTypeMode: "strict",
+            returnTypeValidator: __val_07a8cc3cc8aea7a1
+        }
+    ]
+};
+RealtimeController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "RealtimeController"
+};
+MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "MathMicroserviceController",
+            methodName: "sum",
+            httpMethod: "RPC",
+            path: "math.sum",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_ccb10958b6aa7739,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                rpc: true
+            },
+            returnTypeValidator: __val_12886f9d00055adf
+        },
+        {
+            controller: "MathMicroserviceController",
+            methodName: "greet",
+            httpMethod: "RPC",
+            path: "math.greet",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_473287f8298dba71,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                rpc: true
+            },
+            returnTypeValidator: __val_473287f8298dba71
+        },
+        {
+            controller: "MathMicroserviceController",
+            methodName: "notify",
+            httpMethod: "RPC",
+            path: "logs.notify",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    validator: __val_473287f8298dba71,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                rpc: true,
+                event: true
+            }
+        }
+    ]
+};
+MathMicroserviceController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "MathMicroserviceController"
+};
+ReturnTypeController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "ReturnTypeController",
+            methodName: "getExact",
+            httpMethod: "GET",
+            path: "/return-type/exact",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "ReturnTypeController",
+            methodName: "getStrip",
+            httpMethod: "GET",
+            path: "/return-type/strip",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "ReturnTypeController",
+            methodName: "getInvalid",
+            httpMethod: "GET",
+            path: "/return-type/invalid",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "ReturnTypeController",
+            methodName: "getInferredBranch",
+            httpMethod: "GET",
+            path: "/return-type/inferred-branch",
+            params: [{
+                    source: "Query",
+                    name: "branch",
+                    validator: __val_473287f8298dba71,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "ReturnTypeController",
+            methodName: "rpcExact",
+            httpMethod: "RPC",
+            path: "/return-typerpc.exact",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                rpc: true
+            },
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "ReturnTypeController",
+            methodName: "rpcStrip",
+            httpMethod: "RPC",
+            path: "/return-typerpc.strip",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                rpc: true
+            },
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "ReturnTypeController",
+            methodName: "rpcInvalid",
+            httpMethod: "RPC",
+            path: "/return-typerpc.invalid",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {
+                rpc: true
+            },
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        }
+    ]
+};
+ReturnTypeController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "ReturnTypeController"
+};
+StrictResponseController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "StrictResponseController",
+            methodName: "fail",
+            httpMethod: "GET",
+            path: "/response-mode-strict/fail",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeMode: "strict",
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "StrictResponseController",
+            methodName: "overrideRelaxed",
+            httpMethod: "GET",
+            path: "/response-mode-strict/override-relaxed",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeMode: "relaxed",
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        }
+    ]
+};
+StrictResponseController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "StrictResponseController"
+};
+BaseRelaxedController[Symbol.for("webergency.server.controller")] = {
+    endpoints: []
+};
+BaseRelaxedController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "BaseRelaxedController"
+};
+InheritedResponseController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "InheritedResponseController",
+            methodName: "inheritedRelaxed",
+            httpMethod: "GET",
+            path: "/response-mode-inherited/inherited-relaxed",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeMode: "relaxed",
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        },
+        {
+            controller: "InheritedResponseController",
+            methodName: "overrideStrict",
+            httpMethod: "GET",
+            path: "/response-mode-inherited/override-strict",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeMode: "strict",
+            returnTypeValidator: __val_04c78f82f98a8cf4
+        }
+    ]
+};
+InheritedResponseController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "InheritedResponseController"
+};
+UnprotectedBaseController[Symbol.for("webergency.server.controller")] = {
+    endpoints: []
+};
+UnprotectedBaseController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UnprotectedBaseController"
+};
+UnprotectedClassController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "UnprotectedClassController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/unprotected-class/test",
+            params: [],
+            guards: [{
+                    type: "class",
+                    name: "AnotherGuard",
+                    resolvers: [],
+                    params: [],
+                    isAsync: false
+                }],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+UnprotectedClassController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UnprotectedClassController"
+};
+UnprotectedClassAllController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "UnprotectedClassAllController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/unprotected-class-all/test",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+UnprotectedClassAllController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UnprotectedClassAllController"
+};
+UnprotectedMethodController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "UnprotectedMethodController",
+            methodName: "getOne",
+            httpMethod: "GET",
+            path: "/unprotected-method/one",
+            params: [],
+            guards: [{
+                    type: "class",
+                    name: "AnotherGuard",
+                    resolvers: [],
+                    params: [],
+                    isAsync: false
+                }],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        },
+        {
+            controller: "UnprotectedMethodController",
+            methodName: "getAll",
+            httpMethod: "GET",
+            path: "/unprotected-method/all",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+UnprotectedMethodController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UnprotectedMethodController"
+};
+UninterceptedBaseController[Symbol.for("webergency.server.controller")] = {
+    endpoints: []
+};
+UninterceptedBaseController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UninterceptedBaseController"
+};
+UninterceptedClassController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "UninterceptedClassController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/unintercepted-class/test",
+            params: [],
+            guards: [],
+            interceptors: ["AnotherInterceptor"],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+UninterceptedClassController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UninterceptedClassController"
+};
+UninterceptedClassAllController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "UninterceptedClassAllController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/unintercepted-class-all/test",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+UninterceptedClassAllController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UninterceptedClassAllController"
+};
+UninterceptedMethodController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "UninterceptedMethodController",
+            methodName: "getOne",
+            httpMethod: "GET",
+            path: "/unintercepted-method/one",
+            params: [],
+            guards: [],
+            interceptors: ["AnotherInterceptor"],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        },
+        {
+            controller: "UninterceptedMethodController",
+            methodName: "getAll",
+            httpMethod: "GET",
+            path: "/unintercepted-method/all",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+UninterceptedMethodController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "UninterceptedMethodController"
+};
+MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "MiddlewareTestController",
+            methodName: "both",
+            httpMethod: "GET",
+            path: "/middleware-test/both",
             params: [{
                     source: "Request",
                     name: "",
                     validator: "",
                     mode: undefined
                 }],
-            isAsync: false
-        }],
-    interceptors: [],
-    middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
-    meta: {},
-    returnTypeValidator: __val_8dc0b81821ea670e
-});
-__server_metadata_store.endpoints.push({
-    controller: "MiddlewareTestController",
-    methodName: "override",
-    httpMethod: "GET",
-    path: "/middleware-test/override",
-    params: [{
-            source: "Request",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: ["SimpleTestMiddleware"],
-    meta: {},
-    returnTypeValidator: __val_8dc0b81821ea670e
-});
-__server_metadata_store.endpoints.push({
-    controller: "MiddlewareUnmiddlewareController",
-    methodName: "removeOne",
-    httpMethod: "GET",
-    path: "/middleware-unmiddleware/remove-one",
-    params: [{
-            source: "Request",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: ["CallbackTestMiddleware"],
-    meta: {},
-    returnTypeValidator: __val_8dc0b81821ea670e
-});
-__server_metadata_store.endpoints.push({
-    controller: "MiddlewareUnmiddlewareController",
-    methodName: "removeAll",
-    httpMethod: "GET",
-    path: "/middleware-unmiddleware/remove-all",
-    params: [{
-            source: "Request",
-            name: "",
-            validator: "",
-            mode: undefined
-        }],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_8dc0b81821ea670e
-});
-__server_metadata_store.endpoints.push({
-    controller: "GuardInterceptorOrderController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/guard-interceptor-order/test",
-    params: [],
-    guards: [{
-            type: "class",
-            name: "FailingGuard",
-            resolvers: [],
+            guards: [{
+                    type: "class",
+                    name: "MiddlewareCheckingGuard",
+                    resolvers: [],
+                    params: [{
+                            source: "Request",
+                            name: "",
+                            validator: "",
+                            mode: undefined
+                        }],
+                    isAsync: false
+                }],
+            interceptors: [],
+            middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
+            meta: {},
+            returnTypeValidator: __val_8dc0b81821ea670e
+        },
+        {
+            controller: "MiddlewareTestController",
+            methodName: "override",
+            httpMethod: "GET",
+            path: "/middleware-test/override",
+            params: [{
+                    source: "Request",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: ["SimpleTestMiddleware"],
+            meta: {},
+            returnTypeValidator: __val_8dc0b81821ea670e
+        }
+    ]
+};
+MiddlewareTestController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "MiddlewareTestController"
+};
+MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "MiddlewareUnmiddlewareController",
+            methodName: "removeOne",
+            httpMethod: "GET",
+            path: "/middleware-unmiddleware/remove-one",
+            params: [{
+                    source: "Request",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: ["CallbackTestMiddleware"],
+            meta: {},
+            returnTypeValidator: __val_8dc0b81821ea670e
+        },
+        {
+            controller: "MiddlewareUnmiddlewareController",
+            methodName: "removeAll",
+            httpMethod: "GET",
+            path: "/middleware-unmiddleware/remove-all",
+            params: [{
+                    source: "Request",
+                    name: "",
+                    validator: "",
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_8dc0b81821ea670e
+        }
+    ]
+};
+MiddlewareUnmiddlewareController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "MiddlewareUnmiddlewareController"
+};
+GuardInterceptorOrderController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "GuardInterceptorOrderController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/guard-interceptor-order/test",
             params: [],
-            isAsync: false
-        }],
-    interceptors: ["CountingInterceptor"],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "ClassPublicController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/class-public/test",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.endpoints.push({
-    controller: "MethodPublicController",
-    methodName: "test",
-    httpMethod: "GET",
-    path: "/method-public/test",
-    params: [],
-    guards: [],
-    interceptors: [],
-    middlewares: [],
-    meta: {},
-    returnTypeValidator: __val_473287f8298dba71
-});
-__server_metadata_store.providers.set("TypeSafetyController", TypeSafetyController);
-__server_metadata_store.controllerClasses.add("TypeSafetyController");
-__server_metadata_store.providers.set("TagParityController", TagParityController);
-__server_metadata_store.controllerClasses.add("TagParityController");
-__server_metadata_store.providers.set("SecureController", SecureController);
-__server_metadata_store.controllerClasses.add("SecureController");
-__server_metadata_store.providers.set("BaseController", BaseController);
-__server_metadata_store.controllerClasses.add("BaseController");
-__server_metadata_store.providers.set("InheritedController", InheritedController);
-__server_metadata_store.controllerClasses.add("InheritedController");
-__server_metadata_store.providers.set("DiTestController", DiTestController);
-__server_metadata_store.controllerClasses.add("DiTestController");
-__server_metadata_store.providers.set("RealtimeController", RealtimeController);
-__server_metadata_store.controllerClasses.add("RealtimeController");
-__server_metadata_store.providers.set("MathMicroserviceController", MathMicroserviceController);
-__server_metadata_store.controllerClasses.add("MathMicroserviceController");
-__server_metadata_store.providers.set("ReturnTypeController", ReturnTypeController);
-__server_metadata_store.controllerClasses.add("ReturnTypeController");
-__server_metadata_store.providers.set("StrictResponseController", StrictResponseController);
-__server_metadata_store.controllerClasses.add("StrictResponseController");
-__server_metadata_store.providers.set("BaseRelaxedController", BaseRelaxedController);
-__server_metadata_store.controllerClasses.add("BaseRelaxedController");
-__server_metadata_store.providers.set("InheritedResponseController", InheritedResponseController);
-__server_metadata_store.controllerClasses.add("InheritedResponseController");
-__server_metadata_store.providers.set("UnprotectedBaseController", UnprotectedBaseController);
-__server_metadata_store.controllerClasses.add("UnprotectedBaseController");
-__server_metadata_store.providers.set("UnprotectedClassController", UnprotectedClassController);
-__server_metadata_store.controllerClasses.add("UnprotectedClassController");
-__server_metadata_store.providers.set("UnprotectedClassAllController", UnprotectedClassAllController);
-__server_metadata_store.controllerClasses.add("UnprotectedClassAllController");
-__server_metadata_store.providers.set("UnprotectedMethodController", UnprotectedMethodController);
-__server_metadata_store.controllerClasses.add("UnprotectedMethodController");
-__server_metadata_store.providers.set("UninterceptedBaseController", UninterceptedBaseController);
-__server_metadata_store.controllerClasses.add("UninterceptedBaseController");
-__server_metadata_store.providers.set("UninterceptedClassController", UninterceptedClassController);
-__server_metadata_store.controllerClasses.add("UninterceptedClassController");
-__server_metadata_store.providers.set("UninterceptedClassAllController", UninterceptedClassAllController);
-__server_metadata_store.controllerClasses.add("UninterceptedClassAllController");
-__server_metadata_store.providers.set("UninterceptedMethodController", UninterceptedMethodController);
-__server_metadata_store.controllerClasses.add("UninterceptedMethodController");
-__server_metadata_store.providers.set("MiddlewareTestController", MiddlewareTestController);
-__server_metadata_store.controllerClasses.add("MiddlewareTestController");
-__server_metadata_store.providers.set("MiddlewareUnmiddlewareController", MiddlewareUnmiddlewareController);
-__server_metadata_store.controllerClasses.add("MiddlewareUnmiddlewareController");
-__server_metadata_store.providers.set("GuardInterceptorOrderController", GuardInterceptorOrderController);
-__server_metadata_store.controllerClasses.add("GuardInterceptorOrderController");
-__server_metadata_store.providers.set("ClassPublicController", ClassPublicController);
-__server_metadata_store.controllerClasses.add("ClassPublicController");
-__server_metadata_store.providers.set("MethodPublicController", MethodPublicController);
-__server_metadata_store.controllerClasses.add("MethodPublicController");
-__server_metadata_store.providers.set("ConfigService", ConfigService);
-__server_metadata_store.providers.set("DatabaseService", DatabaseService);
-__server_metadata_store.providers.set("LoggerService", LoggerService);
-__server_metadata_store.providers.set("BaseService", BaseService);
-__server_metadata_store.providers.set("ChildService", ChildService);
-__server_metadata_store.providers.set("DiGuard", DiGuard);
-__server_metadata_store.providers.set("SimpleGuard", SimpleGuard);
-__server_metadata_store.providers.set("AnotherGuard", AnotherGuard);
-__server_metadata_store.providers.set("SimpleTestMiddleware", SimpleTestMiddleware);
-__server_metadata_store.providers.set("CallbackTestMiddleware", CallbackTestMiddleware);
-__server_metadata_store.providers.set("MiddlewareCheckingGuard", MiddlewareCheckingGuard);
-__server_metadata_store.providers.set("FailingGuard", FailingGuard);
-__server_metadata_store.providers.set("PublicDenyGuard", PublicDenyGuard);
+            guards: [{
+                    type: "class",
+                    name: "FailingGuard",
+                    resolvers: [],
+                    params: [],
+                    isAsync: false
+                }],
+            interceptors: ["CountingInterceptor"],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+GuardInterceptorOrderController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "GuardInterceptorOrderController"
+};
+ClassPublicController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "ClassPublicController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/class-public/test",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+ClassPublicController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "ClassPublicController"
+};
+MethodPublicController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "MethodPublicController",
+            methodName: "test",
+            httpMethod: "GET",
+            path: "/method-public/test",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_473287f8298dba71
+        }
+    ]
+};
+MethodPublicController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "MethodPublicController"
+};

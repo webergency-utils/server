@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.1.15",
+  "version": "0.2.0",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "license": "MIT",
   "type": "module",
@@ -8,11 +8,13 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "webergency-server-build": "./dist/compiler/cli.js"
+    "webergency-tsc": "./dist/compiler/cli.js"
   },
   "exports": {
     ".": "./dist/index.js",
-    "./transformer": "./dist/compiler/transformer.js"
+    "./transformer": "./dist/compiler/transformer.js",
+    "./register": "./dist/compiler/register.js",
+    "./testing": "./dist/testing.js"
   },
   "publishConfig": {
     "access": "public"
@@ -49,7 +51,7 @@
     "@webergency-utils/typechecker": "^0.2.2"
   },
   "peerDependencies": {
-    "typescript": ">=5.0.0"
+    "typescript": "^5 || ^6"
   },
   "engines": {
     "node": ">=22"

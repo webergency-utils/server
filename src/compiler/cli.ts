@@ -1,154 +1,138 @@
 #!/usr/bin/env node
+/**
+ * webergency-tsc — drop-in tsc wrapper that always applies the Webergency AOT transformer.
+ *
+ * Usage (same args as tsc):
+ *   webergency-tsc -p tsconfig.json
+ *   webergency-tsc --outDir dist src/index.ts
+ */
 import ts from 'typescript';
-import * as fs from 'fs';
 import * as path from 'path';
-import { transformer, createRegistry, generateManifestCode, discoverFromEntryPoint } from './transformer.js';
+import compilerPlugin from './transformer.js';
 
 const args = process.argv.slice( 2 );
-let entryPoint: string | null = null;
-const controllers: string[] = [];
-let output = './_metadata.webergency-server.js';
-const watch = args.includes( '--watch' ) || args.includes( '-w' );
 
-// Basic argument parsing
-for( let i = 0; i < args.length; i++ ) 
+function printUsage()
 {
-    if( args[i] === '--output' || args[i] === '-o' ) 
-    {
-        output = args[++i];
-    }
-    else if( args[i] === '--entry' || args[i] === '-e' ) 
-    {
-        entryPoint = args[++i];
-    }
-    else if( !args[i].startsWith( '-' )) 
-    {
-        controllers.push( args[i]);
-    }
+    console.error( 'Usage: webergency-tsc [tsc options…]\n  Compiles TypeScript with the Webergency AOT transformer (Symbol.for meta + validators).' );
 }
 
-// Smart discovery helpers
-function findEntryPoint(): string | null 
+if( args.includes( '-h' ) || args.includes( '--help' ))
 {
-    const common = ['src/index.ts', 'src/main.ts', 'src/boot.ts', 'index.ts', 'main.ts', 'boot.ts', 'tests/boot.ts'];
-
-    for( const p of common ) 
-    {
-        if( fs.existsSync( path.resolve( process.cwd(), p ))) { return p }
-    }
-
-    return null;
+    printUsage();
+    process.exit( 0 );
 }
 
-if( !entryPoint && controllers.length === 0 ) 
-{
-    entryPoint = findEntryPoint();
+let projectPath: string | undefined;
+const passthrough: string[] = [];
 
-    if( !entryPoint ) 
+for( let i = 0; i < args.length; i++ )
+{
+    const a = args[i];
+
+    if( a === '-p' || a === '--project' )
     {
-        console.error( '❌ Error: Could not automatically find an entry point (src/index.ts, src/main.ts, etc.).' );
-        console.log( 'Usage: npx webergency-server-build [--entry src/main.ts] [--output file.js] [--watch]' );
+        projectPath = args[++i];
+        continue;
+    }
+
+    passthrough.push( a );
+}
+
+const parsedCli = ts.parseCommandLine( passthrough );
+
+if( parsedCli.errors.length )
+{
+    const host =
+    {
+        getCurrentDirectory  : () => ts.sys.getCurrentDirectory(),
+        getCanonicalFileName : ( f: string ) => f,
+        getNewLine           : () => ts.sys.newLine
+    };
+    console.error( ts.formatDiagnosticsWithColorAndContext( parsedCli.errors, host as any ));
+    process.exit( 1 );
+}
+
+let options: ts.CompilerOptions = { ...parsedCli.options };
+let rootNames: string[] = parsedCli.fileNames;
+
+const configPath = projectPath
+    ? path.resolve( process.cwd(), projectPath )
+    : ( rootNames.length === 0
+        ? ts.findConfigFile( process.cwd(), ts.sys.fileExists, 'tsconfig.json' )
+        : undefined );
+
+if( configPath )
+{
+    const configFile = ts.readConfigFile( configPath, ts.sys.readFile );
+
+    if( configFile.error )
+    {
+        console.error( ts.flattenDiagnosticMessageText( configFile.error.messageText, '\n' ));
         process.exit( 1 );
     }
+
+    const parsed = ts.parseJsonConfigFileContent(
+        configFile.config,
+        ts.sys,
+        path.dirname( configPath ),
+        parsedCli.options,
+        configPath
+    );
+
+    if( parsed.errors.length )
+    {
+        console.error( parsed.errors.map( e => ts.flattenDiagnosticMessageText( e.messageText, '\n' )).join( '\n' ));
+        process.exit( 1 );
+    }
+
+    options = parsed.options;
+    rootNames = parsed.fileNames;
 }
-
-const manifestPath = path.resolve( process.cwd(), output );
-const absOutput = path.dirname( manifestPath );
-
-if( !fs.existsSync( absOutput )) { fs.mkdirSync( absOutput, { recursive : true }) }
-
-async function runBuild() 
+else if( rootNames.length === 0 )
 {
-    console.log( '\n🚀 Starting AOT Build...' );
-    const registry = createRegistry();
-
-    // Initialize program with all potential files for discovery
-    const initialFiles = entryPoint ? [path.resolve( process.cwd(), entryPoint )] : controllers.map( c => path.resolve( process.cwd(), c ));
-    let program = ts.createProgram( initialFiles, {
-        experimentalDecorators : true,
-        target                 : ts.ScriptTarget.ES2022,
-        module                 : ts.ModuleKind.NodeNext,
-        moduleResolution       : ts.ModuleResolutionKind.NodeNext,
-        skipLibCheck           : true
-    });
-
-    let filesToAnalyze = controllers.map( c => path.resolve( process.cwd(), c ));
-
-    if( entryPoint ) 
-    {
-        const discovered = discoverFromEntryPoint( program, entryPoint!, registry );
-        filesToAnalyze = Array.from( new Set([...filesToAnalyze, ...discovered]));
-    
-        // Re-create program with discovered files to ensure all symbols are available
-        program = ts.createProgram([path.resolve( process.cwd(), entryPoint! ), ...filesToAnalyze], {
-            experimentalDecorators : true,
-            target                 : ts.ScriptTarget.ES2022,
-            module                 : ts.ModuleKind.NodeNext,
-            moduleResolution       : ts.ModuleResolutionKind.NodeNext,
-            skipLibCheck           : true
-        });
-    }
-
-    const analyzer = transformer( program, registry )({} as any );
-    const analyzedFiles = new Set<string>();
-    const queue = [...filesToAnalyze];
-
-    while( queue.length > 0 ) 
-    {
-        const file = queue.shift()!;
-
-        if( analyzedFiles.has( file )) { continue }
-    
-        const source = program.getSourceFile( file );
-
-        if( source ) 
-        {
-            analyzer( source );
-            analyzedFiles.add( file );
-      
-            for( const info of [...registry.guards.values(), ...registry.interceptors.values(), ...registry.controllers.values(), ...registry.providers.values()]) 
-            {
-                if( !analyzedFiles.has( info.path )) 
-                {
-                    queue.push( info.path );
-                }
-            }
-        }
-    }
-
-    const manifestCode = generateManifestCode( registry, new Map(), manifestPath );
-    fs.writeFileSync( manifestPath, manifestCode );
-    console.log( `✅ AOT Manifest updated: ${path.basename( manifestPath )}` );
-
-    try 
-    {
-        const { SwaggerSpecGenerator } = await import( './swagger.js' );
-        SwaggerSpecGenerator.generate( registry, program, path.dirname( manifestPath ));
-    }
-    catch ( e: any ) 
-    {
-        console.warn( '⚠️ Warning: Failed to generate Swagger docs:', e.message );
-    }
+    printUsage();
+    process.exit( 1 );
 }
 
-if( watch ) 
+options.experimentalDecorators = options.experimentalDecorators ?? true;
+
+const host = ts.createCompilerHost( options );
+const program = ts.createProgram({
+    rootNames,
+    options,
+    host
+});
+
+const emitResult = program.emit(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+        before : [compilerPlugin( program ) as unknown as ts.TransformerFactory<ts.SourceFile>]
+    }
+);
+
+const diagnostics = [
+    ...ts.getPreEmitDiagnostics( program ),
+    ...emitResult.diagnostics
+];
+
+if( diagnostics.length )
 {
-    console.log( '👀 Watching for changes in src/ folder...' );
-    runBuild();
-    let timeout: NodeJS.Timeout | null = null;
-    fs.watch( path.resolve( process.cwd(), 'src' ), { recursive : true }, ( event, filename ) => 
+    const formatHost: ts.FormatDiagnosticsHost =
     {
-        if( filename?.endsWith( '.ts' )) 
-        {
-            if( timeout ) { clearTimeout( timeout ) }
-            timeout = setTimeout(() => 
-            {
-                runBuild();
-            }, 100 ); // Debounce
-        }
-    });
+        getCanonicalFileName : f => f,
+        getCurrentDirectory  : () => ts.sys.getCurrentDirectory(),
+        getNewLine           : () => ts.sys.newLine
+    };
+    console.error( ts.formatDiagnosticsWithColorAndContext( diagnostics, formatHost ));
 }
-else 
+
+if( emitResult.emitSkipped || diagnostics.some( d => d.category === ts.DiagnosticCategory.Error ))
 {
-    runBuild();
+    process.exit( 1 );
 }
+
+console.log( '✔ webergency-tsc emit complete' );

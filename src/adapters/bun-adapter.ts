@@ -24,8 +24,8 @@ export class BunAdapter implements ServerAdapter
         }
 
         this.isNodeCompat = false;
-        const { MetadataStore } = await import( '../core/metadata.js' );
-        const hasWs = MetadataStore.getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
+        const { getRegistry } = await import( '../core/registry.js' );
+        const hasWs = getRegistry().getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
 
         const serveOptions: any = {
             port

@@ -2,7 +2,23 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Server } from '../server.js';
 import { Scope, Meta, SetMetadata } from '../decorators.js';
 import { Reflector } from '../core/reflector.js';
-import { MetadataStore } from '../core/metadata.js';
+import { seedInstanceController, runWithRegistry, ApplicationRegistry, defineController, setModuleMeta } from '../testing.js';
+
+function setupServer( port: number, setup: ( registry: ApplicationRegistry ) => void, options: Record<string, any> = {} ): Server
+{
+    const server = new Server({ port, ...options });
+    runWithRegistry( server.registry, () => setup( server.registry ));
+    return server;
+}
+
+function legacyModule( meta: Record<string, any> )
+{
+    class LegacyModule {}
+    setModuleMeta( LegacyModule, meta );
+
+    return LegacyModule;
+}
+
 import { validators } from '@webergency-utils/typechecker';
 import { Context } from '../core/context.js';
 import { createServer } from 'http';
@@ -22,33 +38,28 @@ vi.mock( 'https', () => ({
 
 describe( 'Server & Metadata', () => 
 {
-    beforeEach(() => 
-    {
-        MetadataStore.clear();
-    });
 
-    describe( 'MetadataStore', () => 
+    describe( 'ApplicationRegistry', () =>
     {
-        it( 'should register and retrieve controllers, guards, and interceptors', () => 
+        it( 'should register and retrieve controllers, guards, and interceptors', () =>
         {
+            const registry = new ApplicationRegistry();
             const ctrl = { hello : () => 'world' };
             const guard = { use : () => true };
             const interceptor = { intercept : () => {} };
-            
-            MetadataStore.registerController( 'TestCtrl', ctrl );
-            MetadataStore.registerGuard( 'TestGuard', guard );
-            MetadataStore.registerInterceptor( 'TestInt', interceptor );
-            
-            expect( MetadataStore.getController( 'TestCtrl' )).toBe( ctrl );
-            expect( MetadataStore.getGuard( 'TestGuard' )).toBe( guard );
-            expect( MetadataStore.getInterceptor( 'TestInt' )).toBe( interceptor );
+            registry.registerController( 'TestCtrl', ctrl );
+            registry.registerGuard( 'TestGuard', guard );
+            registry.registerInterceptor( 'TestInt', interceptor );
+            expect( registry.getController( 'TestCtrl' )).toBe( ctrl );
+            expect( registry.getGuard( 'TestGuard' )).toBe( guard );
+            expect( registry.getInterceptor( 'TestInt' )).toBe( interceptor );
         });
-
-        it( 'should register endpoints', () => 
+        it( 'should register endpoints', () =>
         {
-            const ep: any = { controller : 'C', methodName : 'm', path : '/test', httpMethod : 'GET', params : [] };
-            MetadataStore.registerEndpoint( ep );
-            expect( MetadataStore.getEndpoints()).toContain( ep );
+            const registry = new ApplicationRegistry();
+            const ep: any = { controller : 'C', methodName : 'm', path : '/test', httpMethod : 'GET', params : [], guards : [], interceptors : [], meta : {} };
+            registry.registerEndpoint( ep );
+            expect( registry.getEndpoints()).toContain( ep );
         });
     });
 
@@ -78,17 +89,17 @@ describe( 'Server & Metadata', () =>
                 home : () => 'home',
                 user : ( id: string ) => id 
             };
-            MetadataStore.registerController( 'Ctrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'Ctrl', ctrl );
+            registry.registerEndpoint({
                 controller : 'Ctrl', methodName : 'home', httpMethod : 'GET', path : '/', params : [], guards : [], interceptors : [], meta : {}
             });
-            MetadataStore.registerEndpoint({
+            registry.registerEndpoint({
                 controller   : 'Ctrl', methodName   : 'user', httpMethod   : 'GET', path         : '/users/:id', 
                 params       : [{ source : 'Param', name : 'id' }], guards       : [], interceptors : [], meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             
             const res1 = await server.fetch( new Request( 'http://localhost/' ));
             expect( await res1.text()).toBe( 'home' );
@@ -99,12 +110,13 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle OPTIONS and fallback routes', async () => 
         {
-            MetadataStore.registerController( 'C', { post : () => 'ok' });
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'C', { post : () => 'ok' });
+            registry.registerEndpoint({
                 controller : 'C', methodName : 'post', httpMethod : 'POST', path : '/data', params : [], guards : [], interceptors : [], meta : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             
             const res = await server.fetch( new Request( 'http://localhost/data', { method : 'OPTIONS' }));
             expect( res.status ).toBe( 200 );
@@ -119,8 +131,10 @@ describe( 'Server & Metadata', () =>
                 test : ( query: any, header: any, host: string, url: string, path: string, ip: string, res: any, ctx: any, headers: any ) => 
                     ({ query, header, host, url, path, ip, res, ctx, headers })
             };
-            MetadataStore.registerController( 'ParamCtrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'ParamCtrl', ctrl );
+            registry.registerEndpoint({
                 controller : 'ParamCtrl',
                 methodName : 'test',
                 httpMethod : 'GET',
@@ -138,9 +152,7 @@ describe( 'Server & Metadata', () =>
                 ],
                 guards : [], interceptors : [], meta : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://example.com/params?q=1', {
                 headers : { 'x-f' : 'v', 'x-forwarded-for' : '1.2.3.4', 'x-test' : 'val' }
             }));
@@ -167,8 +179,10 @@ describe( 'Server & Metadata', () =>
                     return { ok : true };
                 }
             };
-            MetadataStore.registerController( 'ResCtrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'ResCtrl', ctrl );
+            registry.registerEndpoint({
                 controller   : 'ResCtrl',
                 methodName   : 'get',
                 httpMethod   : 'GET',
@@ -178,9 +192,7 @@ describe( 'Server & Metadata', () =>
                 interceptors : [],
                 meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://localhost/res' ));
             expect( res.status ).toBe( 201 );
             expect( res.headers.get( 'x-from-handler' )).toBe( '1' );
@@ -196,34 +208,33 @@ describe( 'Server & Metadata', () =>
                     yield { event : 'tick', data : { val : 1, extra : 'x' } };
                 }
             };
-            MetadataStore.registerController( 'SseValCtrl', ctrl );
-            MetadataStore.registerEndpoint({
-                controller         : 'SseValCtrl',
-                methodName         : 'stream',
-                httpMethod         : 'GET',
-                path               : '/sse-val',
-                params             : [],
-                guards             : [],
-                interceptors       : [],
-                meta               : { sse : true },
-                returnTypeMode     : 'strip',
-                returnTypeValidator : ( v: any, _path: string, ctx: any ) =>
-                {
-                    if( ctx.mode === 'strip' && v && typeof v === 'object' )
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'SseValCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller         : 'SseValCtrl',
+                    methodName         : 'stream',
+                    httpMethod         : 'GET',
+                    path               : '/sse-val',
+                    params             : [],
+                    guards             : [],
+                    interceptors       : [],
+                    meta               : { sse : true },
+                    returnTypeMode     : 'strip',
+                    returnTypeValidator : ( v: any, _path: string, ctx: any ) =>
                     {
-                        const out : Record<string, any> = {};
+                        if( ctx.mode === 'strip' && v && typeof v === 'object' )
+                        {
+                            const out : Record<string, any> = {};
+                            if( 'val' in v ){ out.val = v.val }
 
-                        if( 'val' in v ){ out.val = v.val }
+                            return out;
+                        }
 
-                        return out;
+                        return v;
                     }
-
-                    return v;
-                }
+                });
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
             const res = await server.fetch( new Request( 'http://localhost/sse-val' ));
             expect( res.status ).toBe( 200 );
             const text = await res.text();
@@ -236,8 +247,10 @@ describe( 'Server & Metadata', () =>
             const ctrl = {
                 get : ( ip: string ) => ({ ip })
             };
-            MetadataStore.registerController( 'IpCtrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'IpCtrl', ctrl );
+            registry.registerEndpoint({
                 controller   : 'IpCtrl',
                 methodName   : 'get',
                 httpMethod   : 'GET',
@@ -247,12 +260,7 @@ describe( 'Server & Metadata', () =>
                 interceptors : [],
                 meta         : {}
             });
-
-            const server = new Server({
-                port       : 3000,
-                trustProxy : [ '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' ]
-            });
-            ( server as any ).init();
+            }, {trustProxy : [ '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' ]});
 
             const req = new Request( 'http://example.com/ip', {
                 headers : { 'x-forwarded-for' : '203.0.113.50, 10.0.0.2' }
@@ -267,13 +275,14 @@ describe( 'Server & Metadata', () =>
         it( 'should handle body and duplex streams', async () => 
         {
             const ctrl = { echo : ( body: any ) => body };
-            MetadataStore.registerController( 'EchoCtrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'EchoCtrl', ctrl );
+            registry.registerEndpoint({
                 controller   : 'EchoCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/echo',
                 params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             
             const res = await server.fetch( new Request( 'http://localhost/echo', {
                 method  : 'POST',
@@ -294,9 +303,11 @@ describe( 'Server & Metadata', () =>
                     if( body.deny ) { throw { code : 403, message : 'Denied' } }
                 })
             };
-            MetadataStore.registerGuard( 'ComplexGuard', guard );
-            MetadataStore.registerController( 'C', { test : () => 'ok' });
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerGuard( 'ComplexGuard', guard );
+            registry.registerController( 'C', { test : () => 'ok' });
+            registry.registerEndpoint({
                 controller : 'C', methodName : 'test', httpMethod : 'POST', path       : '/complex-g', params     : [],
                 guards     : [{ 
                     name      : 'ComplexGuard', type      : 'class', resolvers : [], 
@@ -307,9 +318,7 @@ describe( 'Server & Metadata', () =>
                 }],
                 interceptors : [], meta : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             
             const req = new Request( 'http://localhost/complex-g', {
                 method  : 'POST',
@@ -327,16 +336,16 @@ describe( 'Server & Metadata', () =>
             { 
                 if( val === 'deny' ) { throw { code : 403, message : 'Denied' } }
             })};
-            MetadataStore.registerGuard( 'G', guard );
-            MetadataStore.registerController( 'C', { ok : () => 'ok' });
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerGuard( 'G', guard );
+            registry.registerController( 'C', { ok : () => 'ok' });
+            registry.registerEndpoint({
                 controller   : 'C', methodName   : 'ok', httpMethod   : 'GET', path         : '/g', params       : [],
                 guards       : [{ name : 'G', type : 'class', resolvers : ['deny'], params : [{ source : 'Unknown' as any }] }],
                 interceptors : [], meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://localhost/g' ));
             expect( res.status ).toBe( 403 );
             const data = await res.json();
@@ -359,16 +368,16 @@ describe( 'Server & Metadata', () =>
 
                 return res;
             }};
-            MetadataStore.registerInterceptor( 'I1', i1 );
-            MetadataStore.registerInterceptor( 'I2', i2 );
-            MetadataStore.registerController( 'C', { ok : () => 'ok' });
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerInterceptor( 'I1', i1 );
+            registry.registerInterceptor( 'I2', i2 );
+            registry.registerController( 'C', { ok : () => 'ok' });
+            registry.registerEndpoint({
                 controller   : 'C', methodName   : 'ok', httpMethod   : 'GET', path         : '/i', params       : [],
                 guards       : [], interceptors : ['I1', 'I2'], meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://localhost/i' ));
             expect( res.headers.get( 'x-1' )).toBe( '1' );
             expect( res.headers.get( 'x-2' )).toBe( '2' );
@@ -471,20 +480,20 @@ describe( 'Server & Metadata', () =>
                 return v;
             };
 
-            MetadataStore.registerController( 'FromBodyCtrl', formCtrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'FromBodyCtrl', formCtrl );
+            registry.registerEndpoint({
                 controller : 'FromBodyCtrl', methodName : 'form', httpMethod : 'POST', path : '/from-form',
                 params     : [{ source : 'Body', validator : bodyValidator }],
                 guards     : [], interceptors : [], meta : {}
             });
-            MetadataStore.registerEndpoint({
+            registry.registerEndpoint({
                 controller : 'FromBodyCtrl', methodName : 'json', httpMethod : 'POST', path : '/from-json',
                 params     : [{ source : 'Body', validator : jsonValidator }],
                 guards     : [], interceptors : [], meta : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
 
             const formRes = await server.fetch( new Request( 'http://localhost/from-form', {
                 method  : 'POST',
@@ -521,13 +530,14 @@ describe( 'Server & Metadata', () =>
         it( 'should pass undefined to handler when body param has no validator and no body is sent', async () => 
         {
             const ctrl = { echo : vi.fn(( body: any ) => ({ received : body })) };
-            MetadataStore.registerController( 'EmptyBodyCtrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'EmptyBodyCtrl', ctrl );
+            registry.registerEndpoint({
                 controller   : 'EmptyBodyCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/empty-body',
                 params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             
             const res = await server.fetch( new Request( 'http://localhost/empty-body', { method : 'POST' }));
 
@@ -553,16 +563,17 @@ describe( 'Server & Metadata', () =>
                 ]);
             };
 
-            MetadataStore.registerController( 'OptBodyCtrl', {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'OptBodyCtrl', {
                 test : ( body: any ) => ({ received : body })
             });
-            MetadataStore.registerEndpoint({
+            registry.registerEndpoint({
                 controller   : 'OptBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/opt-body',
                 params       : [{ source : 'Body', validator : optionalBodyValidator, mode : 'strict' }],
                 guards       : [], interceptors : [], meta         : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
 
             const res = await server.fetch( new Request( 'http://localhost/opt-body', { method : 'POST' }));
 
@@ -583,16 +594,17 @@ describe( 'Server & Metadata', () =>
                 return v;
             };
 
-            MetadataStore.registerController( 'ReqBodyCtrl', {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'ReqBodyCtrl', {
                 test : ( body: any ) => body
             });
-            MetadataStore.registerEndpoint({
+            registry.registerEndpoint({
                 controller   : 'ReqBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/req-body',
                 params       : [{ source : 'Body', validator : requiredBodyValidator, mode : 'strict' }],
                 guards       : [], interceptors : [], meta         : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
 
             const res = await server.fetch( new Request( 'http://localhost/req-body', { method : 'POST' }));
 
@@ -604,13 +616,14 @@ describe( 'Server & Metadata', () =>
         it( 'should handle server errors gracefully', async () => 
         {
             const ctrl = { boom : () => { throw new Error( 'Boom' ) } };
-            MetadataStore.registerController( 'C', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'C', ctrl );
+            registry.registerEndpoint({
                 controller   : 'C', methodName   : 'boom', httpMethod   : 'GET', path         : '/boom', params       : [],
                 guards       : [], interceptors : [], meta         : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://localhost/boom' ));
             expect( res.status ).toBe( 500 );
             const data = await res.json();
@@ -620,13 +633,14 @@ describe( 'Server & Metadata', () =>
         it( 'should handle custom errors with data', async () => 
         {
             const ctrl = { fail : () => { throw { code : 418, data : { tea : 'pot' } } } };
-            MetadataStore.registerController( 'C', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'C', ctrl );
+            registry.registerEndpoint({
                 controller   : 'C', methodName   : 'fail', httpMethod   : 'GET', path         : '/fail', params       : [],
                 guards       : [], interceptors : [], meta         : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://localhost/fail' ));
             expect( res.status ).toBe( 418 );
             expect( await res.json()).toEqual({ tea : 'pot' });
@@ -644,8 +658,10 @@ describe( 'Server & Metadata', () =>
         it( 'should validate parameters and return 400 with multiple errors', async () => 
         {
             const ctrl = { test : ( a: number, b: number ) => ({ a, b }) };
-            MetadataStore.registerController( 'ValCtrl', ctrl );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+            registry.registerController( 'ValCtrl', ctrl );
+            registry.registerEndpoint({
                 controller : 'ValCtrl', methodName : 'test', httpMethod : 'GET', path       : '/val-fail',
                 params     : [
                     { source : 'Query', name : 'a', validator : validators.number },
@@ -653,8 +669,7 @@ describe( 'Server & Metadata', () =>
                 ],
                 guards : [], interceptors : [], meta : {}
             });
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
             const res = await server.fetch( new Request( 'http://localhost/val-fail?a=x&b=y' ));
             expect( res.status ).toBe( 400 );
             const data = await res.json();
@@ -741,7 +756,14 @@ describe( 'Server & Metadata', () =>
             const { createServer } = await import( 'http' );
             const mockCreateServer = vi.mocked( createServer ).mockReturnValue( mockServer as any );
 
-            const server = new Server({ port : 3000 });
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'NodeCtrl', { test : () => ({ ok : true }) });
+                registry.registerEndpoint({
+                    controller   : 'NodeCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/test',
+                    params       : [], guards       : [], interceptors : [], meta         : {}
+                });
+            });
             await server.start();
 
             expect( mockCreateServer ).toHaveBeenCalled();
@@ -767,13 +789,6 @@ describe( 'Server & Metadata', () =>
             };
 
             // Mock Metadata for the request to match
-            MetadataStore.registerController( 'NodeCtrl', { test : () => ({ ok : true }) });
-            MetadataStore.registerEndpoint({
-                controller   : 'NodeCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/test',
-                params       : [], guards       : [], interceptors : [], meta         : {}
-            });
-            ( server as any ).init();
-
             await handler( mockReq as any, mockRes as any );
 
             expect( mockRes.statusCode ).toBe( 200 );
@@ -833,20 +848,19 @@ describe( 'Server & Metadata', () =>
             const { createServer } = await import( 'http' );
             vi.mocked( createServer ).mockReturnValue( mockServer as any );
 
-            const server = new Server({ port : 3003 });
+            const server = setupServer( 3003, ( registry ) =>
+            {
+                registry.registerController( 'EmptyCtrl', { test : () => new Response( null ) });
+                registry.registerEndpoint({
+                    controller   : 'EmptyCtrl', methodName   : 'test', httpMethod   : 'GET', path         : '/empty-test',
+                    params       : [], guards       : [], interceptors : [], meta         : {}
+                });
+            });
             await server.start();
             const handler = vi.mocked( createServer ).mock.calls[vi.mocked( createServer ).mock.calls.length - 1][0];
 
             const mockReq = { method : 'GET', url : '/empty-test', headers : { host : 'l' }, socket : { getPeerCertificate : () => null } };
             const mockRes = { statusCode : 0, setHeader : vi.fn(), end : vi.fn(), on : vi.fn(), once : vi.fn(), emit : vi.fn(), write : vi.fn() };
-
-            // Mock an endpoint that returns null/empty
-            MetadataStore.registerController( 'EmptyCtrl', { test : () => new Response( null ) });
-            MetadataStore.registerEndpoint({
-                controller   : 'EmptyCtrl', methodName   : 'test', httpMethod   : 'GET', path         : '/empty-test',
-                params       : [], guards       : [], interceptors : [], meta         : {}
-            });
-            ( server as any ).init();
 
             await handler( mockReq as any, mockRes as any );
             expect( mockRes.end ).toHaveBeenCalled();
@@ -872,15 +886,14 @@ describe( 'Server & Metadata', () =>
         {
             const consoleSpy = vi.spyOn( console, 'log' ).mockImplementation(() => {});
             
-            const server = new Server({ port : 3004, logs : true });
-            
-            // Register controller and endpoint
-            MetadataStore.registerController( 'LogCtrl', { getLog : () => ({ hello : 'log' }) });
-            MetadataStore.registerEndpoint({
-                controller   : 'LogCtrl', methodName   : 'getLog', httpMethod   : 'GET', path         : '/log-test',
-                params       : [], guards       : [], interceptors : [], meta         : {}
-            });
-            
+            const server = setupServer( 3004, ( registry ) =>
+            {
+                registry.registerController( 'LogCtrl', { getLog : () => ({ hello : 'log' }) });
+                registry.registerEndpoint({
+                    controller   : 'LogCtrl', methodName   : 'getLog', httpMethod   : 'GET', path         : '/log-test',
+                    params       : [], guards       : [], interceptors : [], meta         : {}
+                });
+            }, { logs : true });
             await server.start();
             
             // Verify registration log
@@ -911,15 +924,14 @@ describe( 'Server & Metadata', () =>
                 error : ( msg: string, ctx: any ) => logs.push({ level : 'error', msg, ctx })
             };
 
-            const server = new Server({ port : 3005, logs : true, logger : customLogger });
-
-            // 1. Verify Registration Log
-            MetadataStore.registerController( 'MockCtrl', { mockAction : () => 'ok' });
-            MetadataStore.registerEndpoint({
-                controller   : 'MockCtrl', methodName   : 'mockAction', httpMethod   : 'GET', path         : '/mock-log',
-                params       : [], guards       : [], interceptors : [], meta         : {}
-            });
-
+            const server = setupServer( 3005, ( registry ) =>
+            {
+                registry.registerController( 'MockCtrl', { mockAction : () => 'ok' });
+                registry.registerEndpoint({
+                    controller   : 'MockCtrl', methodName   : 'mockAction', httpMethod   : 'GET', path         : '/mock-log',
+                    params       : [], guards       : [], interceptors : [], meta         : {}
+                });
+            }, { logs : true, logger : customLogger });
             await server.start();
 
             const regLog = logs.find( l => l.ctx?.type === 'registration' );
@@ -998,45 +1010,34 @@ describe( 'Server & Metadata', () =>
             ( ChildController as any ).__injections__ = { constructorDeps : ['ServiceB'] };
             ( ParentController as any ).__injections__ = { constructorDeps : ['ServiceC'] };
 
-            // Define modules
-            const SubModule = {
-                __moduleMetadata__ : {
-                    providers   : [ServiceA, ServiceB],
-                    controllers : [ChildController]
-                }
-            };
+            defineController( ChildController, [{ methodName : 'hello', httpMethod : 'GET', path : '/child' }]);
+            defineController( ParentController, [{ methodName : 'greet', httpMethod : 'GET', path : '/parent' }]);
 
-            const RootModule = {
-                __moduleMetadata__ : {
-                    imports     : [SubModule],
-                    providers   : [ServiceC],
-                    controllers : [ParentController]
-                }
-            };
-
-            // Register endpoints as if AOT did it
-            MetadataStore.registerEndpoint({
-                controller : 'ChildController', methodName : 'hello', httpMethod : 'GET', path : '/child', params : [], guards : [], interceptors : [], meta : {}
-            });
-            MetadataStore.registerEndpoint({
-                controller : 'ParentController', methodName : 'greet', httpMethod : 'GET', path : '/parent', params : [], guards : [], interceptors : [], meta : {}
-            });
-            MetadataStore.registerEndpoint({
-                controller : 'OtherController', methodName : 'ignored', httpMethod : 'GET', path : '/ignored', params : [], guards : [], interceptors : [], meta : {}
+            const SubModule = legacyModule({
+                providers   : [ServiceA, ServiceB],
+                controllers : [ChildController]
             });
 
-            const server = new Server({ port : 3006, module : RootModule, logger, logs : false });
-            ( server as any ).init();
+            const RootModule = legacyModule({
+                imports     : [SubModule],
+                providers   : [ServiceC],
+                controllers : [ParentController]
+            });
 
-            // Verify DI containers resolved correctly
-            const parentInst = MetadataStore.getController( 'ParentController' );
-            const childInst = MetadataStore.getController( 'ChildController' );
+            const server = setupServer( 3006, () => {}, {module : RootModule, logger, logs : false});
 
-            expect( parentInst ).toBeDefined();
-            expect( parentInst.c.getValue()).toBe( 'C' );
+            server.ensureReady();
 
-            expect( childInst ).toBeDefined();
-            expect( childInst.b.getValue()).toBe( 'AB' );
+            runWithRegistry( server.registry, () =>
+            {
+                const parentInst = server.registry.getController( 'ParentController' );
+                const childInst = server.registry.getController( 'ChildController' );
+                expect( parentInst ).toBeDefined();
+                expect( parentInst.c.getValue()).toBe( 'C' );
+
+                expect( childInst ).toBeDefined();
+                expect( childInst.b.getValue()).toBe( 'AB' );
+            });
 
             // Verify routes are registered
             const res1 = await server.fetch( new Request( 'http://localhost/parent' ));
@@ -1065,29 +1066,26 @@ describe( 'Server & Metadata', () =>
             }
             ( DynamicController as any ).__injections__ = { constructorDeps : ['ConfigService'] };
 
-            // Dynamic module mimicking NestJS DynamicModule
+            defineController( DynamicController, [{ methodName : 'handle', httpMethod : 'GET', path : '/dynamic' }]);
+
+            class DynamicModuleClass {}
             const DynamicModule = {
-                module      : class DynamicModule {},
+                module      : DynamicModuleClass,
                 providers   : [ConfigService],
                 controllers : [DynamicController]
             };
 
-            const RootModule = {
-                __moduleMetadata__ : {
-                    imports : [DynamicModule]
-                }
-            };
+            const RootModule = legacyModule({ imports : [DynamicModule] });
 
-            MetadataStore.registerEndpoint({
-                controller : 'DynamicController', methodName : 'handle', httpMethod : 'GET', path : '/dynamic', params : [], guards : [], interceptors : [], meta : {}
+            const server = setupServer( 3007, () => {}, {module : RootModule});
+
+            server.ensureReady();
+            runWithRegistry( server.registry, () =>
+            {
+                const ctrl = server.registry.getController( 'DynamicController' );
+                expect( ctrl ).toBeDefined();
+                expect( ctrl.config.get()).toBe( 'dynamic-config' );
             });
-
-            const server = new Server({ port : 3007, module : RootModule });
-            ( server as any ).init();
-
-            const ctrl = MetadataStore.getController( 'DynamicController' );
-            expect( ctrl ).toBeDefined();
-            expect( ctrl.config.get()).toBe( 'dynamic-config' );
 
             const res = await server.fetch( new Request( 'http://localhost/dynamic' ));
             expect( await res.text()).toBe( 'dynamic-config' );
@@ -1095,18 +1093,12 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle circular module dependencies gracefully', async () => 
         {
-            const ModuleA: any = {
-                __moduleMetadata__ : {}
-            };
-            const ModuleB: any = {
-                __moduleMetadata__ : {
-                    imports : [ModuleA]
-                }
-            };
-            ModuleA.__moduleMetadata__.imports = [ModuleB];
+            const ModuleA: any = legacyModule({});
+            const ModuleB: any = legacyModule({ imports : [ModuleA] });
+            setModuleMeta( ModuleA, { imports : [ModuleB] });
 
             const server = new Server({ port : 3008, module : ModuleA });
-            expect(() => ( server as any ).init()).not.toThrow();
+            expect(() => server.ensureReady()).not.toThrow();
         });
 
         it( 'should support multiple root modules', async () => 
@@ -1132,28 +1124,13 @@ describe( 'Server & Metadata', () =>
             ( ControllerX as any ).__injections__ = { constructorDeps : ['ServiceX'] };
             ( ControllerY as any ).__injections__ = { constructorDeps : ['ServiceY'] };
 
-            const ModuleX = {
-                __moduleMetadata__ : {
-                    providers   : [ServiceX],
-                    controllers : [ControllerX]
-                }
-            };
-            const ModuleY = {
-                __moduleMetadata__ : {
-                    providers   : [ServiceY],
-                    controllers : [ControllerY]
-                }
-            };
+            defineController( ControllerX, [{ methodName : 'hello', httpMethod : 'GET', path : '/x' }]);
+            defineController( ControllerY, [{ methodName : 'hello', httpMethod : 'GET', path : '/y' }]);
 
-            MetadataStore.registerEndpoint({
-                controller : 'ControllerX', methodName : 'hello', httpMethod : 'GET', path : '/x', params : [], guards : [], interceptors : [], meta : {}
-            });
-            MetadataStore.registerEndpoint({
-                controller : 'ControllerY', methodName : 'hello', httpMethod : 'GET', path : '/y', params : [], guards : [], interceptors : [], meta : {}
-            });
+            const ModuleX = legacyModule({ providers : [ServiceX], controllers : [ControllerX] });
+            const ModuleY = legacyModule({ providers : [ServiceY], controllers : [ControllerY] });
 
-            const server = new Server({ port : 3009, module : [ModuleX, ModuleY] });
-            ( server as any ).init();
+            const server = setupServer( 3009, () => {}, {module : [ModuleX, ModuleY]});
 
             const resX = await server.fetch( new Request( 'http://localhost/x' ));
             expect( await resX.text()).toBe( 'X' );
@@ -1175,25 +1152,14 @@ describe( 'Server & Metadata', () =>
             }
             ( ConsumerController as any ).__injections__ = { constructorDeps : ['HiddenService'] };
 
-            const ModuleA = {
-                __moduleMetadata__ : {
-                    providers : [HiddenService]
-                }
-            };
-            const RootModule = {
-                __moduleMetadata__ : {
-                    imports     : [ModuleA],
-                    controllers : [ConsumerController]
-                }
-            };
+            defineController( ConsumerController, [{ methodName : 'hello', httpMethod : 'GET', path : '/consume' }]);
 
-            MetadataStore.registerEndpoint({
-                controller : 'ConsumerController', methodName : 'hello', httpMethod : 'GET', path : '/consume', params : [], guards : [], interceptors : [], meta : {}
-            });
+            const ModuleA = legacyModule({ providers : [HiddenService] });
+            const RootModule = legacyModule({ imports : [ModuleA], controllers : [ConsumerController] });
 
-            const server = new Server({ port : 3010, module : RootModule });
-            expect(() => ( server as any ).init()).toThrow(
-                /No provider registered for token: HiddenService in module DynamicModule/
+            const server = setupServer( 3010, () => {}, {module : RootModule});
+            expect(() => server.ensureReady()).toThrow(
+                /No provider registered for token: HiddenService in module/
             );
         });
 
@@ -1210,31 +1176,13 @@ describe( 'Server & Metadata', () =>
             }
             ( ConsumerController as any ).__injections__ = { constructorDeps : ['SharedService'] };
 
-            const ModuleC = {
-                __moduleMetadata__ : {
-                    providers : [SharedService],
-                    exports   : [SharedService]
-                }
-            };
-            const ModuleB = {
-                __moduleMetadata__ : {
-                    imports : [ModuleC],
-                    exports : [ModuleC]
-                }
-            };
-            const RootModule = {
-                __moduleMetadata__ : {
-                    imports     : [ModuleB],
-                    controllers : [ConsumerController]
-                }
-            };
+            defineController( ConsumerController, [{ methodName : 'hello', httpMethod : 'GET', path : '/reexport' }]);
 
-            MetadataStore.registerEndpoint({
-                controller : 'ConsumerController', methodName : 'hello', httpMethod : 'GET', path : '/reexport', params : [], guards : [], interceptors : [], meta : {}
-            });
+            const ModuleC = legacyModule({ providers : [SharedService], exports : [SharedService] });
+            const ModuleB = legacyModule({ imports : [ModuleC], exports : [ModuleC] });
+            const RootModule = legacyModule({ imports : [ModuleB], controllers : [ConsumerController] });
 
-            const server = new Server({ port : 3011, module : RootModule });
-            ( server as any ).init();
+            const server = setupServer( 3011, () => {}, {module : RootModule});
 
             const res = await server.fetch( new Request( 'http://localhost/reexport' ));
             expect( await res.text()).toBe( 'shared' );
@@ -1263,25 +1211,23 @@ describe( 'Server & Metadata', () =>
             }
             ( CircularController as any ).__injections__ = { constructorDeps : ['ServiceA'] };
 
-            const CircularModule = {
-                __moduleMetadata__ : {
-                    providers   : [ServiceA, ServiceB],
-                    controllers : [CircularController]
-                }
-            };
+            defineController( CircularController, [{ methodName : 'hello', httpMethod : 'GET', path : '/circ' }]);
 
-            MetadataStore.registerEndpoint({
-                controller : 'CircularController', methodName : 'hello', httpMethod : 'GET', path : '/circ', params : [], guards : [], interceptors : [], meta : {}
+            const CircularModule = legacyModule({
+                providers   : [ServiceA, ServiceB],
+                controllers : [CircularController]
             });
 
-            const server = new Server({ port : 3012, module : CircularModule });
-            ( server as any ).init();
+            const server = setupServer( 3012, () => {}, {module : CircularModule});
 
             const res = await server.fetch( new Request( 'http://localhost/circ' ));
             expect( await res.text()).toBe( 'AB' );
 
-            const ctrl = MetadataStore.getController( 'CircularController' );
-            expect( ctrl.a.b.hello()).toBe( 'BA' );
+            runWithRegistry( server.registry, () =>
+            {
+                const ctrl = server.registry.getController( 'CircularController' );
+                expect( ctrl.a.b.hello()).toBe( 'BA' );
+            });
         });
 
         it( 'should support @Global() modules', async () => 
@@ -1297,31 +1243,13 @@ describe( 'Server & Metadata', () =>
             }
             ( ConsumerController as any ).__injections__ = { constructorDeps : ['GlobalService'] };
 
-            const GlobalModule = {
-                __isGlobal__       : true,
-                __moduleMetadata__ : {
-                    providers : [GlobalService],
-                    exports   : [GlobalService]
-                }
-            };
-            const RootModule = {
-                __moduleMetadata__ : {
-                    imports     : [GlobalModule],
-                    controllers : []
-                }
-            };
-            const ConsumerModule = {
-                __moduleMetadata__ : {
-                    controllers : [ConsumerController]
-                }
-            };
+            defineController( ConsumerController, [{ methodName : 'hello', httpMethod : 'GET', path : '/consume-global' }]);
 
-            MetadataStore.registerEndpoint({
-                controller : 'ConsumerController', methodName : 'hello', httpMethod : 'GET', path : '/consume-global', params : [], guards : [], interceptors : [], meta : {}
-            });
+            const GlobalModule = legacyModule({ global : true, providers : [GlobalService], exports : [GlobalService] });
+            const RootModule = legacyModule({ imports : [GlobalModule], controllers : [] });
+            const ConsumerModule = legacyModule({ controllers : [ConsumerController] });
 
-            const server = new Server({ port : 3013, module : [RootModule, ConsumerModule] });
-            ( server as any ).init();
+            const server = setupServer( 3013, () => {}, {module : [RootModule, ConsumerModule]});
 
             const res = await server.fetch( new Request( 'http://localhost/consume-global' ));
             expect( await res.text()).toBe( 'global' );
@@ -1330,10 +1258,6 @@ describe( 'Server & Metadata', () =>
 
     describe( 'Injection Scopes', () => 
     {
-        beforeEach(() => 
-        {
-            MetadataStore.clear();
-        });
 
         it( 'should resolve TRANSIENT provider with new instance every time', () => 
         {
@@ -1348,11 +1272,10 @@ describe( 'Server & Metadata', () =>
                     this.id = instanceCount;
                 }
             }
-            MetadataStore.registerProvider( 'TransientService', TransientService );
-
-            const inst1 = MetadataStore.resolve( 'TransientService' );
-            const inst2 = MetadataStore.resolve( 'TransientService' );
-
+            const registry = new ApplicationRegistry();
+            registry.registerProvider( 'TransientService', TransientService );
+            const inst1 = runWithRegistry( registry, () => registry.resolve( 'TransientService' ));
+            const inst2 = runWithRegistry( registry, () => registry.resolve( 'TransientService' ));
             expect( inst1 ).toBeInstanceOf( TransientService );
             expect( inst2 ).toBeInstanceOf( TransientService );
             expect( inst1.id ).toBe( 1 );
@@ -1393,30 +1316,18 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            const ScopeModule = {
-                __moduleMetadata__ : {
-                    providers   : [RequestService, DependentService],
-                    controllers : [RequestController]
-                }
-            };
+            defineController( RequestController, [{ methodName : 'hello', httpMethod : 'GET', path : '/scope-test' }]);
 
-            MetadataStore.registerEndpoint({
-                controller   : 'RequestController',
-                methodName   : 'hello',
-                httpMethod   : 'GET',
-                path         : '/scope-test',
-                params       : [],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
+            const ScopeModule = legacyModule({
+                providers   : [RequestService, DependentService],
+                controllers : [RequestController]
             });
 
-            const server = new Server({ port : 3014, module : ScopeModule });
-            ( server as any ).init();
+            const server = setupServer( 3014, () => {}, {module : ScopeModule});
+            server.ensureReady();
 
-            // Resolve outside request context should throw
-            expect(() => MetadataStore.resolve( 'RequestService' )).toThrow( /Cannot resolve request-scoped provider/ );
-
+            expect(() => runWithRegistry( server.registry, () => server.registry.resolve( 'RequestService' )))
+                .toThrow( /Cannot resolve request-scoped provider/ );
             // Fetch request 1
             const res1 = await server.fetch( new Request( 'http://localhost/scope-test' ));
             const data1 = ( await res1.json()) as any;
@@ -1431,10 +1342,6 @@ describe( 'Server & Metadata', () =>
 
     describe( 'Lifecycle Hooks', () => 
     {
-        beforeEach(() => 
-        {
-            MetadataStore.clear();
-        });
 
         it( 'should call all lifecycle hooks in sequence during start and shutdown', async () => 
         {
@@ -1488,33 +1395,35 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            class HookModule 
+            class HookModule
             {
-                static __moduleMetadata__ = {
-                    providers   : [HookService],
-                    controllers : [HookController]
-                };
-                async onModuleInit() 
+                async onModuleInit()
                 {
                     sequence.push( 'module:onModuleInit' );
                 }
-                async onApplicationBootstrap() 
+                async onApplicationBootstrap()
                 {
                     sequence.push( 'module:onApplicationBootstrap' );
                 }
-                async onModuleDestroy() 
+                async onModuleDestroy()
                 {
                     sequence.push( 'module:onModuleDestroy' );
                 }
-                async beforeApplicationShutdown( signal?: string ) 
+                async beforeApplicationShutdown( signal?: string )
                 {
                     sequence.push( `module:beforeApplicationShutdown:${signal}` );
                 }
-                async onApplicationShutdown( signal?: string ) 
+                async onApplicationShutdown( signal?: string )
                 {
                     sequence.push( `module:onApplicationShutdown:${signal}` );
                 }
             }
+
+            defineController( HookController, [] );
+            setModuleMeta( HookModule, {
+                providers   : [HookService],
+                controllers : [HookController]
+            });
 
             const server = new Server({ port : 3015, module : HookModule });
 
@@ -1622,28 +1531,29 @@ describe( 'Server & Metadata', () =>
         {
             const sequence: string[] = [];
 
-            // A mock guard checking metadata
-            class AuthGuard 
+            class AuthGuard
             {
-                async use( req: Request ) 
+                constructor( private reg: ApplicationRegistry ) {}
+
+                async use( req: Request )
                 {
                     const ctx = Context.get();
 
-                    if( !ctx ) 
+                    if( !ctx )
                     {
                         sequence.push( 'no-context' );
 
                         return;
                     }
                     const reflector = new Reflector();
-                    const controllerClass = MetadataStore.getProvider( ctx.metadata.controller );
+                    const controllerClass = this.reg.getProvider( ctx.metadata.controller );
                     const handlerMethod = controllerClass?.prototype?.[ctx.metadata.methodName];
 
                     const requiredRoles = reflector.getAllAndOverride<string[]>( 'roles', [handlerMethod, controllerClass]);
-                    
+
                     const roleHeader = req.headers.get( 'x-role' );
 
-                    if( requiredRoles && ( !roleHeader || !requiredRoles.includes( roleHeader ))) 
+                    if( requiredRoles && ( !roleHeader || !requiredRoles.includes( roleHeader )))
                     {
                         const err = new Error( 'Forbidden' );
                         ( err as any ).status = 403;
@@ -1653,58 +1563,52 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            class TestController 
+            class TestController
             {
-                async adminEndpoint() 
+                async adminEndpoint()
                 {
                     return { ok : true, section : 'admin' };
                 }
 
-                async userEndpoint() 
+                async userEndpoint()
                 {
                     return { ok : true, section : 'user' };
                 }
             }
 
-            // Manually register metadata similar to what AOT does:
-            MetadataStore.registerGuard( 'AuthGuard', AuthGuard );
-            MetadataStore.registerController( 'TestController', TestController );
-
-            // Register controller constructor as provider so getProvider works
-            MetadataStore.registerProvider( 'TestController', TestController );
-
-            // Attach metadata to controller and methods manually (simulating decorator evaluation)
             Meta({ roles : ['admin'] })( TestController );
             Meta({ roles : ['user', 'admin'] })( TestController.prototype, 'userEndpoint', Object.getOwnPropertyDescriptor( TestController.prototype, 'userEndpoint' )! );
 
-            MetadataStore.registerEndpoint({
-                controller : 'TestController',
-                methodName : 'adminEndpoint',
-                httpMethod : 'GET',
-                path       : '/admin',
-                params     : [],
-                guards     : [
-                    { type : 'class', name : 'AuthGuard', resolvers : [], params : [{ source : 'Request' }], isAsync : true }
-                ],
-                interceptors : [],
-                meta         : {}
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerGuard( 'AuthGuard', new AuthGuard( registry ));
+                registry.registerController( 'TestController', TestController );
+                registry.registerProvider( 'TestController', TestController );
+                registry.registerEndpoint({
+                    controller : 'TestController',
+                    methodName : 'adminEndpoint',
+                    httpMethod : 'GET',
+                    path       : '/admin',
+                    params     : [],
+                    guards     : [
+                        { type : 'class', name : 'AuthGuard', resolvers : [], params : [{ source : 'Request' }], isAsync : true }
+                    ],
+                    interceptors : [],
+                    meta         : {}
+                });
+                registry.registerEndpoint({
+                    controller : 'TestController',
+                    methodName : 'userEndpoint',
+                    httpMethod : 'GET',
+                    path       : '/user',
+                    params     : [],
+                    guards     : [
+                        { type : 'class', name : 'AuthGuard', resolvers : [], params : [{ source : 'Request' }], isAsync : true }
+                    ],
+                    interceptors : [],
+                    meta         : {}
+                });
             });
-
-            MetadataStore.registerEndpoint({
-                controller : 'TestController',
-                methodName : 'userEndpoint',
-                httpMethod : 'GET',
-                path       : '/user',
-                params     : [],
-                guards     : [
-                    { type : 'class', name : 'AuthGuard', resolvers : [], params : [{ source : 'Request' }], isAsync : true }
-                ],
-                interceptors : [],
-                meta         : {}
-            });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
 
             // 1. Calling /admin with no role -> 403 Forbidden
             const res1 = await server.fetch( new Request( 'http://localhost/admin' ));
@@ -1744,8 +1648,10 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            MetadataStore.registerController( 'PeerTestController', PeerTestController );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'PeerTestController', PeerTestController );
+                registry.registerEndpoint({
                 controller : 'PeerTestController',
                 methodName : 'handle',
                 httpMethod : 'GET',
@@ -1757,9 +1663,7 @@ describe( 'Server & Metadata', () =>
                 interceptors : [],
                 meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
 
             const req = new Request( 'http://localhost/peer-test' ) as any;
             req.clientCert = {
@@ -1801,8 +1705,10 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            MetadataStore.registerController( 'PeerTestController2', PeerTestController2 );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'PeerTestController2', PeerTestController2 );
+                registry.registerEndpoint({
                 controller : 'PeerTestController2',
                 methodName : 'handle',
                 httpMethod : 'GET',
@@ -1814,9 +1720,7 @@ describe( 'Server & Metadata', () =>
                 interceptors : [],
                 meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
 
             const req = new Request( 'http://localhost/peer-test-missing' );
             const res = await server.fetch( req );
@@ -1838,8 +1742,10 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            MetadataStore.registerController( 'CookieTestController', CookieTestController );
-            MetadataStore.registerEndpoint({
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'CookieTestController', CookieTestController );
+                registry.registerEndpoint({
                 controller : 'CookieTestController',
                 methodName : 'handle',
                 httpMethod : 'GET',
@@ -1853,9 +1759,7 @@ describe( 'Server & Metadata', () =>
                 interceptors : [],
                 meta         : {}
             });
-
-            const server = new Server({ port : 3000 });
-            ( server as any ).init();
+            });
 
             // Send multiple sessionId cookies to test RFC 6265 first-match wins, and an age cookie to test coercion
             const req = new Request( 'http://localhost/cookie-test', {
@@ -1917,7 +1821,11 @@ describe( 'Server & Metadata', () =>
             const { createServer } = await import( 'https' );
             const mockCreateServer = vi.mocked( createServer ).mockReturnValue( mockNodeServer as any );
 
-            await adapter.listen( 3002, async () => new Response(), tlsOptions );
+            const registry = new ApplicationRegistry();
+            await runWithRegistry( registry, async () =>
+            {
+                await adapter.listen( 3002, async () => new Response(), tlsOptions );
+            });
 
             expect( serveMock ).not.toHaveBeenCalled();
             expect( mockCreateServer ).toHaveBeenCalled();

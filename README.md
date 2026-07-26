@@ -44,6 +44,8 @@ const server = new Server({
 await server.start();
 ```
 
+Controllers must be compiled with `webergency-tsc` (or the transformer / `register` host) so `Symbol.for` route meta exists before `start()`.
+
 ## Installation & Setup
 
 ```bash
@@ -52,21 +54,20 @@ npm install -D typescript
 ```
 
 **Runtime dependency:** `@webergency-utils/typechecker` (validators; pulled in automatically).  
-**Peer dependency:** `typescript` `>=5.0.0` (compiler API for the AOT transformer / CLI).  
+**Peer dependency:** `typescript` `^5 || ^6` (compiler API for the AOT transformer / CLI).  
 **Engines:** Node.js `>=22` (Bun and Deno are also supported via native adapters).
 
-### AOT metadata
+### AOT compile (required)
 
-Decorators are compile-time markers. Generate the route/validator manifest with the package CLI:
+Decorators are compile-time markers. The transformer writes `Symbol.for(...)` metadata and inlined validators onto each class in the emitted JS — there is no sidecar manifest and no process-global metadata store.
+
+Compile with the package CLI (drop-in `tsc` wrapper):
 
 ```bash
-npx webergency-server-build
-# optional: --entry src/main.ts  --output ./_metadata.webergency-server.js  --watch
+npx webergency-tsc -p tsconfig.json
 ```
 
-`Server` loads `_metadata.webergency-server.js` automatically when present (searches upward from `process.cwd()`).
-
-Alternatively, register the TypeScript transform plugin (requires a transform host such as [ts-patch](https://github.com/nonara/ts-patch)):
+Or register the transformer via [ts-patch](https://github.com/nonara/ts-patch) / your existing TS plugin host:
 
 ```json
 {
@@ -82,20 +83,33 @@ Alternatively, register the TypeScript transform plugin (requires a transform ho
 }
 ```
 
+For local TypeScript without a prior `dist` emit:
+
+```bash
+node --import @webergency-utils/server/register ./src/main.ts
+```
+
+`Server({ module })` / `Server({ controllers, providers, guards, interceptors })` walks the graph on first `start()` or `fetch()` and fails fast if a declared controller host has no AOT meta.
+
 Entry points:
 
 | Export | Purpose |
 | --- | --- |
 | `@webergency-utils/server` | Runtime API |
 | `@webergency-utils/server/transformer` | AOT compiler plugin |
+| `@webergency-utils/server/register` | Optional load-time AOT host |
+| `@webergency-utils/server/testing` | Test-only helpers for attaching AOT-shaped meta without the compiler |
 
 ## Architecture & Internals
 
-1. **AOT transformer / CLI** — Analyzes controllers at build time, emits route metadata and typechecker validators. Decorators are no-ops at runtime without that metadata.
-2. **Adapters** — Maps Web Standard `Request` / `Response` to `Bun.serve`, `Deno.serve`, or Node `http`/`https` (Node 22+). Runtime is auto-detected.
-3. **Pipeline** — Match route (linear first-match registration order) → security checks → middlewares → guards → interceptors → handler → response merge (`ResponseBag` headers/status).
-4. **Body `from` modes** — Query, path, cookie, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON bodies use `from: 'json'`. Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
-5. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
+1. **AOT transformer / `webergency-tsc`** — Analyzes controllers at build time; emits `Symbol.for` meta + typechecker validators into each file’s JS. Decorators are no-ops without that emit.
+2. **Per-Server registry** — `ApplicationRegistry` is owned by each `Server` / `Microservice`. Bootstrap walks modules/controllers lazily on first `start()`/`fetch()`. Active registry is available to the request/DI stack via `getRegistry()` / `runWithRegistry()`.
+3. **Adapters** — Maps Web Standard `Request` / `Response` to `Bun.serve`, `Deno.serve`, or Node `http`/`https` (Node 22+). Runtime is auto-detected.
+4. **Pipeline** — Match route (linear first-match registration order) → security checks → middlewares → guards → interceptors → handler → response merge (`ResponseBag` headers/status).
+5. **Body `from` modes** — Query, path, cookie, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON bodies use `from: 'json'`. Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
+6. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
+
+**Dependencies:** `@webergency-utils/typechecker` supplies runtime validators referenced by AOT-emitted code. Peer `typescript` (`^5 || ^6`) is required for `webergency-tsc`, the transformer plugin, and `register`. Package type is ESM (`"type": "module"`).
 
 ## Glossary
 
@@ -106,7 +120,8 @@ Entry points:
 * **ResponseBag** — Mutable headers/status bag shared by middleware and `@Response`.
 * **Guard / Interceptor / Middleware** — Auth gate, wrap-around handler, and pre-handler hooks.
 * **Adapter** — Runtime bridge (`Node` / `Bun` / `Deno`) under `Server`.
-* **Manifest** — Generated `_metadata.webergency-server.js` with routes and validators.
+* **ApplicationRegistry** — Per-instance route/DI registry filled from `Symbol.for` meta at bootstrap.
+* **`webergency-tsc`** — CLI that runs `tsc` with the Webergency AOT transformer.
 
 ## API Reference
 
@@ -119,8 +134,9 @@ Orchestrates routing, adapters, security, and lifecycle.
 | Option | Type | Description |
 | --- | --- | --- |
 | `port` | `number` | Listen port |
-| `controllers?` | `any[]` | Controller classes to register |
-| `guards?` / `interceptors?` | `any[]` | Global guards / interceptors |
+| `controllers?` | `any[]` | Controller classes to register (must have AOT Symbol meta) |
+| `providers?` | `any[]` | Flat providers when not using `module` |
+| `guards?` / `interceptors?` | `any[]` | Flat guards / interceptors when not using `module` |
 | `module?` | `any \| any[]` | Application module(s) |
 | `cors?` | `CorsOptions` | Global CORS |
 | `security?` | `SecurityOptions \| boolean` | Global security / headers |
@@ -130,7 +146,8 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `logger?` / `logs?` | `Logger` / `boolean` | Logging |
 | `shutdownTimeout?` | `number` | Graceful shutdown wait |
 
-**Methods:** `start()`, `shutdown()`, `fetch(request)` (in-process), `getBody` / `getRawBody`, `on` / `off` for `start` | `beforeShutdown` | `shutdown` | `request` | `error`.
+**Methods:** `start()`, `shutdown()`, `fetch(request)` (in-process), `ensureReady()`, `getBody` / `getRawBody`, `on` / `off` for `start` | `beforeShutdown` | `shutdown` | `request` | `error`.  
+**Property:** `registry` — the owning `ApplicationRegistry`.
 
 ```typescript
 const server = new Server({ port: 3000, controllers: [UserController] });
@@ -142,7 +159,7 @@ await server.shutdown();
 
 #### `Microservice` + `TcpMessageAdapter` + `TcpClient`
 
-TCP JSON-lines microservice protocol (`MessagePattern` request/response, `EventPattern` fire-and-forget).
+TCP JSON-lines microservice protocol (`MessagePattern` request/response, `EventPattern` fire-and-forget). Same AOT bootstrap as `Server`: pass `module` and/or flat `controllers` / `providers` / `guards` / `interceptors`.
 
 | Decorator | Client | Behavior |
 | --- | --- | --- |
@@ -168,15 +185,20 @@ class MathService {
   }
 }
 
-const ms = new Microservice(new TcpMessageAdapter(3999));
+const ms = new Microservice(new TcpMessageAdapter(3999), {
+  controllers: [MathService]
+});
 await ms.start();
 
 const client = new TcpClient({ port: 3999 });
 await client.connect();
 await client.send('math.sum', { a: 1, b: 2 }); // → 3
 await client.emit('logs.notify', 'booted');
+await ms.shutdown();
 ```
 
+**Constructor:** `new Microservice(adapter, options?)` — `options` mirrors flat/`module` bootstrap fields on `ServerOptions`.  
+**Property:** `registry`. **Methods:** `ensureReady()`, `start()`, `shutdown()`.  
 `MicroserviceNoReply` — sentinel returned for `@EventPattern` so adapters never write a reply envelope.
 
 ### Route decorators
@@ -229,10 +251,12 @@ Coercion via `from`:
 * `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
 * `Scope` (`DEFAULT` | `TRANSIENT` | `REQUEST`)
 * `ConsoleLogger` / `NoOpLogger`
-* `MetadataStore`, `Router`, `Reflector`, `RequestContext` / `RequestContextStore`
-* `loadAutoMetadata()` — Load nearest `_metadata.webergency-server.js`
+* `ApplicationRegistry`, `getRegistry`, `tryGetRegistry`, `runWithRegistry`
+* `Router`, `Reflector`, `RequestContext` / `RequestContextStore`
+* Symbol keys: `WEBERGENCY_CONTROLLER`, `WEBERGENCY_MODULE`, `WEBERGENCY_INJECTABLE`, `WEBERGENCY_METADATA`
+* Meta readers: `getControllerMeta`, `getModuleMeta`, `getInjectableMeta`
 * Path helpers: `pathCompiler`, `pathMatcher`, `pathToRE`, …
-* IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`
+* IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`, `TrustProxy`
 * Peer helpers: `normalizePeerCert`, `needsNodeTlsCompat`, `tlsMaterialToString`
 
 ### Errors
@@ -274,11 +298,11 @@ await server.start();
 
 ## Troubleshooting
 
-### Decorators do nothing / routes 404
+### Decorators do nothing / routes 404 / “Missing AOT metadata”
 
-**Cause:** No AOT manifest or transform output.  
-**Check:** `_metadata.webergency-server.js` exists and is importable from the process cwd.  
-**Fix:** Run `npx webergency-server-build` (or enable the transformer plugin) before `server.start()`.
+**Cause:** Controllers were not compiled with the Webergency transformer.  
+**Check:** Emitted class JS assigns `Symbol.for('webergency.server.controller')`.  
+**Fix:** Compile with `npx webergency-tsc` (or the transformer plugin / `@webergency-utils/server/register`) before `server.start()`.
 
 ### `@Body` returns 415
 

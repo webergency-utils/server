@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events';
 import { Router } from './core/router.js';
 import { QueryParser } from './helpers/parsers.js';
-import { MetadataStore } from './core/metadata.js';
+import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/registry.js';
+import { bootstrapRegistry } from './core/bootstrap.js';
 import { EndpointMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
 import { CorsOptions, SecurityOptions } from './decorators.js';
-import { loadAutoMetadata } from './config.js';
 import { handleCors } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
 
@@ -54,6 +54,7 @@ export interface ServerOptions {
     security?        : SecurityOptions | boolean
     shutdownTimeout? : number
     controllers?     : any[]
+    providers?       : any[]
     interceptors?    : any[]
     guards?          : any[]
     logs?            : boolean
@@ -86,6 +87,9 @@ export class Server extends EventEmitter
     private _isShuttingDown = false;
     private rateLimiter = new RateLimiter();
     private events         : { [K in keyof ServerEvents]?: Set<any> } = {};
+    private bootstrapped = false;
+    /** Per-Server metadata / DI registry (no process-global store). */
+    public readonly registry = new ApplicationRegistry();
     public logger          : Logger;
 
     public get isShuttingDown(): boolean 
@@ -132,197 +136,56 @@ export class Server extends EventEmitter
             ? ( options.logger || new ConsoleLogger() )
             : new NoOpLogger();
         this.setupSignals();
-
-        if( options.responseMode ) 
-        {
-            MetadataStore.setDefaultResponseMode( options.responseMode );
-        }
     }
 
-    private collectModuleElements( moduleClass: any, activeControllers: Set<string>, visitedModules = new Set<any>()): any 
+    /**
+     * Lazy walk of module/controller Symbol meta + route wiring.
+     * Safe to call multiple times; runs once per Server instance.
+     */
+    public ensureReady()
     {
-        if( !moduleClass ) { return null }
+        if( this.bootstrapped ){ return }
 
-        let actualModuleClass = moduleClass;
-        let metadata: any = {};
-
-        if( moduleClass && typeof moduleClass === 'object' && 'module' in moduleClass ) 
+        runWithRegistry( this.registry, () =>
         {
-            actualModuleClass = moduleClass.module;
-            metadata = moduleClass;
-        }
-        else if( moduleClass && typeof moduleClass === 'object' && '__moduleMetadata__' in moduleClass ) 
-        {
-            metadata = moduleClass.__moduleMetadata__;
-        }
-        else if( moduleClass && typeof moduleClass === 'function' ) 
-        {
-            metadata = moduleClass.__moduleMetadata__ || moduleClass.prototype?.__moduleMetadata__ || {};
-        }
+            bootstrapRegistry( this.registry, {
+                module       : this.options.module,
+                controllers  : this.options.controllers,
+                providers    : this.options.providers,
+                guards       : this.options.guards,
+                interceptors : this.options.interceptors,
+                responseMode : this.options.responseMode
+            });
 
-        const moduleName = ( actualModuleClass.name && actualModuleClass.name !== 'Object' ) 
-            ? actualModuleClass.name 
-            : ( actualModuleClass.constructor?.name && actualModuleClass.constructor.name !== 'Object' 
-                ? actualModuleClass.constructor.name 
-                : 'DynamicModule' );
+            this.registry.resolveAll();
 
-        let moduleInstance = MetadataStore.getModuleInstance( actualModuleClass );
-
-        if( !moduleInstance ) 
-        {
-            moduleInstance = MetadataStore.createModuleInstance( moduleName, actualModuleClass );
-        }
-
-        if( actualModuleClass && ( actualModuleClass.__isGlobal__ || moduleClass.__isGlobal__ )) 
-        {
-            MetadataStore.registerGlobalModule( moduleInstance );
-        }
-
-        if( visitedModules.has( actualModuleClass )) 
-        {
-            return moduleInstance;
-        }
-        visitedModules.add( actualModuleClass );
-
-        if( actualModuleClass && actualModuleClass.name ) 
-        {
-            MetadataStore.registerModule( actualModuleClass.name, actualModuleClass );
-            MetadataStore.registerProvider( actualModuleClass.name, actualModuleClass );
-            moduleInstance.providers.set( actualModuleClass.name, actualModuleClass );
-            MetadataStore.mapClassToModule( actualModuleClass, moduleInstance );
-            MetadataStore.mapTokenToModule( actualModuleClass.name, moduleInstance );
-        }
-
-        // 1. Process providers
-        if( metadata.providers ) 
-        {
-            for( const provider of metadata.providers ) 
+            for( const endpoint of this.registry.getEndpoints())
             {
-                let token: string;
-                let providerClass: any;
+                this.router.add( endpoint );
 
-                if( typeof provider === 'function' ) 
+                if( this.options.logs )
                 {
-                    token = provider.name;
-                    providerClass = provider;
-                }
-                else if( provider && typeof provider === 'object' ) 
-                {
-                    if( 'provide' in provider ) 
-                    {
-                        token = typeof provider.provide === 'function' ? provider.provide.name : provider.provide;
-                        providerClass = provider;
-                    }
-                    else 
-                    {
-                        token = provider.constructor?.name || 'UnknownProvider';
-                        providerClass = provider;
-                    }
-                }
-                else 
-                {
-                    continue;
-                }
-
-                moduleInstance.providers.set( token, providerClass );
-                const actualClass = typeof provider === 'function' ? provider : ( provider && typeof provider === 'object' && 'useClass' in provider ? provider.useClass : null );
-
-                if( actualClass ) 
-                {
-                    MetadataStore.mapClassToModule( actualClass, moduleInstance );
-                }
-                MetadataStore.mapTokenToModule( token, moduleInstance );
-                MetadataStore.registerProvider( token, provider );
-            }
-        }
-
-        // 2. Process controllers
-        if( metadata.controllers ) 
-        {
-            for( const ctrl of metadata.controllers ) 
-            {
-                const ctrlName = ctrl.name || ctrl;
-                activeControllers.add( ctrlName );
-        
-                moduleInstance.controllers.set( ctrlName, ctrl );
-                MetadataStore.mapClassToModule( ctrl, moduleInstance );
-                MetadataStore.mapTokenToModule( ctrlName, moduleInstance );
-                MetadataStore.registerController( ctrlName, ctrl );
-            }
-        }
-
-        // 3. Process exports
-        if( metadata.exports ) 
-        {
-            for( const exp of metadata.exports ) 
-            {
-                const expName = exp.name || exp;
-                moduleInstance.exports.add( expName );
-            }
-        }
-
-        // 4. Process imports
-        if( metadata.imports ) 
-        {
-            for( const imp of metadata.imports ) 
-            {
-                const impInstance = this.collectModuleElements( imp, activeControllers, visitedModules );
-
-                if( impInstance ) 
-                {
-                    moduleInstance.imports.add( impInstance );
+                    this.logger.info(
+                        `Registered route: ${endpoint.httpMethod.padEnd( 6 )} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
+                        {
+                            type       : 'registration',
+                            method     : endpoint.httpMethod,
+                            path       : endpoint.path,
+                            controller : endpoint.controller,
+                            action     : endpoint.methodName
+                        }
+                    );
                 }
             }
-        }
+        });
 
-        return moduleInstance;
+        this.bootstrapped = true;
     }
 
-    private init() 
+    /** @deprecated Use ensureReady() — kept for tests that called init(). */
+    private init()
     {
-        const activeControllers = new Set<string>();
-
-        if( this.options.module ) 
-        {
-            const modules = Array.isArray( this.options.module ) ? this.options.module : [this.options.module];
-
-            for( const mod of modules ) 
-            {
-                this.collectModuleElements( mod, activeControllers );
-            }
-        }
-        else if( this.options.controllers ) 
-        {
-            for( const ctrl of this.options.controllers ) 
-            {
-                activeControllers.add( ctrl.name || ctrl );
-            }
-        }
-
-        MetadataStore.resolveAll();
-
-        for( const endpoint of MetadataStore.getEndpoints()) 
-        {
-            if( activeControllers.size > 0 && !activeControllers.has( endpoint.controller )) 
-            {
-                continue;
-            }
-            this.router.add( endpoint );
-
-            if( this.options.logs ) 
-            {
-                this.logger.info(
-                    `Registered route: ${endpoint.httpMethod.padEnd( 6 )} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
-                    {
-                        type       : 'registration',
-                        method     : endpoint.httpMethod,
-                        path       : endpoint.path,
-                        controller : endpoint.controller,
-                        action     : endpoint.methodName
-                    }
-                );
-            }
-        }
+        this.ensureReady();
     }
 
     public on<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]) 
@@ -378,8 +241,11 @@ export class Server extends EventEmitter
 
         this.internalEmit( 'beforeShutdown' );
 
-        await MetadataStore.invokeHook( 'onModuleDestroy' );
-        await MetadataStore.invokeHook( 'beforeApplicationShutdown', signal );
+        await runWithRegistry( this.registry, async () =>
+        {
+            await this.registry.invokeHook( 'onModuleDestroy' );
+            await this.registry.invokeHook( 'beforeApplicationShutdown', signal );
+        });
 
         if( this.serverAdapter ) 
         {
@@ -419,7 +285,10 @@ export class Server extends EventEmitter
         };
 
         await checkActive();
-        await MetadataStore.invokeHook( 'onApplicationShutdown', signal );
+        await runWithRegistry( this.registry, async () =>
+        {
+            await this.registry.invokeHook( 'onApplicationShutdown', signal );
+        });
 
         if( this.options.logs ) 
         {
@@ -452,12 +321,12 @@ export class Server extends EventEmitter
 
     public async start() 
     {
-        if( MetadataStore.getEndpoints().length === 0 ) 
+        this.ensureReady();
+
+        await runWithRegistry( this.registry, async () =>
         {
-            await loadAutoMetadata( !!this.options.logs );
-        }
-        this.init();
-        await MetadataStore.invokeHook( 'onModuleInit' );
+            await this.registry.invokeHook( 'onModuleInit' );
+        });
 
         const { port } = this.options;
         const runtime = this.detectRuntime();
@@ -471,9 +340,13 @@ export class Server extends EventEmitter
         }
 
         this.serverAdapter = this.selectAdapter( runtime );
-        await this.serverAdapter.listen( port, this.fetch, this.options.tls );
+        await runWithRegistry( this.registry, async () =>
+        {
+            await this.serverAdapter!.listen( port, this.fetch, this.options.tls );
+        });
 
         const protocol = this.options.tls ? 'https' : 'http';
+
         if( this.options.logs ) 
         {
             this.logger.info( `${runtime} server running at ${protocol}://localhost:${port}`, {
@@ -483,11 +356,21 @@ export class Server extends EventEmitter
             });
         }
 
-        await MetadataStore.invokeHook( 'onApplicationBootstrap' );
+        await runWithRegistry( this.registry, async () =>
+        {
+            await this.registry.invokeHook( 'onApplicationBootstrap' );
+        });
         this.internalEmit( 'start', port );
     }
 
     public fetch = async ( request: Request ): Promise<Response> => 
+    {
+        this.ensureReady();
+
+        return runWithRegistry( this.registry, () => this.handleFetch( request ));
+    };
+
+    private handleFetch = async ( request: Request ): Promise<Response> => 
     {
         this.internalEmit( 'request', request );
     
@@ -658,8 +541,9 @@ export class Server extends EventEmitter
             if( isUpgrade ) 
             {
                 // Enforce guards before upgrading
-                const controllerModule = MetadataStore.getTokenModule( finalMatch.metadata.controller );
-                const controller = MetadataStore.getController( finalMatch.metadata.controller, controllerModule );
+                const registry = getRegistry();
+                const controllerModule = registry.getTokenModule( finalMatch.metadata.controller );
+                const controller = registry.getController( finalMatch.metadata.controller, controllerModule );
 
                 if( !controller ) { throw new Error( `Controller ${finalMatch.metadata.controller} not registered` ) }
 
@@ -671,8 +555,8 @@ export class Server extends EventEmitter
 
                 for( const g of finalMatch.metadata.guards ) 
                 {
-                    const guardModule = g.type === 'class' ? MetadataStore.getTokenModule( g.name ) : controllerModule;
-                    const guardInstance = g.type === 'class' ? MetadataStore.getGuard( g.name, guardModule ) : controller;
+                    const guardModule = g.type === 'class' ? registry.getTokenModule( g.name ) : controllerModule;
+                    const guardInstance = g.type === 'class' ? registry.getGuard( g.name, guardModule ) : controller;
                     const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
           
                     const guardArgs: any[] = [];

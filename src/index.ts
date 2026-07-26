@@ -1,11 +1,19 @@
 export * from './server.js';
 export * from './decorators.js';
 export * from './core/router.js';
-export * from './core/metadata.js';
+export { ApplicationRegistry, getRegistry, tryGetRegistry, runWithRegistry } from './core/registry.js';
+export {
+    WEBERGENCY_CONTROLLER,
+    WEBERGENCY_MODULE,
+    WEBERGENCY_INJECTABLE,
+    WEBERGENCY_METADATA,
+    getControllerMeta,
+    getModuleMeta,
+    getInjectableMeta
+} from './core/symbols.js';
 export { RequestContext, Context as RequestContextStore } from './core/context.js';
 export { Reflector } from './core/reflector.js';
 export * from './errors.js';
-export * from './config.js';
 export { Logger, LogContext, ServerWebSocket, PeerCert, PeerCertSubject, EndpointRequest, EndpointResponse, ResponseBag, MiddlewareClass, Middleware } from './core/types.js';
 export {
     pathCompiler,

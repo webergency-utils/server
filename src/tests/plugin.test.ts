@@ -4,14 +4,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import compilerPlugin from '../compiler/transformer.js';
 
-describe( 'TypeScript Compiler Plugin Transformer', () => 
+describe( 'TypeScript Compiler Plugin Transformer', () =>
 {
-    function compileAndTransform( sourceCode: string ): string 
+    function compileAndTransform( sourceCode: string ): string
     {
         const tempFile = path.resolve( './temp_test_controller.ts' );
         fs.writeFileSync( tempFile, sourceCode );
 
-        try 
+        try
         {
             const program = ts.createProgram([tempFile], {
                 target                 : ts.ScriptTarget.ES2022,
@@ -30,16 +30,16 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
 
             return printer.printFile( result.transformed[0]);
         }
-        finally 
+        finally
         {
-            if( fs.existsSync( tempFile )) 
+            if( fs.existsSync( tempFile ))
             {
                 fs.unlinkSync( tempFile );
             }
         }
     }
 
-    it( 'should transform a simple controller and append self-registrations', () => 
+    it( 'should transform a simple controller and attach Symbol AOT metadata', () =>
     {
         const code = `
       import { Controller, Get, Post, Body, Param } from '../decorators.js';
@@ -65,30 +65,19 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
 
         const compiled = compileAndTransform( code );
 
-        // Should initialize __server_metadata_store from globalThis
-        expect( compiled ).toContain( '__server_metadata_store = globalThis.__WEBERGENCY_SERVER_METADATA_STORE__' );
-
-        // Should import typechecker runtime
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.controller")' );
         expect( compiled ).toContain( 'import "@webergency-utils/typechecker/runtime"' );
-
-        // Should declare validator constant
         expect( compiled ).toContain( 'const __val_' );
-
-        // Should register controller
-        expect( compiled ).toContain( '__server_metadata_store.providers.set("UserController", UserController)' );
-        expect( compiled ).toContain( '__server_metadata_store.controllerClasses.add("UserController")' );
-
-        // Should register GET /users/:id endpoint
         expect( compiled ).toContain( 'httpMethod: "GET"' );
         expect( compiled ).toContain( 'path: "/users/:id"' );
-
-        // Should register POST /users endpoint with validator
         expect( compiled ).toContain( 'httpMethod: "POST"' );
         expect( compiled ).toContain( 'path: "/users"' );
         expect( compiled ).toContain( 'validator: __val_' );
+        expect( compiled ).toContain( 'kind: "controller"' );
+        expect( compiled ).not.toContain( 'MetadataStore' );
     });
 
-    it( 'should transform CORS decorators at class and method level', () => 
+    it( 'should transform CORS decorators at class and method level', () =>
     {
         const code = `
       import { Controller, Get, Post, Cors } from '../decorators.js';
@@ -112,15 +101,12 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
 
         const compiled = compileAndTransform( code );
 
-        // getPublic has @Cors() without params, which resolves to {}
         expect( compiled ).toContain( 'cors: {}' );
-
-        // getRestricted has method level @Cors with inline arrow function and array of wildcards
         expect( compiled ).toContain( 'origin: (o) => o === \'http://trusted\'' );
         expect( compiled ).toContain( 'allowedHeaders: [\'Content-Type\', \'X-Custom-*\']' );
     });
 
-    it( 'should throw an error if @Head decorated method does not return void or Promise<void>', () => 
+    it( 'should throw an error if @Head decorated method does not return void or Promise<void>', () =>
     {
         const code = `
       import { Controller, Head } from '../decorators.js';
@@ -137,4 +123,3 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect(() => compileAndTransform( code )).toThrow( /must return void or Promise<void>/ );
     });
 });
-

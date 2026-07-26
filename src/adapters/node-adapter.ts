@@ -100,8 +100,8 @@ export class NodeAdapter implements ServerAdapter
             this.nodeServer = createServer( connectionHandler );
         }
 
-        const { MetadataStore } = await import( '../core/metadata.js' );
-        const hasWs = MetadataStore.getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
+        const { getRegistry } = await import( '../core/registry.js' );
+        const hasWs = getRegistry().getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
 
         if( hasWs && this.nodeServer && typeof this.nodeServer.on === 'function' ) 
         {

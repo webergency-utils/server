@@ -1,40 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { loadAutoMetadata } from '../config.js';
 import * as index from '../index.js';
 
-describe( 'Exports & Config', () => 
+describe( 'Exports & Config', () =>
 {
-    it( 'should have a working metadata loader', async () => 
+    it( 'should export ApplicationRegistry and registry helpers', () =>
     {
-        await loadAutoMetadata();
-        expect( true ).toBe( true );
+        expect( index.ApplicationRegistry ).toBeDefined();
+        expect( index.runWithRegistry ).toBeDefined();
+        expect( index.getRegistry ).toBeDefined();
     });
 
-    it( 'should load metadata from file', async () => 
+    it( 'should export Symbol AOT metadata helpers', () =>
     {
-        const fs = await import( 'fs' );
-        const path = await import( 'path' );
-        const metaPath = path.join( process.cwd(), '_metadata.webergency-server.js' );
-        
-        fs.writeFileSync( metaPath, '/* dummy */' );
-        
-        try 
-        {
-            // We need to reset the internal isLoaded flag to test the loop
-            // Since it's not exported, we just call it and hope for the best or skip if it's already loaded
-            await loadAutoMetadata();
-            expect( true ).toBe( true );
-        }
-        finally 
-        {
-            if( fs.existsSync( metaPath )) { fs.unlinkSync( metaPath ) }
-        }
+        expect( index.getControllerMeta ).toBeDefined();
+        expect( index.getInjectableMeta ).toBeDefined();
+        expect( index.getModuleMeta ).toBeDefined();
     });
 
-    it( 'should export all main components', () => 
+    it( 'should export all main components', () =>
     {
         expect( index.Server ).toBeDefined();
-        expect( index.MetadataStore ).toBeDefined();
         expect( index.Context ).toBeDefined();
+        expect( ( index as any ).MetadataStore ).toBeUndefined();
     });
 });

@@ -7,4 +7,4 @@ export { parseSize, mergeSecurityConfigs, generateSecurityHeaders } from './help
 export { pathCompiler, pathMatcher, pathToRE } from './helpers/match.js';
 export { getContentType } from './helpers/request-reader.js';
 export { Router } from './core/router.js';
-export { MetadataStore } from './core/metadata.js';
+export { ApplicationRegistry } from './core/registry.js';

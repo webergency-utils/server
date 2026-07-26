@@ -89,9 +89,12 @@ function unwrapSsePayloadType( returnType: ts.Type, checker: ts.TypeChecker ): t
         type = typeArgs[0];
     }
 
-    const dataType = checker.getTypeOfPropertyOfType( type, 'data' );
+    const dataProp = checker.getPropertyOfType( type, 'data' );
 
-    if( dataType ){ return dataType }
+    if( dataProp )
+    {
+        return checker.getTypeOfSymbol( dataProp );
+    }
 
     return type;
 }
@@ -1855,58 +1858,37 @@ export default function compilerPlugin( program: ts.Program )
             const runTransform = transformer( program, registry )( context );
             const transformedSourceFile = runTransform( sourceFile );
 
-            // 3. Generate and append the self-registration nodes
-            const registrations: ts.Statement[] = [];
-
+            // 3. Emit Symbol.for AOT meta on classes (no process-global registry)
             const prepends: ts.Statement[] = [];
             const appends: ts.Statement[] = [];
 
-            // Initialize __server_metadata_store locally from globalThis to ensure 100% ESM & CommonJS compatibility
-            // with zero module alias/symbol binding dependencies.
-            prepends.push(
-                ts.factory.createVariableStatement(
-                    undefined,
-                    ts.factory.createVariableDeclarationList([
-                        ts.factory.createVariableDeclaration(
-                            ts.factory.createIdentifier( '__server_metadata_store' ),
-                            undefined,
-                            undefined,
-                            ts.factory.createBinaryExpression(
+            const symbolAssign = ( className: string, symbolKey: string, value: ts.Expression ): ts.Statement =>
+                ts.factory.createExpressionStatement(
+                    ts.factory.createBinaryExpression(
+                        ts.factory.createElementAccessExpression(
+                            ts.factory.createIdentifier( className ),
+                            ts.factory.createCallExpression(
                                 ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( 'globalThis' ),
-                                    '__WEBERGENCY_SERVER_METADATA_STORE__'
+                                    ts.factory.createIdentifier( 'Symbol' ),
+                                    'for'
                                 ),
-                                ts.SyntaxKind.BarBarToken,
-                                ts.factory.createParenthesizedExpression(
-                                    ts.factory.createBinaryExpression(
-                                        ts.factory.createPropertyAccessExpression(
-                                            ts.factory.createIdentifier( 'globalThis' ),
-                                            '__WEBERGENCY_SERVER_METADATA_STORE__'
-                                        ),
-                                        ts.SyntaxKind.EqualsToken,
-                                        ts.factory.createObjectLiteralExpression([
-                                            ts.factory.createPropertyAssignment( 'endpoints', ts.factory.createArrayLiteralExpression([])),
-                                            ts.factory.createPropertyAssignment( 'controllers', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Map' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'guards', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Map' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'interceptors', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Map' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'providers', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Map' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'modules', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Map' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'instances', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Map' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'resolving', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Set' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'controllerClasses', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Set' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'guardClasses', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Set' ), undefined, [])),
-                                            ts.factory.createPropertyAssignment( 'interceptorClasses', ts.factory.createNewExpression( ts.factory.createIdentifier( 'Set' ), undefined, []))
-                                        ], true )
-                                    )
-                                )
+                                undefined,
+                                [ts.factory.createStringLiteral( symbolKey )]
                             )
-                        )
-                    ], ts.NodeFlags.Const )
-                )
-            );
+                        ),
+                        ts.SyntaxKind.EqualsToken,
+                        value
+                    )
+                );
+
+            const injectableMeta = ( kind: string, token: string ): ts.Expression =>
+                ts.factory.createObjectLiteralExpression([
+                    ts.factory.createPropertyAssignment( 'kind', ts.factory.createStringLiteral( kind )),
+                    ts.factory.createPropertyAssignment( 'token', ts.factory.createStringLiteral( token ))
+                ], true );
 
             // Import typechecker runtime side-effects if we have validators
-            if( registry.validators.size > 0 ) 
+            if( registry.validators.size > 0 )
             {
                 prepends.push(
                     ts.factory.createImportDeclaration(
@@ -1918,7 +1900,7 @@ export default function compilerPlugin( program: ts.Program )
                 );
 
                 if( !hasVariableDeclaration( transformedSourceFile.statements, 'validators' ) &&
-            !hasVariableDeclaration( prepends, 'validators' )) 
+            !hasVariableDeclaration( prepends, 'validators' ))
                 {
                     prepends.push(
                         ts.factory.createVariableStatement(
@@ -1940,10 +1922,10 @@ export default function compilerPlugin( program: ts.Program )
             }
 
             // Declare all the validators in local variables: const __val_[hash] = expr;
-            for( const [hash, expr] of registry.validators.entries()) 
+            for( const [hash, expr] of registry.validators.entries())
             {
                 if( !hasVariableDeclaration( transformedSourceFile.statements, `__val_${hash}` ) &&
-            !hasVariableDeclaration( prepends, `__val_${hash}` )) 
+            !hasVariableDeclaration( prepends, `__val_${hash}` ))
                 {
                     prepends.push(
                         ts.factory.createVariableStatement(
@@ -1961,200 +1943,100 @@ export default function compilerPlugin( program: ts.Program )
                 }
             }
 
-            // Register Guards
-            for( const [name, info] of registry.guards.entries()) 
+            const endpointsByController = new Map<string, any[]>();
+
+            for( const ep of registry.endpoints )
             {
-                if( info.path !== sourceFile.fileName ) { continue }
+                const list = endpointsByController.get( ep.controller ) || [];
+                list.push( ep );
+                endpointsByController.set( ep.controller, list );
+            }
+
+            for( const [name, info] of registry.guards.entries())
+            {
+                if( info.path !== sourceFile.fileName ){ continue }
+                appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'guard', name )));
+            }
+
+            for( const [name, info] of registry.interceptors.entries())
+            {
+                if( info.path !== sourceFile.fileName ){ continue }
+                appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'interceptor', name )));
+            }
+
+            for( const [name, info] of registry.providers.entries())
+            {
+                if( info.path !== sourceFile.fileName ){ continue }
+
+                if( registry.controllers.has( name ) || registry.guards.has( name ) || registry.interceptors.has( name ))
+                {
+                    continue;
+                }
+                appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'provider', name )));
+            }
+
+            for( const [name, info] of registry.controllers.entries())
+            {
+                if( info.path !== sourceFile.fileName ){ continue }
+                const endpoints = endpointsByController.get( name ) || [];
                 appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'providers'
-                                ),
-                                'set'
-                            ),
-                            undefined,
-                            [
-                                ts.factory.createStringLiteral( name ),
-                                ts.factory.createIdentifier( name )
-                            ]
-                        )
+                    symbolAssign(
+                        name,
+                        'webergency.server.controller',
+                        ts.factory.createObjectLiteralExpression([
+                            ts.factory.createPropertyAssignment(
+                                'endpoints',
+                                ts.factory.createArrayLiteralExpression(
+                                    endpoints.map( ep => objectToExpression( ep )),
+                                    true
+                                )
+                            )
+                        ], true )
                     )
                 );
+                appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'controller', name )));
+            }
+
+            // Modules: mirror runtime @Module() into Symbol.for so published dist does not rely on decorator side-effects alone
+            for( const [name, info] of registry.modules.entries())
+            {
+                if( info.path !== sourceFile.fileName ){ continue }
                 appends.push(
                     ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'guardClasses'
-                                ),
-                                'add'
+                        ts.factory.createBinaryExpression(
+                            ts.factory.createElementAccessExpression(
+                                ts.factory.createIdentifier( name ),
+                                ts.factory.createCallExpression(
+                                    ts.factory.createPropertyAccessExpression(
+                                        ts.factory.createIdentifier( 'Symbol' ),
+                                        'for'
+                                    ),
+                                    undefined,
+                                    [ts.factory.createStringLiteral( 'webergency.server.module' )]
+                                )
                             ),
-                            undefined,
-                            [ts.factory.createStringLiteral( name )]
+                            ts.SyntaxKind.EqualsToken,
+                            ts.factory.createBinaryExpression(
+                                ts.factory.createPropertyAccessExpression(
+                                    ts.factory.createIdentifier( name ),
+                                    '__moduleMetadata__'
+                                ),
+                                ts.SyntaxKind.BarBarToken,
+                                ts.factory.createObjectLiteralExpression([])
+                            )
                         )
                     )
                 );
             }
-
-            // Register Interceptors
-            for( const [name, info] of registry.interceptors.entries()) 
-            {
-                if( info.path !== sourceFile.fileName ) { continue }
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'providers'
-                                ),
-                                'set'
-                            ),
-                            undefined,
-                            [
-                                ts.factory.createStringLiteral( name ),
-                                ts.factory.createIdentifier( name )
-                            ]
-                        )
-                    )
-                );
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'interceptorClasses'
-                                ),
-                                'add'
-                            ),
-                            undefined,
-                            [ts.factory.createStringLiteral( name )]
-                        )
-                    )
-                );
-            }
-
-            // Register Endpoints
-            for( const ep of registry.endpoints ) 
-            {
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'endpoints'
-                                ),
-                                'push'
-                            ),
-                            undefined,
-                            [objectToExpression( ep )]
-                        )
-                    )
-                );
-            }
-
-            // Register Controllers
-            for( const [name, info] of registry.controllers.entries()) 
-            {
-                if( info.path !== sourceFile.fileName ) { continue }
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'providers'
-                                ),
-                                'set'
-                            ),
-                            undefined,
-                            [
-                                ts.factory.createStringLiteral( name ),
-                                ts.factory.createIdentifier( name )
-                            ]
-                        )
-                    )
-                );
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'controllerClasses'
-                                ),
-                                'add'
-                            ),
-                            undefined,
-                            [ts.factory.createStringLiteral( name )]
-                        )
-                    )
-                );
-            }
-
-            // Register Providers
-            for( const [name, info] of registry.providers.entries()) 
-            {
-                if( info.path !== sourceFile.fileName ) { continue }
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'providers'
-                                ),
-                                'set'
-                            ),
-                            undefined,
-                            [
-                                ts.factory.createStringLiteral( name ),
-                                ts.factory.createIdentifier( name )
-                            ]
-                        )
-                    )
-                );
-            }
-
-            // Register Modules
-            for( const [name, info] of registry.modules.entries()) 
-            {
-                if( info.path !== sourceFile.fileName ) { continue }
-                appends.push(
-                    ts.factory.createExpressionStatement(
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier( '__server_metadata_store' ),
-                                    'modules'
-                                ),
-                                'set'
-                            ),
-                            undefined,
-                            [
-                                ts.factory.createStringLiteral( name ),
-                                ts.factory.createIdentifier( name )
-                            ]
-                        )
-                    )
-                );
-            }
-
 
             const mergedStatements = [...prepends, ...transformedSourceFile.statements];
             const insertIndex = findInsertionIndex( mergedStatements );
 
             const finalStatements = [
-        ...mergedStatements.slice( 0, insertIndex ),
-        ...appends,
-        ...mergedStatements.slice( insertIndex )
-      ];
+                ...mergedStatements.slice( 0, insertIndex ),
+                ...appends,
+                ...mergedStatements.slice( insertIndex )
+            ];
 
             return ts.factory.updateSourceFile( transformedSourceFile, finalStatements );
 

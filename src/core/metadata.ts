@@ -1,327 +1,193 @@
+/**
+ * @deprecated Internal compatibility shim. Prefer ApplicationRegistry + getRegistry().
+ * Removed from the public package API in 0.2.0.
+ */
+import { ApplicationRegistry, getRegistry, tryGetRegistry, runWithRegistry } from './registry.js';
 import { EndpointMetadata } from './types.js';
 import { Scope } from '../decorators.js';
-import { DIContainer } from './container.js';
 
-const GLOBAL_KEY = '__WEBERGENCY_SERVER_METADATA_STORE__';
+export { ApplicationRegistry, getRegistry, tryGetRegistry, runWithRegistry };
 
-if( !( globalThis as any )[GLOBAL_KEY]) 
+/**
+ * Legacy static facade that delegates to the active ApplicationRegistry (ALS).
+ * Used only where call sites have not yet been migrated; not part of the public API.
+ */
+export class MetadataStore
 {
-    ( globalThis as any )[GLOBAL_KEY] = {
-    endpoints          : [] as EndpointMetadata[],
-    controllers        : new Map<string, any>(),
-    guards             : new Map<string, any>(),
-    interceptors       : new Map<string, any>(),
-    providers          : new Map<string, any>(),
-    modules            : new Map<string, any>(),
-    instances          : new Map<string, any>(),
-    resolving          : new Set<string>(),
-    controllerClasses  : new Set<string>(),
-    guardClasses       : new Set<string>(),
-    interceptorClasses : new Set<string>(),
-    moduleInstances    : new Map<any, any>(),
-    classToModuleMap   : new Map<any, any>(),
-    tokenToModuleMap   : new Map<string, any>(),
-    globalModules      : new Set<any>()
-  };
-}
-else 
-{
-    const gStore = ( globalThis as any )[GLOBAL_KEY];
-
-    if( !gStore.moduleInstances ) { gStore.moduleInstances = new Map<any, any>() }
-
-    if( !gStore.classToModuleMap ) { gStore.classToModuleMap = new Map<any, any>() }
-
-    if( !gStore.tokenToModuleMap ) { gStore.tokenToModuleMap = new Map<string, any>() }
-
-    if( !gStore.globalModules ) { gStore.globalModules = new Set<any>() }
-}
-
-export const store = ( globalThis as any )[GLOBAL_KEY];
-
-export class MetadataStore 
-{
-    public static registerEndpoint( metadata: EndpointMetadata ) 
+    public static registerEndpoint( metadata: EndpointMetadata )
     {
-        store.endpoints.push( metadata );
+        getRegistry().registerEndpoint( metadata );
     }
 
-    public static getEndpoints(): EndpointMetadata[] 
+    public static getEndpoints(): EndpointMetadata[]
     {
-        return store.endpoints;
+        return getRegistry().getEndpoints();
     }
 
-    public static registerProvider( token: string, provider: any ) 
+    public static registerProvider( token: string, provider: any )
     {
-        store.providers.set( token, provider );
+        getRegistry().registerProvider( token, provider );
     }
 
-    public static getProvider( token: string ): any 
+    public static getProvider( token: string ): any
     {
-        return store.providers.get( token );
+        return getRegistry().getProvider( token );
     }
 
-    public static registerModule( name: string, moduleClass: any ) 
+    public static registerModule( name: string, moduleClass: any )
     {
-        store.modules.set( name, moduleClass );
+        getRegistry().registerModule( name, moduleClass );
     }
 
-    public static getModule( name: string ): any 
+    public static getModule( name: string ): any
     {
-        return store.modules.get( name );
+        return getRegistry().getModule( name );
     }
 
-    public static getModuleInstance( moduleClass: any ): any 
+    public static getModuleInstance( moduleClass: any ): any
     {
-        return store.moduleInstances.get( moduleClass );
+        return getRegistry().getModuleInstance( moduleClass );
     }
 
-    public static createModuleInstance( name: string, moduleClass: any ): any 
+    public static createModuleInstance( name: string, moduleClass: any ): any
     {
-        const instance = {
-      name,
-      moduleClass,
-      providers   : new Map<string, any>(),
-      controllers : new Map<string, any>(),
-      exports     : new Set<string>(),
-      imports     : new Set<any>(),
-      instances   : new Map<string, any>()
-    };
-        store.moduleInstances.set( moduleClass, instance );
-
-        return instance;
+        return getRegistry().createModuleInstance( name, moduleClass );
     }
 
-    public static getModuleInstances(): any[] 
+    public static getModuleInstances(): any[]
     {
-        return Array.from( store.moduleInstances.values());
+        return getRegistry().getModuleInstances();
     }
 
-    public static mapClassToModule( cls: any, moduleInstance: any ) 
+    public static mapClassToModule( cls: any, moduleInstance: any )
     {
-        store.classToModuleMap.set( cls, moduleInstance );
+        getRegistry().mapClassToModule( cls, moduleInstance );
     }
 
-    public static getClassModule( cls: any ): any 
+    public static getClassModule( cls: any ): any
     {
-        return store.classToModuleMap.get( cls );
+        return getRegistry().getClassModule( cls );
     }
 
-    public static mapTokenToModule( token: string, moduleInstance: any ) 
+    public static mapTokenToModule( token: string, moduleInstance: any )
     {
-        store.tokenToModuleMap.set( token, moduleInstance );
+        getRegistry().mapTokenToModule( token, moduleInstance );
     }
 
-    public static getTokenModule( token: string ): any 
+    public static getTokenModule( token: string ): any
     {
-        return store.tokenToModuleMap.get( token );
+        return getRegistry().getTokenModule( token );
     }
 
-    public static registerGlobalModule( moduleInstance: any ) 
+    public static registerGlobalModule( moduleInstance: any )
     {
-        store.globalModules.add( moduleInstance );
+        getRegistry().registerGlobalModule( moduleInstance );
     }
 
-    public static getGlobalModules(): any[] 
+    public static getGlobalModules(): any[]
     {
-        return Array.from( store.globalModules );
+        return getRegistry().getGlobalModules();
     }
 
-    public static registerController( name: string, classOrInstance: any ) 
+    public static registerController( name: string, classOrInstance: any )
     {
-        if( typeof classOrInstance === 'function' ) 
+        getRegistry().registerController( name, classOrInstance );
+    }
+
+    public static getController( name: string, contextModule?: any ): any
+    {
+        return getRegistry().getController( name, contextModule );
+    }
+
+    public static registerGuard( name: string, classOrInstance: any )
+    {
+        getRegistry().registerGuard( name, classOrInstance );
+    }
+
+    public static getGuard( name: string, contextModule?: any ): any
+    {
+        return getRegistry().getGuard( name, contextModule );
+    }
+
+    public static registerInterceptor( name: string, classOrInstance: any )
+    {
+        getRegistry().registerInterceptor( name, classOrInstance );
+    }
+
+    public static getInterceptor( name: string, contextModule?: any ): any
+    {
+        return getRegistry().getInterceptor( name, contextModule );
+    }
+
+    public static getInjectable( name: string, contextModule?: any ): any
+    {
+        return getRegistry().getInjectable( name, contextModule );
+    }
+
+    public static resolveAll()
+    {
+        getRegistry().resolveAll();
+    }
+
+    public static clear()
+    {
+        const reg = tryGetRegistry();
+
+        if( reg )
         {
-            store.providers.set( name, classOrInstance );
-            store.controllerClasses.add( name );
-        }
-        else 
-        {
-            store.controllers.set( name, classOrInstance );
+            reg.clear();
         }
     }
 
-    public static getController( name: string, contextModule?: any ): any 
+    public static resolve( token: string, contextModule?: any ): any
     {
-        if( store.controllers.has( name )) 
-        {
-            return store.controllers.get( name );
-        }
-        const actualContext = contextModule || store.tokenToModuleMap.get( name );
-
-        return DIContainer.resolve( name, actualContext );
+        return getRegistry().resolve( token, contextModule );
     }
 
-    public static registerGuard( name: string, classOrInstance: any ) 
+    public static getResolvedScope( token: string, contextModule?: any, visited = new Set<string>()): Scope
     {
-        if( typeof classOrInstance === 'function' ) 
-        {
-            store.providers.set( name, classOrInstance );
-            store.guardClasses.add( name );
-        }
-        else 
-        {
-            store.guards.set( name, classOrInstance );
-        }
+        return getRegistry().getResolvedScope( token, contextModule, visited );
     }
 
-    public static getGuard( name: string, contextModule?: any ): any 
+    public static getAllInstances(): any[]
     {
-        if( store.guards.has( name )) 
-        {
-            return store.guards.get( name );
-        }
-        const actualContext = contextModule || store.tokenToModuleMap.get( name );
-
-        return DIContainer.resolve( name, actualContext );
+        return getRegistry().getAllInstances();
     }
 
-    public static registerInterceptor( name: string, classOrInstance: any ) 
+    public static async invokeHook( hookName: string, ...args: any[])
     {
-        if( typeof classOrInstance === 'function' ) 
-        {
-            store.providers.set( name, classOrInstance );
-            store.interceptorClasses.add( name );
-        }
-        else 
-        {
-            store.interceptors.set( name, classOrInstance );
-        }
+        return getRegistry().invokeHook( hookName, ...args );
     }
 
-    public static getInterceptor( name: string, contextModule?: any ): any 
+    public static setDefaultResponseMode( mode: 'strict' | 'relaxed' | 'strip' )
     {
-        if( store.interceptors.has( name )) 
-        {
-            return store.interceptors.get( name );
-        }
-        const actualContext = contextModule || store.tokenToModuleMap.get( name );
-
-        return DIContainer.resolve( name, actualContext );
+        getRegistry().setDefaultResponseMode( mode );
     }
 
-    public static getInjectable( name: string, contextModule?: any ): any 
+    public static getDefaultResponseMode(): 'strict' | 'relaxed' | 'strip'
     {
-        return DIContainer.resolve( name, contextModule );
-    }
-
-    public static resolveAll() 
-    {
-        DIContainer.resolveAll();
-    }
-
-    public static clear() 
-    {
-        store.endpoints.length = 0;
-        store.controllers.clear();
-        store.guards.clear();
-        store.interceptors.clear();
-        store.providers.clear();
-        store.modules.clear();
-        store.instances.clear();
-        store.resolving.clear();
-        store.controllerClasses.clear();
-        store.guardClasses.clear();
-        store.interceptorClasses.clear();
-
-        if( store.moduleInstances ) { store.moduleInstances.clear() }
-
-        if( store.classToModuleMap ) { store.classToModuleMap.clear() }
-
-        if( store.tokenToModuleMap ) { store.tokenToModuleMap.clear() }
-
-        if( store.globalModules ) { store.globalModules.clear() }
-        store.defaultResponseMode = undefined;
-    }
-
-    public static resolve( token: string, contextModule?: any ): any 
-    {
-        return DIContainer.resolve( token, contextModule );
-    }
-
-    public static getResolvedScope( token: string, contextModule?: any, visited = new Set<string>()): Scope 
-    {
-        return DIContainer.getResolvedScope( token, contextModule, visited );
-    }
-
-    public static getAllInstances(): any[] 
-    {
-        const instances = new Set<any>();
-
-        // 1. Modules, Providers & Controllers in each module
-        for( const m of store.moduleInstances.values()) 
-        {
-            if( m.moduleClass && m.moduleClass.name ) 
-            {
-                const modInst = m.instances.get( m.moduleClass.name );
-
-                if( modInst ) { instances.add( modInst ) }
-            }
-
-            for( const inst of m.instances.values()) 
-            {
-                if( inst && typeof inst === 'object' ) 
-                {
-                    instances.add( inst );
-                }
-            }
-        }
-
-        // 2. Fallback/legacy global instances
-        for( const inst of store.instances.values()) 
-        {
-            if( inst && typeof inst === 'object' ) 
-            {
-                instances.add( inst );
-            }
-        }
-
-        for( const inst of store.controllers.values()) 
-        {
-            if( inst && typeof inst === 'object' ) 
-            {
-                instances.add( inst );
-            }
-        }
-
-        for( const inst of store.guards.values()) 
-        {
-            if( inst && typeof inst === 'object' ) 
-            {
-                instances.add( inst );
-            }
-        }
-
-        for( const inst of store.interceptors.values()) 
-        {
-            if( inst && typeof inst === 'object' ) 
-            {
-                instances.add( inst );
-            }
-        }
-
-        return Array.from( instances );
-    }
-
-    public static async invokeHook( hookName: string, ...args: any[]) 
-    {
-        const instances = this.getAllInstances();
-
-        for( const instance of instances ) 
-        {
-            if( instance && typeof instance[hookName] === 'function' ) 
-            {
-                await instance[hookName]( ...args );
-            }
-        }
-    }
-
-    public static setDefaultResponseMode( mode: 'strict' | 'relaxed' | 'strip' ) 
-    {
-        store.defaultResponseMode = mode;
-    }
-
-    public static getDefaultResponseMode(): 'strict' | 'relaxed' | 'strip' 
-    {
-        return store.defaultResponseMode || 'strip';
+        return getRegistry().getDefaultResponseMode();
     }
 }
+
+/** @deprecated — use ApplicationRegistry fields via getRegistry() */
+export const store =
+{
+    get endpoints() { return getRegistry().endpoints },
+    get controllers() { return getRegistry().controllers },
+    get guards() { return getRegistry().guards },
+    get interceptors() { return getRegistry().interceptors },
+    get providers() { return getRegistry().providers },
+    get modules() { return getRegistry().modules },
+    get instances() { return getRegistry().instances },
+    get resolving() { return getRegistry().resolving },
+    get controllerClasses() { return getRegistry().controllerClasses },
+    get guardClasses() { return getRegistry().guardClasses },
+    get interceptorClasses() { return getRegistry().interceptorClasses },
+    get moduleInstances() { return getRegistry().moduleInstances },
+    get classToModuleMap() { return getRegistry().classToModuleMap },
+    get tokenToModuleMap() { return getRegistry().tokenToModuleMap },
+    get globalModules() { return getRegistry().globalModules },
+    get defaultResponseMode() { return getRegistry().defaultResponseMode },
+    set defaultResponseMode( v: any ) { getRegistry().defaultResponseMode = v }
+};

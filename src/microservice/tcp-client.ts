@@ -36,7 +36,7 @@ export class TcpClient
                 resolve();
             });
 
-            socket.on( 'data', ( chunk ) => this.onData( chunk ));
+            socket.on( 'data', ( chunk ) => this.onData( Buffer.isBuffer( chunk ) ? chunk : Buffer.from( chunk )));
             socket.on( 'error', ( err ) =>
             {
                 this.failAll( err );
