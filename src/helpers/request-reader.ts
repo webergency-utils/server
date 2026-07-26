@@ -21,7 +21,7 @@ export function getEffectiveBodyContentType( req: AugmentedRequest ): string | n
     return getContentType( req ) ?? req._bodyContentType ?? null;
 }
 
-/** True when headers indicate a non-empty body (without reading the stream). */
+/** True when headers or the Request body stream indicate a non-empty body (without reading it). */
 export function requestLikelyHasBody( req: AugmentedRequest ): boolean
 {
     const contentLength = req.headers.get( 'content-length' );
@@ -39,6 +39,12 @@ export function requestLikelyHasBody( req: AugmentedRequest ): boolean
     const transferEncoding = req.headers.get( 'transfer-encoding' );
 
     if( transferEncoding && transferEncoding.toLowerCase() !== 'identity' )
+    {
+        return true;
+    }
+
+    // Bun (and some undici paths) may omit Content-Length while still exposing a body stream.
+    if( req.body != null )
     {
         return true;
     }

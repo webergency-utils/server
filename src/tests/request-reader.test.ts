@@ -124,6 +124,17 @@ describe( 'requestLikelyHasBody', () =>
     {
         expect( requestLikelyHasBody( createRequest({}))).toBe( false );
     });
+
+    it( 'should treat a non-null Request body stream as a body', () =>
+    {
+        expect( requestLikelyHasBody( new Request( 'http://localhost/', {
+            method : 'POST',
+            body   : '{"a":1}'
+        }) as any )).toBe( true );
+        expect( requestLikelyHasBody( new Request( 'http://localhost/', {
+            method : 'POST'
+        }) as any )).toBe( false );
+    });
 });
 
 describe( 'RequestReader.getRawBody', () =>
