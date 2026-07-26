@@ -7,7 +7,8 @@
  *   bun  scripts/runtime-smoke.mjs
  *   deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-smoke.mjs
  */
-import { Server, MetadataStore } from '../dist/index.js';
+import { Server } from '../dist/index.js';
+import { seedInstanceController } from '../dist/testing.js';
 
 function detectRuntime()
 {
@@ -64,8 +65,6 @@ async function main()
 
     console.log( `[runtime-smoke] starting on ${runtime} :${port}` );
 
-    MetadataStore.clear();
-
     const controller =
     {
         hello : () => ({ ok : true, runtime }),
@@ -78,29 +77,27 @@ async function main()
         }
     };
 
-    MetadataStore.registerController( 'RuntimeSmokeController', controller );
-    MetadataStore.registerEndpoint({
-        controller   : 'RuntimeSmokeController',
-        methodName   : 'hello',
-        httpMethod   : 'GET',
-        path         : '/smoke/hello',
-        params       : [],
-        guards       : [],
-        interceptors : [],
-        meta         : {}
-    });
-    MetadataStore.registerEndpoint({
-        controller   : 'RuntimeSmokeController',
-        methodName   : 'echo',
-        httpMethod   : 'WS',
-        path         : '/smoke/ws',
-        params       : [{ source : 'WebSocket' }],
-        guards       : [],
-        interceptors : [],
-        meta         : {}
-    });
-
     const server = new Server({ port, logs : false });
+    seedInstanceController( server.registry, 'RuntimeSmokeController', controller, [
+        {
+            methodName   : 'hello',
+            httpMethod   : 'GET',
+            path         : '/smoke/hello',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            meta         : {}
+        },
+        {
+            methodName   : 'echo',
+            httpMethod   : 'WS',
+            path         : '/smoke/ws',
+            params       : [{ source : 'WebSocket' }],
+            guards       : [],
+            interceptors : [],
+            meta         : {}
+        }
+    ]);
     await server.start();
 
     try

@@ -1,7 +1,7 @@
 /**
  * Cross-runtime full adapter suite.
  * Real listen() + validation + HTTP + SSE + WebSocket against the native adapter.
- * Uses MetadataStore fixtures (same shape as AOT endpoints) so Node / Bun / Deno
+ * Uses ApplicationRegistry fixtures (same shape as AOT endpoints) so Node / Bun / Deno
  * can share one script without Vitest aliases or the TypeScript compiler.
  *
  *   npm run build
@@ -10,7 +10,8 @@
  *   bun  scripts/runtime-suite.mjs
  *   deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-suite.mjs
  */
-import { Server, MetadataStore } from '../dist/index.js';
+import { Server } from '../dist/index.js';
+import { seedInstanceController } from '../dist/testing.js';
 import { validators } from '@webergency-utils/typechecker';
 
 function detectRuntime()
@@ -120,10 +121,8 @@ function statusValidator( v, path, ctx )
     ]);
 }
 
-function registerFixtures( runtime )
+function registerFixtures( server, runtime )
 {
-    MetadataStore.clear();
-
     const controller =
     {
         hello : () => ({ ok : true, runtime }),
@@ -175,111 +174,101 @@ function registerFixtures( runtime )
         }
     };
 
-    MetadataStore.registerController( 'RuntimeSuiteController', controller );
-
     const base =
     {
-        controller   : 'RuntimeSuiteController',
         guards       : [],
         interceptors : [],
         middlewares  : [],
         meta         : {}
     };
 
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'hello',
-        httpMethod : 'GET',
-        path       : '/suite/hello',
-        params     : []
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'strict',
-        httpMethod : 'POST',
-        path       : '/suite/strict',
-        params     : [{ source : 'Body', name : '', validator : userValidator, mode : 'strict' }]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'strip',
-        httpMethod : 'POST',
-        path       : '/suite/strip',
-        params     : [{ source : 'Body', name : '', validator : userValidator, mode : 'strip' }]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'status',
-        httpMethod : 'GET',
-        path       : '/suite/status',
-        params     : [{ source : 'Query', name : 's', validator : statusValidator, mode : 'strip' }]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'arrayQuery',
-        httpMethod : 'GET',
-        path       : '/suite/array-query',
-        params     : [{
-            source    : 'Query',
-            name      : 'tags',
-            validator : ( v, path, ctx ) => validators.array( v, path, ctx, validators.string ),
-            mode      : 'strip'
-        }]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'coerce',
-        httpMethod : 'GET',
-        path       : '/suite/coerce',
-        params     : [
-            { source : 'Query', name : 'age', validator : validators.number },
-            { source : 'Query', name : 'active', validator : validators.boolean },
-            { source : 'Query', name : 'date', validator : validators.date }
-        ]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'echo',
-        httpMethod : 'WS',
-        path       : '/suite/ws',
-        params     : [{ source : 'WebSocket' }]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'wsParams',
-        httpMethod : 'WS',
-        path       : '/suite/ws-params/:room',
-        params     : [
-            { source : 'WebSocket' },
-            { source : 'Param', name : 'room', validator : validators.string },
-            { source : 'Query', name : 'token', validator : validators.string }
-        ]
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'wsLimited',
-        httpMethod : 'WS',
-        path       : '/suite/ws-limited',
-        params     : [{ source : 'WebSocket' }],
-        meta       : { ws : true, wsOptions : { maxPayload : 10 } }
-    });
-
-    MetadataStore.registerEndpoint({
-        ...base,
-        methodName : 'sse',
-        httpMethod : 'GET',
-        path       : '/suite/sse',
-        params     : [],
-        meta       : { sse : true }
-    });
+    seedInstanceController( server.registry, 'RuntimeSuiteController', controller, [
+        {
+            ...base,
+            methodName : 'hello',
+            httpMethod : 'GET',
+            path       : '/suite/hello',
+            params     : []
+        },
+        {
+            ...base,
+            methodName : 'strict',
+            httpMethod : 'POST',
+            path       : '/suite/strict',
+            params     : [{ source : 'Body', name : '', validator : userValidator, mode : 'strict' }]
+        },
+        {
+            ...base,
+            methodName : 'strip',
+            httpMethod : 'POST',
+            path       : '/suite/strip',
+            params     : [{ source : 'Body', name : '', validator : userValidator, mode : 'strip' }]
+        },
+        {
+            ...base,
+            methodName : 'status',
+            httpMethod : 'GET',
+            path       : '/suite/status',
+            params     : [{ source : 'Query', name : 's', validator : statusValidator, mode : 'strip' }]
+        },
+        {
+            ...base,
+            methodName : 'arrayQuery',
+            httpMethod : 'GET',
+            path       : '/suite/array-query',
+            params     : [{
+                source    : 'Query',
+                name      : 'tags',
+                validator : ( v, path, ctx ) => validators.array( v, path, ctx, validators.string ),
+                mode      : 'strip'
+            }]
+        },
+        {
+            ...base,
+            methodName : 'coerce',
+            httpMethod : 'GET',
+            path       : '/suite/coerce',
+            params     : [
+                { source : 'Query', name : 'age', validator : validators.number },
+                { source : 'Query', name : 'active', validator : validators.boolean },
+                { source : 'Query', name : 'date', validator : validators.date }
+            ]
+        },
+        {
+            ...base,
+            methodName : 'echo',
+            httpMethod : 'WS',
+            path       : '/suite/ws',
+            params     : [{ source : 'WebSocket' }]
+        },
+        {
+            ...base,
+            methodName : 'wsParams',
+            httpMethod : 'WS',
+            path       : '/suite/ws-params/:room',
+            params     : [
+                { source : 'WebSocket' },
+                { source : 'Param', name : 'room', validator : validators.string },
+                { source : 'Query', name : 'token', validator : validators.string }
+            ]
+        },
+        {
+            ...base,
+            methodName : 'wsLimited',
+            httpMethod : 'WS',
+            path       : '/suite/ws-limited',
+            params     : [{ source : 'WebSocket' }],
+            meta       : { ws : true, wsOptions : { maxPayload : 10 } }
+        },
+        {
+            ...base,
+            methodName : 'sse',
+            httpMethod : 'GET',
+            path       : '/suite/sse',
+            params     : [],
+            meta       : { sse : true }
+        }
+    ]);
 }
 
 async function main()
@@ -291,9 +280,8 @@ async function main()
 
     console.log( `[runtime-suite] ${runtime} starting on :${port}` );
 
-    registerFixtures( runtime );
-
     const server = new Server({ port, logs : false });
+    registerFixtures( server, runtime );
     await server.start();
 
     let passed = 0;

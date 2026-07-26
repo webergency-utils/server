@@ -139,7 +139,7 @@ module.exports.fuzz = function( data )
             pathToRE,
             getContentType,
             Router,
-            MetadataStore
+            ApplicationRegistry
         } = runtime;
 
         const qs = fuzzQueryString( provider );
@@ -223,7 +223,7 @@ module.exports.fuzz = function( data )
         };
         getContentType( fakeReq );
 
-        MetadataStore.clear();
+        const registry = new ApplicationRegistry();
         const router = new Router();
         const methods = [ 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL' ];
         const routeCount = provider.consumeIntegralInRange( 0, 5 );
@@ -251,10 +251,10 @@ module.exports.fuzz = function( data )
 
         router.find( provider.pickValue( methods ), provider.consumeString( 32 ) || '/' );
 
-        MetadataStore.registerController( 'FuzzCtrl', { ping : () => 'pong' });
-        MetadataStore.getController( 'FuzzCtrl' );
-        MetadataStore.getEndpoints();
-        MetadataStore.clear();
+        registry.registerController( 'FuzzCtrl', { ping : () => 'pong' });
+        registry.getController( 'FuzzCtrl' );
+        registry.getEndpoints();
+        registry.clear();
     }
     catch( e )
     {
