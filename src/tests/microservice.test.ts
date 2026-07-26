@@ -23,7 +23,10 @@ describe( 'Microservice Integration Tests', () =>
 
     afterAll( async () => 
     {
-        await microservice.shutdown();
+        if( microservice )
+        {
+            await microservice.shutdown();
+        }
     });
 
     const sendRpc = ( pattern: string, payload: any ): Promise<any> => 
