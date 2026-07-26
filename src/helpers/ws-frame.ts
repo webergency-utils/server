@@ -78,6 +78,17 @@ export class SimpleMultibuffer
     }
 }
 
+function readUint32BE( buf: SimpleMultibuffer, offset: number ): number
+{
+    // Multiply to avoid JS signed 32-bit overflow from `<< 24`.
+    return (
+        ( buf.get( offset ) & 0xff ) * 0x1000000
+        + ( buf.get( offset + 1 ) & 0xff ) * 0x10000
+        + ( buf.get( offset + 2 ) & 0xff ) * 0x100
+        + ( buf.get( offset + 3 ) & 0xff )
+    );
+}
+
 export class WebsocketFrame 
 {
     static write( tx_buffer: SimpleMultibuffer, payload: string | Buffer, options: { opcode? : number, mask? : boolean } = {}): void 
@@ -115,7 +126,7 @@ export class WebsocketFrame
 
     static read( rx_buffer: SimpleMultibuffer, emit: ( event: string, ...args: any[]) => void, options?: { maxPayload? : number }): void 
     {
-        while( rx_buffer.length > 2 ) 
+        while( rx_buffer.length >= 2 ) 
         {
             const opcode = rx_buffer.get( 0 ) & 0x0f;
             const head = rx_buffer.get( 1 );
@@ -127,15 +138,22 @@ export class WebsocketFrame
                 payload_length = head & 0x7f;
                 header_length = 2 + ( head & 0x80 ? 4 : 0 );
             }
-            else if(( head & 0x7f ) === 126 && rx_buffer.length > 4 ) 
+            else if(( head & 0x7f ) === 126 && rx_buffer.length >= 4 ) 
             {
                 payload_length = ( rx_buffer.get( 2 ) << 8 ) + rx_buffer.get( 3 );
                 header_length = 4 + ( head & 0x80 ? 4 : 0 );
             }
-            else if(( head & 0x7f ) === 127 && rx_buffer.length > 10 ) 
+            else if(( head & 0x7f ) === 127 && rx_buffer.length >= 10 ) 
             {
-                // Read 64-bit length (assuming safe integer range)
-                payload_length = ( rx_buffer.get( 6 ) << 24 ) + ( rx_buffer.get( 7 ) << 16 ) + ( rx_buffer.get( 8 ) << 8 ) + rx_buffer.get( 9 );
+                // High 32 bits must be zero — lengths above 4 GiB are unsupported.
+                if( rx_buffer.get( 2 ) !== 0 || rx_buffer.get( 3 ) !== 0 || rx_buffer.get( 4 ) !== 0 || rx_buffer.get( 5 ) !== 0 )
+                {
+                    emit( 'limit_exceeded' );
+
+                    return;
+                }
+
+                payload_length = readUint32BE( rx_buffer, 6 );
                 header_length = 10 + ( head & 0x80 ? 4 : 0 );
             }
 

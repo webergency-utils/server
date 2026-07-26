@@ -195,4 +195,64 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
         expect( events ).toHaveLength( 1 );
         expect( events[0]).toEqual({ event : 'message', data : 'hello' });
     });
+
+    it( 'should parse empty unmasked text frames (exactly 2 header bytes)', () =>
+    {
+        // Arrange — FIN + text, unmasked, length 0
+        const rx = new SimpleMultibuffer();
+        rx.append( Buffer.from([ 0x81, 0x00 ]));
+
+        // Act
+        const events: any[] = [];
+        WebsocketFrame.read( rx, ( event, data ) =>
+        {
+            events.push({ event, data });
+        });
+
+        // Assert
+        expect( events ).toEqual([{ event : 'message', data : '' }]);
+        expect( rx.length ).toBe( 0 );
+    });
+
+    it( 'should reject 64-bit lengths with non-zero high bytes without throwing', () =>
+    {
+        // Arrange — length encoding 127 with high 32 bits set (would overflow signed << 24 before)
+        const rx = new SimpleMultibuffer();
+        rx.append( Buffer.from([
+            0x82, 0x7f,
+            0x00, 0x00, 0x00, 0x01,
+            0x00, 0x00, 0x00, 0x00
+        ]));
+
+        // Act
+        const events: any[] = [];
+        WebsocketFrame.read( rx, ( event ) =>
+        {
+            events.push( event );
+        });
+
+        // Assert
+        expect( events ).toEqual([ 'limit_exceeded' ]);
+    });
+
+    it( 'should read 64-bit lengths near 2GiB without signed-shift overflow', () =>
+    {
+        // Arrange — declare ~2.1GiB payload via 64-bit length; reject via maxPayload before alloc
+        const rx = new SimpleMultibuffer();
+        rx.append( Buffer.from([
+            0x82, 0x7f,
+            0x00, 0x00, 0x00, 0x00,
+            0x80, 0x00, 0x00, 0x00
+        ]));
+
+        // Act
+        const events: any[] = [];
+        WebsocketFrame.read( rx, ( event ) =>
+        {
+            events.push( event );
+        }, { maxPayload : 1024 });
+
+        // Assert — length parsed as unsigned 0x80000000 (> 1024), not a negative number
+        expect( events ).toEqual([ 'limit_exceeded' ]);
+    });
 });

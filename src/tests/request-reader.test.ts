@@ -6,6 +6,7 @@ function createRequest( options:
 {
     headers?     : Record<string, string | null>
     body?        : string | ArrayBuffer
+    streamBody?  : ReadableStream<Uint8Array>
     _json?       : unknown
     withJsonKey? : boolean
     _raw?        : ArrayBuffer
@@ -31,6 +32,7 @@ function createRequest( options:
         headers : {
             get : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null
         },
+        body : options.streamBody,
         arrayBuffer : vi.fn( async () =>
         {
             arrayBufferCalls += 1;
@@ -56,6 +58,26 @@ function createRequest( options:
     ( req as { arrayBufferCalls: () => number }).arrayBufferCalls = () => arrayBufferCalls;
 
     return req;
+}
+
+function chunkedStream( chunks: string[]): ReadableStream<Uint8Array>
+{
+    const encoder = new TextEncoder();
+    let i = 0;
+
+    return new ReadableStream({
+        pull( controller )
+        {
+            if( i < chunks.length )
+            {
+                controller.enqueue( encoder.encode( chunks[i++]));
+            }
+            else
+            {
+                controller.close();
+            }
+        }
+    });
 }
 
 describe( 'getContentType', () =>
@@ -201,6 +223,37 @@ describe( 'RequestReader.getRawBody', () =>
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 413 });
+    });
+
+    it( 'should reject mid-stream when chunked body exceeds maxBodySize', async () =>
+    {
+        // Arrange — no Content-Length; stream would otherwise buffer everything via arrayBuffer()
+        const req = createRequest({
+            streamBody : chunkedStream([ 'aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc' ])
+        }) as AugmentedRequest & { arrayBufferCalls: () => number };
+
+        // Act
+        const act = RequestReader.getRawBody( req, { maxBodySize : '15b' });
+
+        // Assert
+        await expect( act ).rejects.toMatchObject({ status : 413 });
+        expect( req.arrayBufferCalls()).toBe( 0 );
+        expect( req._raw ).toBeUndefined();
+    });
+
+    it( 'should stream-read bodies within maxBodySize without calling arrayBuffer', async () =>
+    {
+        // Arrange
+        const req = createRequest({
+            streamBody : chunkedStream([ 'hel', 'lo' ])
+        }) as AugmentedRequest & { arrayBufferCalls: () => number };
+
+        // Act
+        const raw = await RequestReader.getRawBody( req, { maxBodySize : '10b' });
+
+        // Assert
+        expect( new TextDecoder().decode( raw )).toBe( 'hello' );
+        expect( req.arrayBufferCalls()).toBe( 0 );
     });
 
     it( 'should accept bodies within a numeric maxBodySize limit', async () =>

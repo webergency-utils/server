@@ -257,16 +257,18 @@ export function discoverFromEntryPoint( program: ts.Program, entryFile: string, 
                 {
                     for( const dec of decorators ) 
                     {
-                        const decText = dec.expression.getText();
-                        const isController = decText.includes( 'Controller' );
-                        const isInjectable = decText.includes( 'Injectable' );
-                        const isModule = decText.includes( 'Module' );
-
-                        // Better check using symbol if possible
+                        // Prefer symbol name; fall back to the call/identifier text only
+                        // (not the full expression — `@Module({ controllers })` contains "Controller").
                         const decSymbol = checker.getSymbolAtLocation( ts.isCallExpression( dec.expression ) ? dec.expression.expression : dec.expression );
                         const decName = decSymbol?.getName();
+                        const callText = ts.isCallExpression( dec.expression )
+                            ? dec.expression.expression.getText()
+                            : dec.expression.getText();
+                        const isController = decName === 'Controller' || callText === 'Controller';
+                        const isInjectable = decName === 'Injectable' || callText === 'Injectable';
+                        const isModule = decName === 'Module' || callText === 'Module';
 
-                        if( decName === 'Controller' || isController ) 
+                        if( isController ) 
                         {
                             const className = node.name.text;
                             const filePath = sourceFile.fileName;
@@ -274,7 +276,7 @@ export function discoverFromEntryPoint( program: ts.Program, entryFile: string, 
                             discoveredFiles.add( filePath );
                             console.log( `- Discovered controller: ${className} in ${path.basename( filePath )}` );
                         }
-                        else if( decName === 'Injectable' || isInjectable ) 
+                        else if( isInjectable ) 
                         {
                             const className = node.name.text;
                             const filePath = sourceFile.fileName;
@@ -282,7 +284,7 @@ export function discoverFromEntryPoint( program: ts.Program, entryFile: string, 
                             discoveredFiles.add( filePath );
                             console.log( `- Discovered provider: ${className} in ${path.basename( filePath )}` );
                         }
-                        else if( decName === 'Module' || isModule ) 
+                        else if( isModule ) 
                         {
                             const className = node.name.text;
                             const filePath = sourceFile.fileName;

@@ -95,7 +95,13 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
         }
         else if( typeof val === 'object' ) 
         {
-            headers['X-Frame-Options'] = val.action.toUpperCase();
+            const action = typeof val.action === 'string' ? val.action.toLowerCase() : '';
+
+            // ALLOW-FROM is obsolete and incomplete without a domain; only emit valid values.
+            if( action === 'deny' || action === 'sameorigin' )
+            {
+                headers['X-Frame-Options'] = action.toUpperCase();
+            }
         }
     }
 

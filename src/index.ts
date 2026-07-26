@@ -42,6 +42,7 @@ export {
     normalizeIp,
     ipInCidr,
     compileTrustProxy,
+    TRUST_PROXY_LOOPBACK,
     TrustProxy
 } from './helpers/client-ip.js';
 export {

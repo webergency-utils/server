@@ -1,6 +1,9 @@
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 
+/** Max incomplete newline-delimited JSON line held in memory. */
+const TCP_MAX_LINE_BYTES = 1024 * 1024;
+
 export type TcpClientOptions =
 {
     host? : string
@@ -103,7 +106,16 @@ export class TcpClient
 
         while(( index = this.buffer.indexOf( '\n' )) !== -1 )
         {
-            const line = this.buffer.substring( 0, index ).trim();
+            const rawLine = this.buffer.substring( 0, index );
+
+            if( Buffer.byteLength( rawLine, 'utf8' ) > TCP_MAX_LINE_BYTES )
+            {
+                this.rejectOversizedLine();
+
+                return;
+            }
+
+            const line = rawLine.trim();
             this.buffer = this.buffer.substring( index + 1 );
 
             if( !line ){ continue }
@@ -134,6 +146,18 @@ export class TcpClient
                 waiter.reject( new Error( response.message || 'RPC Error' ));
             }
         }
+
+        if( Buffer.byteLength( this.buffer, 'utf8' ) > TCP_MAX_LINE_BYTES )
+        {
+            this.rejectOversizedLine();
+        }
+    }
+
+    private rejectOversizedLine(): void
+    {
+        this.buffer = '';
+        this.failAll( new Error( `TCP response line exceeds ${TCP_MAX_LINE_BYTES} bytes` ));
+        this.socket?.destroy();
     }
 
     private failAll( err: Error ): void

@@ -142,7 +142,7 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `security?` | `SecurityOptions \| boolean` | Global security / headers |
 | `responseMode?` | `'strict' \| 'relaxed' \| 'strip'` | Default response validation mode |
 | `tls?` | `TlsOptions` | TLS / mTLS |
-| `trustProxy?` | `boolean \| string[]` | XFF trust: omit/`false` = never; `true` = loopback peer only; `string[]` = peer CIDR allowlist |
+| `trustProxy?` | `string[]` | Peer CIDR allowlist for XFF; omit/`[]` = never trust. Use `TRUST_PROXY_LOOPBACK` for local loopback peers. |
 | `logger?` / `logs?` | `Logger` / `boolean` | Logging |
 | `shutdownTimeout?` | `number` | Graceful shutdown wait |
 
@@ -256,7 +256,7 @@ Coercion via `from`:
 * Symbol keys: `WEBERGENCY_CONTROLLER`, `WEBERGENCY_MODULE`, `WEBERGENCY_INJECTABLE`, `WEBERGENCY_METADATA`
 * Meta readers: `getControllerMeta`, `getModuleMeta`, `getInjectableMeta`
 * Path helpers: `pathCompiler`, `pathMatcher`, `pathToRE`, …
-* IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`, `TrustProxy`
+* IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`, `TRUST_PROXY_LOOPBACK`, `TrustProxy`
 * Peer helpers: `normalizePeerCert`, `needsNodeTlsCompat`, `tlsMaterialToString`
 
 ### Errors
@@ -312,7 +312,7 @@ await server.start();
 ### `@Ip` ignores `X-Forwarded-For`
 
 **Cause:** `trustProxy` not set, or the immediate peer is outside the allowlist.  
-**Fix:** Set `trustProxy: true` (loopback only) or `trustProxy: ['10.0.0.0/8', ...]`.
+**Fix:** Set `trustProxy: TRUST_PROXY_LOOPBACK` (local) or `trustProxy: ['10.0.0.0/8', ...]`.
 
 ## Maintenance
 

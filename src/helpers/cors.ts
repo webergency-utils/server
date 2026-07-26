@@ -90,6 +90,12 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
     {
         headers['Access-Control-Allow-Origin'] = allowedOrigin;
 
+        // Reflected origins must vary by Origin so shared caches do not reuse ACAO.
+        if( allowedOrigin !== '*' ) 
+        {
+            headers['Vary'] = 'Origin';
+        }
+
         if( config.credentials ) 
         {
             headers['Access-Control-Allow-Credentials'] = 'true';

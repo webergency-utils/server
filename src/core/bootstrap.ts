@@ -58,21 +58,22 @@ export function bootstrapRegistry( registry: ApplicationRegistry, options: Boots
                 ingestProviderHost( registry, provider, undefined );
             }
         }
+    }
 
-        if( options.guards )
+    // Top-level guards/interceptors apply with or without a module graph.
+    if( options.guards )
+    {
+        for( const guard of options.guards )
         {
-            for( const guard of options.guards )
-            {
-                ingestGuardHost( registry, guard, undefined );
-            }
+            ingestGuardHost( registry, guard, undefined );
         }
+    }
 
-        if( options.interceptors )
+    if( options.interceptors )
+    {
+        for( const interceptor of options.interceptors )
         {
-            for( const interceptor of options.interceptors )
-            {
-                ingestInterceptorHost( registry, interceptor, undefined );
-            }
+            ingestInterceptorHost( registry, interceptor, undefined );
         }
     }
 
@@ -150,6 +151,22 @@ function collectModule(
         for( const provider of meta.providers )
         {
             ingestProviderHost( registry, provider, moduleInstance );
+        }
+    }
+
+    if( meta.guards )
+    {
+        for( const guard of meta.guards )
+        {
+            ingestGuardHost( registry, guard, moduleInstance );
+        }
+    }
+
+    if( meta.interceptors )
+    {
+        for( const interceptor of meta.interceptors )
+        {
+            ingestInterceptorHost( registry, interceptor, moduleInstance );
         }
     }
 

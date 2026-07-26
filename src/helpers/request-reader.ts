@@ -94,6 +94,64 @@ function sniffBody( text: string ): { value: any; contentType: 'application/json
     throw Object.assign( new Error( 'Unable to parse body without Content-Type' ), { status : 400 });
 }
 
+function payloadTooLarge( maxSize: string | number ): never
+{
+    throw Object.assign( new Error( `Payload Too Large (limit: ${maxSize})` ), { status : 413 });
+}
+
+function concatChunks( chunks: Uint8Array[], total: number ): ArrayBuffer
+{
+    const out = new Uint8Array( total );
+    let offset = 0;
+
+    for( const chunk of chunks )
+    {
+        out.set( chunk, offset );
+        offset += chunk.byteLength;
+    }
+
+    return out.buffer;
+}
+
+/**
+ * Read a Request body stream while capping total bytes in memory.
+ * Cancels the stream as soon as the limit is exceeded.
+ */
+async function readStreamWithLimit( body: ReadableStream<Uint8Array>, limit: number, maxSize: string | number ): Promise<ArrayBuffer>
+{
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+
+    try
+    {
+        for( ;; )
+        {
+            const { done, value } = await reader.read();
+
+            if( done ){ break }
+
+            if( !value?.byteLength ){ continue }
+
+            total += value.byteLength;
+
+            if( total > limit )
+            {
+                await reader.cancel().catch(() => undefined );
+                payloadTooLarge( maxSize );
+            }
+
+            chunks.push( value );
+        }
+    }
+    finally
+    {
+        reader.releaseLock();
+    }
+
+    return concatChunks( chunks, total );
+}
+
 export class RequestReader 
 {
     public static async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
@@ -131,27 +189,30 @@ export class RequestReader
     {
         if( req._raw !== undefined ) { return req._raw }
         const maxSize = securityConfig?.maxBodySize;
+        const limit = maxSize !== undefined ? parseSize( maxSize ) : undefined;
 
-        if( maxSize !== undefined ) 
+        if( limit !== undefined ) 
         {
-            const limit = parseSize( maxSize );
             const contentLength = req.headers.get( 'content-length' );
 
             if( contentLength && parseInt( contentLength, 10 ) > limit ) 
             {
-                throw Object.assign( new Error( `Payload Too Large (limit: ${maxSize})` ), { status : 413 });
+                payloadTooLarge( maxSize! );
             }
         }
+
+        // Prefer streaming when a size cap is set so chunked/omitted Content-Length
+        // cannot force the entire payload into memory before rejection.
+        if( limit !== undefined && req.body != null && typeof ( req.body as ReadableStream<Uint8Array> ).getReader === 'function' )
+        {
+            return req._raw = await readStreamWithLimit( req.body as ReadableStream<Uint8Array>, limit, maxSize! );
+        }
+
         const buffer = await req.arrayBuffer();
 
-        if( maxSize !== undefined ) 
+        if( limit !== undefined && buffer.byteLength > limit ) 
         {
-            const limit = parseSize( maxSize );
-
-            if( buffer.byteLength > limit ) 
-            {
-                throw Object.assign( new Error( `Payload Too Large (limit: ${maxSize})` ), { status : 413 });
-            }
+            payloadTooLarge( maxSize! );
         }
 
         return req._raw = buffer;

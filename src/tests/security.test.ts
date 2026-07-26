@@ -77,6 +77,75 @@ describe( 'Security Helper & Integration Tests', () =>
             expect( headers['Strict-Transport-Security']).toBeUndefined();
             expect( headers['X-Content-Type-Options']).toBe( 'nosniff' );
         });
+
+        it( 'should emit CSP string, object, and cross-origin policies', () =>
+        {
+            // Arrange / Act
+            const asTrue = generateSecurityHeaders({
+                csp  : true,
+                coep : true,
+                coop : true,
+                corp : true
+            });
+            const asString = generateSecurityHeaders({
+                csp            : "default-src 'none'",
+                coep           : 'credentialless',
+                coop           : 'same-origin-allow-popups',
+                corp           : 'cross-origin',
+                referrerPolicy : 'strict-origin',
+                frameguard     : 'deny',
+                hsts           : { maxAge : 60, includeSubDomains : false, preload : true }
+            });
+            const asObject = generateSecurityHeaders({
+                csp : {
+                    'default-src' : ["'self'"],
+                    'img-src'     : '*'
+                }
+            });
+
+            // Assert
+            expect( asTrue['Content-Security-Policy']).toBe( "default-src 'self'" );
+            expect( asTrue['Cross-Origin-Embedder-Policy']).toBe( 'require-corp' );
+            expect( asTrue['Cross-Origin-Opener-Policy']).toBe( 'same-origin' );
+            expect( asTrue['Cross-Origin-Resource-Policy']).toBe( 'same-origin' );
+
+            expect( asString['Content-Security-Policy']).toBe( "default-src 'none'" );
+            expect( asString['Cross-Origin-Embedder-Policy']).toBe( 'credentialless' );
+            expect( asString['Cross-Origin-Opener-Policy']).toBe( 'same-origin-allow-popups' );
+            expect( asString['Cross-Origin-Resource-Policy']).toBe( 'cross-origin' );
+            expect( asString['Referrer-Policy']).toBe( 'strict-origin' );
+            expect( asString['X-Frame-Options']).toBe( 'DENY' );
+            expect( asString['Strict-Transport-Security']).toBe( 'max-age=60; preload' );
+
+            expect( asObject['Content-Security-Policy']).toContain( "default-src 'self'" );
+            expect( asObject['Content-Security-Policy']).toContain( 'img-src *' );
+        });
+
+        it( 'should support frameguard action objects and custom cross-domain policy', () =>
+        {
+            // Arrange / Act
+            const headers = generateSecurityHeaders({
+                frameguard                   : { action : 'sameorigin' },
+                permittedCrossDomainPolicies : 'master-only',
+                downloadOptions              : true
+            });
+
+            // Assert
+            expect( headers['X-Frame-Options']).toBe( 'SAMEORIGIN' );
+            expect( headers['X-Permitted-Cross-Domain-Policies']).toBe( 'master-only' );
+            expect( headers['X-Download-Options']).toBe( 'noopen' );
+        });
+
+        it( 'should ignore obsolete or incomplete frameguard actions like allow-from', () =>
+        {
+            // Arrange / Act
+            const headers = generateSecurityHeaders({
+                frameguard : { action : 'allow-from' as 'deny' }
+            });
+
+            // Assert
+            expect( headers['X-Frame-Options']).toBeUndefined();
+        });
     });
 
     describe( 'Server integration - Request Protections', () =>

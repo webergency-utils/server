@@ -21,11 +21,13 @@ export type EndpointDefinition = Omit<EndpointMetadata, 'controller'> & {
 
 export type ModuleAotMeta =
 {
-    global?     : boolean
-    imports?    : any[]
-    controllers?: any[]
-    providers?  : any[]
-    exports?    : any[]
+    global?       : boolean
+    imports?      : any[]
+    controllers?  : any[]
+    providers?    : any[]
+    guards?       : any[]
+    interceptors? : any[]
+    exports?      : any[]
 };
 
 export type InjectableAotMeta =

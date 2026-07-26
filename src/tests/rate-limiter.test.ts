@@ -203,4 +203,30 @@ describe( 'RateLimiter', () =>
         expect( ip2Path1Allowed ).toBe( true );
         expect( ip1Path2Allowed ).toBe( true );
     });
+
+    it( 'should evict expired entries so rotating IPs cannot grow the store unbounded', () =>
+    {
+        // Arrange
+        const store: Map<string, unknown> = ( rateLimiter as any ).rateLimitStore;
+        const limitConfig = { max : 1, window : 50 };
+
+        for( let i = 0; i < 20; i++ )
+        {
+            rateLimiter.checkLimit( `203.0.113.${i}`, '/api', limitConfig );
+        }
+
+        expect( store.size ).toBe( 20 );
+
+        // Act — expire windows, then drive enough ops to trigger a sweep
+        vi.advanceTimersByTime( 100 );
+
+        for( let i = 0; i < 64; i++ )
+        {
+            rateLimiter.checkLimit( '198.51.100.1', '/api', limitConfig );
+        }
+
+        // Assert — stale rotating-IP keys are gone; only the active key remains
+        expect( store.size ).toBe( 1 );
+        expect( store.has( '/api:198.51.100.1' )).toBe( true );
+    });
 });

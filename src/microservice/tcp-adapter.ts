@@ -1,6 +1,9 @@
 import { MicroserviceAdapter, MessageConnection, MicroserviceNoReply } from './adapter.js';
 import net from 'node:net';
 
+/** Max incomplete newline-delimited JSON line held in memory per socket. */
+export const TCP_MAX_LINE_BYTES = 1024 * 1024;
+
 export class TcpMessageAdapter implements MicroserviceAdapter 
 {
     private server? : net.Server;
@@ -22,7 +25,17 @@ export class TcpMessageAdapter implements MicroserviceAdapter
 
                 while(( index = buffer.indexOf( '\n' )) !== -1 ) 
                 {
-                    const line = buffer.substring( 0, index ).trim();
+                    const rawLine = buffer.substring( 0, index );
+
+                    if( Buffer.byteLength( rawLine, 'utf8' ) > TCP_MAX_LINE_BYTES )
+                    {
+                        buffer = '';
+                        socket.destroy();
+
+                        return;
+                    }
+
+                    const line = rawLine.trim();
                     buffer = buffer.substring( index + 1 );
 
                     if( !line ) { continue }
@@ -79,6 +92,12 @@ export class TcpMessageAdapter implements MicroserviceAdapter
                             // ignore write failures on a broken socket
                         }
                     }
+                }
+
+                if( Buffer.byteLength( buffer, 'utf8' ) > TCP_MAX_LINE_BYTES )
+                {
+                    buffer = '';
+                    socket.destroy();
                 }
             });
 

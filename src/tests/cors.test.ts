@@ -1,6 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { Server } from '../server.js';
 import { seedInstanceController } from '../testing.js';
+import { isAllowed, handleCors } from '../helpers/cors.js';
+
+describe( 'CORS helpers', () =>
+{
+    it( 'should evaluate boolean rules, reflect origin:true, and reject unknown rule types', () =>
+    {
+        // Arrange / Act / Assert
+        expect( isAllowed( 'x', true )).toBe( true );
+        expect( isAllowed( 'x', false )).toBe( false );
+        expect( isAllowed( 'x', { nope : true })).toBe( false );
+
+        const req = new Request( 'http://localhost/', {
+            headers : { Origin : 'https://app.example' }
+        });
+        const headers = handleCors( req, { origin : true });
+        expect( headers && !( headers instanceof Response ) ? headers['Access-Control-Allow-Origin'] : null )
+            .toBe( 'https://app.example' );
+        expect( headers && !( headers instanceof Response ) ? headers['Vary'] : null ).toBe( 'Origin' );
+
+        const starred = handleCors( req, { origin : '*' });
+        expect( starred && !( starred instanceof Response ) ? starred['Vary'] : undefined ).toBeUndefined();
+    });
+});
 
 describe( 'CORS Integration & Runtime Tests', () =>
 {

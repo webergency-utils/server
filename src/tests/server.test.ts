@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Server } from '../server.js';
+import { Server, ConsoleLogger } from '../server.js';
 import { Scope, Meta, SetMetadata } from '../decorators.js';
 import { Reflector } from '../core/reflector.js';
 import { seedInstanceController, runWithRegistry, ApplicationRegistry, defineController, setModuleMeta } from '../testing.js';
@@ -108,18 +108,20 @@ describe( 'Server & Metadata', () =>
             expect( await res2.text()).toBe( '456' );
         });
 
-        it( 'should handle OPTIONS and fallback routes', async () => 
+        it( 'should answer OPTIONS with 204 without running rematched verb handlers', async () =>
         {
+            let posts = 0;
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'C', { post : () => 'ok' });
+            registry.registerController( 'C', { post : () => { posts++; return 'ok' } });
             registry.registerEndpoint({
                 controller : 'C', methodName : 'post', httpMethod : 'POST', path : '/data', params : [], guards : [], interceptors : [], meta : {}
             });
             });
-            
+
             const res = await server.fetch( new Request( 'http://localhost/data', { method : 'OPTIONS' }));
-            expect( res.status ).toBe( 200 );
+            expect( res.status ).toBe( 204 );
+            expect( posts ).toBe( 0 );
         });
     });
 
@@ -910,6 +912,492 @@ describe( 'Server & Metadata', () =>
             expect( response.status ).toBe( 200 );
             
             consoleSpy.mockRestore();
+        });
+    });
+
+    describe( 'ConsoleLogger and event off()', () =>
+    {
+        it( 'should forward ConsoleLogger.error and debug to console', () =>
+        {
+            // Arrange
+            const err = vi.spyOn( console, 'error' ).mockImplementation( () => {});
+            const dbg = vi.spyOn( console, 'debug' ).mockImplementation( () => {});
+            const logger = new ConsoleLogger();
+
+            // Act
+            logger.error( 'E' );
+            logger.debug( 'D' );
+
+            // Assert
+            expect( err ).toHaveBeenCalledWith( 'E' );
+            expect( dbg ).toHaveBeenCalledWith( 'D' );
+            err.mockRestore();
+            dbg.mockRestore();
+        });
+
+        it( 'should remove event handlers with off()', async () =>
+        {
+            // Arrange
+            const server = new Server({ port : 3000 });
+            const onReq = vi.fn();
+            server.on( 'request', onReq );
+            server.off( 'request', onReq );
+
+            // Act
+            await server.fetch( new Request( 'http://localhost/any' ));
+
+            // Assert
+            expect( onReq ).not.toHaveBeenCalled();
+        });
+
+        it( 'should strip error response bodies for HEAD requests', async () =>
+        {
+            // Arrange — force Server.catch (RequestProcessor normally swallows handler errors)
+            const { RequestProcessor } = await import( '../core/request-processor.js' );
+            const spy = vi.spyOn( RequestProcessor, 'execute' ).mockRejectedValue( new Error( 'nope' ));
+
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { ok : () => 'ok' });
+                registry.registerEndpoint({
+                    controller   : 'C',
+                    methodName   : 'ok',
+                    httpMethod   : 'GET',
+                    path         : '/boom',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/boom', { method : 'HEAD' }));
+
+            // Assert
+            expect( res.status ).toBe( 500 );
+            expect( await res.text()).toBe( '' );
+            spy.mockRestore();
+        });
+
+        it( 'should rebuild responses when security headers cannot mutate immutable headers', async () =>
+        {
+            // Arrange — security only (no cors) so applySecurityHeaders catch runs
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', {
+                    get : () =>
+                    {
+                        const res = new Response( 'ok' );
+                        res.headers.set = () => { throw new TypeError( 'immutable' ) };
+
+                        return res;
+                    }
+                });
+                registry.registerEndpoint({
+                    controller   : 'C',
+                    methodName   : 'get',
+                    httpMethod   : 'GET',
+                    path         : '/h',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            }, { security : true });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/h' ));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            expect( res.headers.get( 'x-content-type-options' )).toBe( 'nosniff' );
+            expect( await res.text()).toBe( 'ok' );
+        });
+
+        it( 'should rebuild responses when CORS headers cannot mutate immutable headers', async () =>
+        {
+            // Arrange
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', {
+                    get : () =>
+                    {
+                        const res = new Response( 'ok' );
+                        res.headers.set = () => { throw new TypeError( 'immutable' ) };
+
+                        return res;
+                    }
+                });
+                registry.registerEndpoint({
+                    controller   : 'C',
+                    methodName   : 'get',
+                    httpMethod   : 'GET',
+                    path         : '/cors-h',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            }, { cors : { origin : '*' } });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/cors-h', {
+                headers : { Origin : 'http://example.com' }
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            expect( res.headers.get( 'access-control-allow-origin' )).toBe( '*' );
+            expect( await res.text()).toBe( 'ok' );
+        });
+    });
+
+    describe( 'Server coverage seams', () =>
+    {
+        it( 'should expose nodeServer via getter after setter creates an adapter', () =>
+        {
+            // Arrange
+            const server = new Server({ port : 3000 });
+            const mockNode = { close : vi.fn() };
+
+            // Act
+            server.nodeServer = mockNode;
+
+            // Assert
+            expect( server.nodeServer ).toBe( mockNode );
+            expect(( server as any ).serverAdapter ).toBeDefined();
+        });
+
+        it( 'should bootstrap via deprecated init()', async () =>
+        {
+            // Arrange
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'InitCtrl', { ok : () => 'ready' });
+                registry.registerEndpoint({
+                    controller   : 'InitCtrl',
+                    methodName   : 'ok',
+                    httpMethod   : 'GET',
+                    path         : '/init',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            });
+
+            // Act
+            ( server as any ).init();
+            const res = await server.fetch( new Request( 'http://localhost/init' ));
+
+            // Assert
+            expect(( server as any ).bootstrapped ).toBe( true );
+            expect( await res.text()).toBe( 'ready' );
+        });
+
+        it.skipIf( !isNodeRuntime )( 'should log and shutdown on SIGTERM when logs:true', async () =>
+        {
+            // Arrange
+            const captured : Record<string, () => void> = {};
+            const onSpy = vi.spyOn( process, 'on' ).mockImplementation(( event : any, listener : any ) =>
+            {
+                if( event === 'SIGTERM' || event === 'SIGINT' )
+                {
+                    captured[event] = listener;
+                }
+
+                return process as any;
+            });
+            const logger =
+            {
+                info  : vi.fn(),
+                warn  : vi.fn(),
+                error : vi.fn(),
+                debug : vi.fn()
+            };
+            const server = new Server({ port : 3998, logs : true, logger });
+            const shutdownSpy = vi.spyOn( server, 'shutdown' ).mockResolvedValue( undefined as any );
+
+            // Act
+            captured.SIGTERM();
+
+            // Assert
+            expect( logger.warn ).toHaveBeenCalledWith(
+                expect.stringContaining( 'SIGTERM' ),
+                expect.objectContaining({ type : 'server_shutdown', reason : 'SIGTERM' })
+            );
+            expect( shutdownSpy ).toHaveBeenCalledWith( 'SIGTERM' );
+            onSpy.mockRestore();
+        });
+
+        it( 'should log CORS preflight and 404 when logs:true', async () =>
+        {
+            // Arrange
+            const logger =
+            {
+                info  : vi.fn(),
+                warn  : vi.fn(),
+                error : vi.fn(),
+                debug : vi.fn()
+            };
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'CorsCtrl', { get : () => 'ok' });
+                registry.registerEndpoint({
+                    controller   : 'CorsCtrl',
+                    methodName   : 'get',
+                    httpMethod   : 'GET',
+                    path         : '/cors-log',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            }, { logs : true, logger, cors : { origin : '*' } });
+
+            // Act
+            const preflight = await server.fetch( new Request( 'http://localhost/cors-log', {
+                method  : 'OPTIONS',
+                headers : {
+                    Origin                         : 'http://example.com',
+                    'Access-Control-Request-Method': 'GET'
+                }
+            }));
+            const missing = await server.fetch( new Request( 'http://localhost/no-such-route' ));
+
+            // Assert
+            expect( preflight.status ).toBe( 204 );
+            expect( logger.info ).toHaveBeenCalledWith(
+                expect.stringContaining( '204 CORS Preflight' ),
+                expect.objectContaining({ type : 'request_end', status : 204 })
+            );
+            expect( missing.status ).toBe( 404 );
+            expect( logger.info ).toHaveBeenCalledWith(
+                expect.stringContaining( '404 Not Found' ),
+                expect.objectContaining({ type : 'request_end', status : 404 })
+            );
+        });
+
+        it( 'should run WS upgrade guards across param sources and mock adapter.upgrade', async () =>
+        {
+            // Arrange
+            const guardArgs : any[] = [];
+            const guard =
+            {
+                use : vi.fn(( ...args : any[] ) => { guardArgs.push( ...args ) })
+            };
+            const upgradeRes = new Response( null, { status : 200 });
+            const upgrade = vi.fn().mockResolvedValue( upgradeRes );
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerProvider( 'Tok', { useValue : 'injected' });
+                registry.registerGuard( 'WsGuard', guard );
+                registry.registerController( 'WsCtrl', { ws : () => {} });
+                registry.registerEndpoint({
+                    controller : 'WsCtrl',
+                    methodName : 'ws',
+                    httpMethod : 'WS',
+                    path       : '/ws/:id',
+                    params     : [],
+                    guards     : [{
+                        name      : 'WsGuard',
+                        type      : 'class',
+                        resolvers : [ 'from-resolver' ],
+                        params    : [
+                            { source : 'WebSocket' },
+                            { source : 'Request' },
+                            { source : 'Param', name : 'id' },
+                            { source : 'Query', name : 'q' },
+                            { source : 'Inject', name : 'Tok' },
+                            { source : 'Unknown' as any }
+                        ]
+                    }],
+                    interceptors : [],
+                    meta         : {}
+                });
+            });
+            ( server as any ).serverAdapter = { upgrade, close : async () => {} };
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/ws/42?q=hi', {
+                headers : { upgrade : 'websocket' }
+            }));
+
+            // Assert
+            expect( guard.use ).toHaveBeenCalledOnce();
+            expect( guardArgs[0]).toBeNull();
+            expect( guardArgs[1]).toBeInstanceOf( Request );
+            expect( guardArgs[2]).toBe( '42' );
+            expect( guardArgs[3]).toBe( 'hi' );
+            expect( guardArgs[4]).toBe( 'injected' );
+            expect( guardArgs[5]).toBe( 'from-resolver' );
+            expect( upgrade ).toHaveBeenCalledOnce();
+            expect( res.status ).toBe( 200 );
+        });
+
+        it( 'should return 501 when adapter has no upgrade', async () =>
+        {
+            // Arrange
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'WsCtrl', { ws : () => {} });
+                registry.registerEndpoint({
+                    controller   : 'WsCtrl',
+                    methodName   : 'ws',
+                    httpMethod   : 'WS',
+                    path         : '/ws-no',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            });
+            ( server as any ).serverAdapter = { close : async () => {} };
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/ws-no', {
+                headers : { upgrade : 'websocket' }
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 501 );
+            expect( await res.text()).toBe( 'WebSockets not supported by adapter' );
+        });
+
+        it( 'should reject WS upgrade when guard param validation fails', async () =>
+        {
+            // Arrange
+            const upgrade = vi.fn();
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerGuard( 'BadQueryGuard', {
+                    use : () => true
+                });
+                registry.registerController( 'WsCtrl', { ws : () => {} });
+                registry.registerEndpoint({
+                    controller   : 'WsCtrl',
+                    methodName   : 'ws',
+                    httpMethod   : 'WS',
+                    path         : '/ws-bad',
+                    params       : [],
+                    guards       : [{
+                        type      : 'class',
+                        name      : 'BadQueryGuard',
+                        params    : [{
+                            source    : 'Query',
+                            name      : 'token',
+                            validator : ( _v: unknown, _p: string, ctx: { success: boolean, errors: unknown[] }) =>
+                            {
+                                ctx.success = false;
+                                ctx.errors.push({ message : 'bad token' });
+
+                                return undefined;
+                            }
+                        }],
+                        resolvers : []
+                    }],
+                    interceptors : [],
+                    meta         : {}
+                });
+            });
+            ( server as any ).serverAdapter = { upgrade, close : async () => {} };
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/ws-bad', {
+                headers : { upgrade : 'websocket' }
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 400 );
+            expect( upgrade ).not.toHaveBeenCalled();
+            expect( await res.json()).toMatchObject({ success : false, message : 'request validation failed' });
+        });
+
+        it( 'should reject immediately when timeout AbortSignal is already aborted', async () =>
+        {
+            // Arrange
+            const RealAC = AbortController;
+            vi.stubGlobal( 'AbortController', class extends RealAC
+            {
+                constructor()
+                {
+                    super();
+                    this.abort();
+                }
+            });
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'T', {
+                    slow : async () =>
+                    {
+                        await new Promise( r => setTimeout( r, 50 ));
+
+                        return 'ok';
+                    }
+                });
+                registry.registerEndpoint({
+                    controller   : 'T',
+                    methodName   : 'slow',
+                    httpMethod   : 'GET',
+                    path         : '/already-aborted',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {},
+                    security     : { timeout : 1000 }
+                });
+            });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/already-aborted' ));
+
+            // Assert
+            expect( res.status ).toBe( 408 );
+            vi.unstubAllGlobals();
+        });
+
+        it( 'should log error and response end when logs:true and handler throws', async () =>
+        {
+            // Arrange — force Server.catch (RequestProcessor normally returns error Responses)
+            const { RequestProcessor } = await import( '../core/request-processor.js' );
+            const spy = vi.spyOn( RequestProcessor, 'execute' ).mockRejectedValue( new Error( 'logged-boom' ));
+            const logger =
+            {
+                info  : vi.fn(),
+                warn  : vi.fn(),
+                error : vi.fn(),
+                debug : vi.fn()
+            };
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'BoomCtrl', { boom : () => 'ok' });
+                registry.registerEndpoint({
+                    controller   : 'BoomCtrl',
+                    methodName   : 'boom',
+                    httpMethod   : 'GET',
+                    path         : '/logged-boom',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+            }, { logs : true, logger });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/logged-boom' ));
+
+            // Assert
+            expect( res.status ).toBe( 500 );
+            expect( logger.error ).toHaveBeenCalledWith(
+                expect.stringContaining( 'Server Error: logged-boom' ),
+                expect.objectContaining({ type : 'error' })
+            );
+            expect( logger.info ).toHaveBeenCalledWith(
+                expect.stringContaining( '500' ),
+                expect.objectContaining({ type : 'request_end', status : 500 })
+            );
+            spy.mockRestore();
         });
     });
 

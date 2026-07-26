@@ -83,7 +83,7 @@ export interface AugmentedRequest extends Request {
     /** TCP peer address attached by the runtime adapter (if available). */
     remoteAddress?  : string
     /** Copied from ServerOptions.trustProxy for @Ip resolution. */
-    trustProxy?     : boolean | string[]
+    trustProxy?     : string[]
     _json?             : any
     _raw?              : ArrayBuffer
     /** Set by getBody when Content-Type was missing and the body was sniffed. */

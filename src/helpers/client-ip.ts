@@ -6,9 +6,11 @@
  * left-most address that is not itself a trusted proxy hop.
  */
 
-export type TrustProxy = boolean | string[];
+/** Peer CIDR allowlist for trusting `X-Forwarded-For`. Omit / `[]` = never trust XFF. */
+export type TrustProxy = string[];
 
-const LOOPBACK_RANGES =
+/** Common local-dev allowlist: IPv4 loopback, IPv6 loopback, and IPv4-mapped loopback. */
+export const TRUST_PROXY_LOOPBACK: TrustProxy =
 [
     '127.0.0.0/8',
     '::1/128',
@@ -168,16 +170,32 @@ function parseIpBytes( ip: string ): IpBytes | null
     return null;
 }
 
+/** Strip display wrappers without collapsing IPv4-mapped addresses to IPv4. */
+function stripIpDisplay( raw: string ): string
+{
+    let ip = raw.trim();
+
+    if( ip.startsWith( '[' ))
+    {
+        const end = ip.indexOf( ']' );
+
+        if( end !== -1 ){ ip = ip.slice( 1, end ) }
+    }
+
+    const zone = ip.indexOf( '%' );
+
+    if( zone !== -1 ){ ip = ip.slice( 0, zone ) }
+
+    return ip;
+}
+
 function parseCidr( cidr: string ): Cidr | null
 {
     const trimmed = cidr.trim();
     const slash = trimmed.indexOf( '/' );
     const addr = slash === -1 ? trimmed : trimmed.slice( 0, slash );
-    const ip = normalizeIp( addr );
-
-    if( !ip ){ return null }
-
-    const parsed = parseIpBytes( ip );
+    // Keep ::ffff:x.x.x.x as v6 so prefixes like /96–/104 stay valid (TRUST_PROXY_LOOPBACK).
+    const parsed = parseIpBytes( stripIpDisplay( addr ));
 
     if( !parsed ){ return null }
 
@@ -266,15 +284,11 @@ export function ipInCidr( ip: string, cidr: string ): boolean
 
 export function compileTrustProxy( trustProxy?: TrustProxy ): Cidr[] | null
 {
-    if( trustProxy === undefined || trustProxy === false ){ return null }
-
-    const list = trustProxy === true ? LOOPBACK_RANGES : trustProxy;
-
-    if( !Array.isArray( list ) || list.length === 0 ){ return null }
+    if( !Array.isArray( trustProxy ) || trustProxy.length === 0 ){ return null }
 
     const ranges: Cidr[] = [];
 
-    for( const entry of list )
+    for( const entry of trustProxy )
     {
         const cidr = parseCidr( entry );
 
@@ -308,8 +322,7 @@ export type ClientIpRequest =
 /**
  * Resolve the client IP for @Ip and rate limiting.
  *
- * @param trustProxy - false/omit: never trust XFF; true: trust loopback peers only;
- *                     string[]: CIDR allowlist of immediate peers that may set XFF.
+ * @param trustProxy - omit/`[]`: never trust XFF; otherwise CIDR allowlist of immediate peers that may set XFF.
  */
 export function resolveClientIp( req: ClientIpRequest, trustProxy?: TrustProxy ): string
 {

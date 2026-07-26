@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestProcessor } from '../core/request-processor.js';
+import { ApplicationRegistry, runWithRegistry } from '../core/registry.js';
 import { validators } from '@webergency-utils/typechecker';
-import type { AugmentedRequest, ParamMetadata } from '../core/types.js';
+import type { AugmentedRequest, EndpointMetadata, ParamMetadata } from '../core/types.js';
 
 function createRequest( options:
 {
@@ -35,6 +36,28 @@ function createRequest( options:
         url         : options.url ?? 'http://localhost/path',
         meta        : {}
     } as unknown as AugmentedRequest;
+}
+
+function createEndpoint( overrides: Partial<EndpointMetadata> & Pick<EndpointMetadata, 'controller' | 'methodName'> ): EndpointMetadata
+{
+    return {
+        httpMethod   : 'GET',
+        path         : '/test',
+        params       : [],
+        guards       : [],
+        interceptors : [],
+        middlewares  : [],
+        meta         : {},
+        ...overrides
+    };
+}
+
+function createWsMock()
+{
+    return {
+        close : vi.fn(),
+        send  : vi.fn()
+    };
 }
 
 describe( 'RequestProcessor.resolveParam', () =>
@@ -356,5 +379,522 @@ describe( 'RequestProcessor.resolveParam', () =>
 
         expect( a ).toEqual({});
         expect( b ).toEqual({ a : 'b' });
+    });
+});
+
+describe( 'RequestProcessor.execute SSE', () =>
+{
+    beforeEach(() =>
+    {
+        vi.clearAllMocks();
+    });
+
+    it( 'should preserve falsy primitive handler results', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'FalsyCtrl', {
+            zero    : () => 0,
+            no      : () => false,
+            empty   : () => ''
+        });
+
+        // Act / Assert
+        await runWithRegistry( registry, async () =>
+        {
+            const zero = await RequestProcessor.execute(
+                createEndpoint({ controller : 'FalsyCtrl', methodName : 'zero' }),
+                createRequest({})
+            );
+            const no = await RequestProcessor.execute(
+                createEndpoint({ controller : 'FalsyCtrl', methodName : 'no' }),
+                createRequest({})
+            );
+            const empty = await RequestProcessor.execute(
+                createEndpoint({ controller : 'FalsyCtrl', methodName : 'empty' }),
+                createRequest({})
+            );
+
+            expect( await zero.text()).toBe( '0' );
+            expect( await no.text()).toBe( 'false' );
+            expect( await empty.text()).toBe( '' );
+        });
+    });
+
+    it( 'should format bare string SSE chunks and run the bare-chunk validator path', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        const validated: unknown[] = [];
+        registry.registerController( 'SseBareCtrl', {
+            stream : async function *()
+            {
+                yield 'hello';
+                yield 42;
+            }
+        });
+        const meta = createEndpoint({
+            controller          : 'SseBareCtrl',
+            methodName          : 'stream',
+            meta                : { sse : true },
+            returnTypeValidator : ( v: unknown, _path: string, ctx: { success: boolean, errors: unknown[] }) =>
+            {
+                validated.push( v );
+
+                if( v === 42 )
+                {
+                    ctx.success = false;
+                    ctx.errors.push({ message : 'bad bare chunk' });
+                }
+
+                return v;
+            }
+        });
+        const req = createRequest({});
+
+        // Act
+        const res = await runWithRegistry( registry, () => RequestProcessor.execute( meta, req ));
+
+        // Assert
+        expect( res.headers.get( 'Content-Type' )).toBe( 'text/event-stream' );
+        await expect( res.text()).rejects.toThrow( /Response validation failed/ );
+        expect( validated ).toEqual([ 'hello', 42 ]);
+    });
+
+    it( 'should stream bare strings when SSE validation succeeds', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'SseOkCtrl', {
+            stream : async function *()
+            {
+                yield 'ping';
+            }
+        });
+        const meta = createEndpoint({
+            controller          : 'SseOkCtrl',
+            methodName          : 'stream',
+            meta                : { sse : true },
+            returnTypeValidator : ( v: unknown ) => v
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( await res.text()).toBe( 'data: ping\n\n' );
+    });
+
+    it( 'should accept a ReadableStream body for SSE endpoints', async () =>
+    {
+        // Arrange — Node ReadableStream is also async-iterable; clear that so the
+        // instanceof ReadableStream branch is taken instead of formatSseChunk.
+        const registry = new ApplicationRegistry();
+        const stream = new ReadableStream({
+            start( controller )
+            {
+                controller.enqueue( new TextEncoder().encode( 'data: from-stream\n\n' ));
+                controller.close();
+            }
+        });
+        Object.defineProperty( stream, Symbol.asyncIterator, { value : undefined });
+        registry.registerController( 'SseStreamCtrl', {
+            stream : () => stream
+        });
+        const meta = createEndpoint({
+            controller : 'SseStreamCtrl',
+            methodName : 'stream',
+            meta       : { sse : true }
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( res.headers.get( 'Content-Type' )).toBe( 'text/event-stream' );
+        expect( await res.text()).toBe( 'data: from-stream\n\n' );
+    });
+
+    it( 'should accept a raw non-stream body for SSE endpoints', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'SseRawCtrl', {
+            stream : () => 'data: already-formatted\n\n'
+        });
+        const meta = createEndpoint({
+            controller : 'SseRawCtrl',
+            methodName : 'stream',
+            meta       : { sse : true }
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( await res.text()).toBe( 'data: already-formatted\n\n' );
+    });
+});
+
+describe( 'RequestProcessor.execute middleware and guards', () =>
+{
+    beforeEach(() =>
+    {
+        vi.clearAllMocks();
+    });
+
+    it( 'should throw when middleware resolves to a falsy instance', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'MwCtrl', { ok : () => 'ok' });
+        registry.registerProvider( 'MissingMw', { useValue : null });
+        const meta = createEndpoint({
+            controller  : 'MwCtrl',
+            methodName  : 'ok',
+            middlewares : [ 'MissingMw' ]
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert — thrown Error is mapped to a 500 JSON response
+        expect( res.status ).toBe( 500 );
+        expect( await res.json()).toMatchObject({
+            success : false,
+            error   : 'Middleware MissingMw not registered'
+        });
+    });
+
+    it( 'should reject when useCallback middleware calls next(error)', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'MwCtrl', { ok : () => 'ok' });
+        registry.registerProvider( 'CbErrMw', {
+            useCallback : ( _req: unknown, _res: unknown, next: ( error?: unknown ) => void ) =>
+            {
+                next( Object.assign( new Error( 'cb failed' ), { status : 418 }));
+            }
+        });
+        const meta = createEndpoint({
+            controller  : 'MwCtrl',
+            methodName  : 'ok',
+            middlewares : [ 'CbErrMw' ]
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( res.status ).toBe( 418 );
+        expect( await res.json()).toMatchObject({ success : false, error : 'cb failed' });
+    });
+
+    it( 'should reject when useCallback middleware throws synchronously', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'MwCtrl', { ok : () => 'ok' });
+        registry.registerProvider( 'CbThrowMw', {
+            useCallback : () =>
+            {
+                throw Object.assign( new Error( 'sync mw boom' ), { status : 503 });
+            }
+        });
+        const meta = createEndpoint({
+            controller  : 'MwCtrl',
+            methodName  : 'ok',
+            middlewares : [ 'CbThrowMw' ]
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( res.status ).toBe( 503 );
+        expect( await res.json()).toMatchObject({ success : false, error : 'sync mw boom' });
+    });
+
+    it( 'should return a Response thrown by a guard', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'GuardCtrl', { ok : () => 'ok' });
+        registry.registerGuard( 'DenyGuard', {
+            use : () =>
+            {
+                throw new Response( 'denied', { status : 403 });
+            }
+        });
+        const meta = createEndpoint({
+            controller : 'GuardCtrl',
+            methodName : 'ok',
+            guards     : [{
+                type      : 'class',
+                name      : 'DenyGuard',
+                resolvers : [],
+                params    : [],
+                isAsync   : false
+            }]
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( res.status ).toBe( 403 );
+        expect( await res.text()).toBe( 'denied' );
+    });
+});
+
+describe( 'RequestProcessor.runWs / executeWs', () =>
+{
+    beforeEach(() =>
+    {
+        vi.clearAllMocks();
+    });
+
+    it( 'should close with 1011 when runWs executeWs fails for a missing controller', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        const ws = createWsMock();
+        const meta = createEndpoint({
+            controller : 'MissingWsCtrl',
+            methodName : 'handle',
+            httpMethod : 'WS',
+            meta       : { ws : true }
+        });
+
+        // Act
+        runWithRegistry( registry, () =>
+            RequestProcessor.runWs( meta, ws, createRequest({})));
+
+        // Assert — resolve throws before the explicit !controller check
+        await vi.waitFor(() =>
+        {
+            expect( ws.close ).toHaveBeenCalledWith(
+                1011,
+                'No provider registered for token: MissingWsCtrl'
+            );
+        });
+    });
+
+    it( 'should ignore secondary close failures in runWs catch', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        const ws = createWsMock();
+        ws.close.mockImplementation(() =>
+        {
+            throw new Error( 'close failed' );
+        });
+        const meta = createEndpoint({
+            controller : 'MissingWsCtrl',
+            methodName : 'handle',
+            httpMethod : 'WS'
+        });
+
+        // Act / Assert — must not surface as an unhandled rejection
+        await expect( runWithRegistry( registry, async () =>
+        {
+            RequestProcessor.runWs( meta, ws, createRequest({}));
+            await vi.waitFor(() =>
+            {
+                expect( ws.close ).toHaveBeenCalled();
+            });
+        })).resolves.toBeUndefined();
+    });
+
+    it( 'should close with 4000 when executeWs param validation fails', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'WsCtrl', { handle : vi.fn() });
+        const ws = createWsMock();
+        const meta = createEndpoint({
+            controller : 'WsCtrl',
+            methodName : 'handle',
+            httpMethod : 'WS',
+            params     : [{
+                source    : 'Query',
+                name      : 'id',
+                validator : ( _v: unknown, path: string, ctx: { success: boolean, errors: unknown[] }) =>
+                {
+                    ctx.success = false;
+                    ctx.errors.push({ path, message : 'invalid' });
+
+                    return _v;
+                }
+            }]
+        });
+        const req = createRequest({ query : { id : 'x' } });
+
+        // Act
+        await runWithRegistry( registry, () => RequestProcessor.executeWs( meta, ws, req ));
+
+        // Assert
+        expect( ws.close ).toHaveBeenCalledWith(
+            4000,
+            JSON.stringify({
+                success : false,
+                message : 'request validation failed',
+                errors  : [{ path : 'id', message : 'invalid' }]
+            })
+        );
+    });
+
+    it( 'should close with 4001 when the WS handler throws', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'WsCtrl', {
+            handle : () =>
+            {
+                throw new Error( 'handler boom' );
+            }
+        });
+        const ws = createWsMock();
+        const meta = createEndpoint({
+            controller : 'WsCtrl',
+            methodName : 'handle',
+            httpMethod : 'WS'
+        });
+
+        // Act
+        await runWithRegistry( registry, () =>
+            RequestProcessor.executeWs( meta, ws, createRequest({})));
+
+        // Assert
+        expect( ws.close ).toHaveBeenCalledWith( 4001, 'handler boom' );
+    });
+
+    it( 'should ignore secondary close failures when the WS handler throws', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'WsCtrl', {
+            handle : () =>
+            {
+                throw new Error( 'handler boom' );
+            }
+        });
+        const ws = createWsMock();
+        ws.close.mockImplementation(() =>
+        {
+            throw new Error( 'close failed' );
+        });
+        const meta = createEndpoint({
+            controller : 'WsCtrl',
+            methodName : 'handle',
+            httpMethod : 'WS'
+        });
+
+        // Act / Assert
+        await expect( runWithRegistry( registry, () =>
+            RequestProcessor.executeWs( meta, ws, createRequest({}))))
+            .resolves.toBeUndefined();
+        expect( ws.close ).toHaveBeenCalledWith( 4001, 'handler boom' );
+    });
+});
+
+describe( 'RequestProcessor.executeRpc', () =>
+{
+    beforeEach(() =>
+    {
+        vi.clearAllMocks();
+    });
+
+    it( 'should resolve class guard Request/Body/Param args and fallback resolvers', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        const seen: unknown[] = [];
+        registry.registerController( 'RpcCtrl', {
+            run : () => ({ ok : true })
+        });
+        registry.registerGuard( 'RpcGuard', {
+            use : ( req: unknown, body: unknown, id: unknown, token: unknown ) =>
+            {
+                seen.push( req, body, id, token );
+            }
+        });
+        const meta = createEndpoint({
+            controller : 'RpcCtrl',
+            methodName : 'run',
+            httpMethod : 'RPC',
+            path       : 'rpc.run',
+            guards     : [{
+                type      : 'class',
+                name      : 'RpcGuard',
+                resolvers : [ 'fallback-token' ],
+                params    : [
+                    { source : 'Request' },
+                    { source : 'Body' },
+                    { source : 'Param', name : 'id' },
+                    { source : 'WebSocket' }
+                ],
+                isAsync   : false
+            }]
+        });
+
+        // Act
+        const result = await runWithRegistry( registry, () =>
+            RequestProcessor.executeRpc( meta, { n : 1 }));
+
+        // Assert
+        expect( result ).toEqual({ ok : true });
+        expect( seen[0] ).toMatchObject({ _json : { n : 1 }, url : 'rpc://localhost/rpc.run' });
+        expect( seen[1] ).toEqual({ n : 1 });
+        expect( seen[2] ).toBeUndefined();
+        expect( seen[3] ).toBe( 'fallback-token' );
+    });
+
+    it( 'should wrap the RPC handler with registered interceptors', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        const order: string[] = [];
+        registry.registerController( 'RpcCtrl', {
+            run : () =>
+            {
+                order.push( 'handler' );
+
+                return { ok : true };
+            }
+        });
+        registry.registerInterceptor( 'RpcInt', {
+            intercept : async ( _req: unknown, next: () => Promise<unknown> ) =>
+            {
+                order.push( 'before' );
+                const value = await next();
+                order.push( 'after' );
+
+                return { ...( value as object ), via : 'interceptor' };
+            }
+        });
+        const meta = createEndpoint({
+            controller   : 'RpcCtrl',
+            methodName   : 'run',
+            httpMethod   : 'RPC',
+            path         : 'rpc.int',
+            interceptors : [ 'RpcInt' ]
+        });
+
+        // Act
+        const result = await runWithRegistry( registry, () =>
+            RequestProcessor.executeRpc( meta, {}));
+
+        // Assert
+        expect( result ).toEqual({ ok : true, via : 'interceptor' });
+        expect( order ).toEqual([ 'before', 'handler', 'after' ]);
     });
 });

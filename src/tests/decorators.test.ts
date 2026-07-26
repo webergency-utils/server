@@ -27,7 +27,15 @@ import {
     Peer,
     Cookies,
     Cookie,
-    Inject
+    Inject,
+    Injectable,
+    Module,
+    Global,
+    Scope,
+    OverrideProtect,
+    OverrideIntercept,
+    ConnectedSocket,
+    Unuse
 } from '../decorators.js';
 
 
@@ -89,5 +97,54 @@ describe( 'Decorators', () =>
         const target = class Test {};
         Controller( '/api' )( target );
         expect(( target.prototype as any ).prefix ).toBe( '/api' );
+    });
+
+    it( 'should set Controller/Injectable/Module/Global metadata', () =>
+    {
+        // Arrange
+        class Ctrl {}
+        class Svc {}
+        class Mod {}
+        class GlobalMod {}
+
+        // Act
+        Controller({ path : '/v1', scope : Scope.REQUEST })( Ctrl );
+        Injectable({ scope : Scope.TRANSIENT })( Svc );
+        Module({
+            imports     : [],
+            controllers : [ Ctrl ],
+            providers   : [ Svc ],
+            exports     : [ Svc ]
+        })( Mod );
+        Global()( GlobalMod );
+        Module({ providers : [] })( GlobalMod );
+        Global()( GlobalMod );
+        OverrideProtect( class G {} );
+        OverrideIntercept( class I {} );
+        ConnectedSocket()({}, 'sock', 0 );
+
+        // Assert
+        expect(( Ctrl.prototype as any ).prefix ).toBe( '/v1' );
+        expect(( Ctrl as any ).__scope__ ).toBe( Scope.REQUEST );
+        expect(( Svc as any ).__scope__ ).toBe( Scope.TRANSIENT );
+        expect(( Mod as any ).__moduleMetadata__.controllers ).toEqual([ Ctrl ]);
+        expect(( Mod as any )[Symbol.for( 'webergency.server.module' )].global ).toBe( false );
+        expect(( GlobalMod as any ).__isGlobal__ ).toBe( true );
+        expect(( GlobalMod as any )[Symbol.for( 'webergency.server.module' )].global ).toBe( true );
+    });
+
+    it( 'should handle Unuse identity and class-decorator forms', () =>
+    {
+        // Arrange
+        class NotMiddleware {}
+        class RealMw { use(){} }
+        const desc = { value : () => {} };
+        const Target = class T {};
+
+        // Act / Assert
+        expect( Unuse( NotMiddleware )).toBe( NotMiddleware );
+        expect( Unuse( {}, 'm', desc )).toBe( desc );
+        expect( typeof Unuse( RealMw )).toBe( 'function' );
+        expect( Unuse()( Target )).toBe( Target );
     });
 });

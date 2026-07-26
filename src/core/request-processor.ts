@@ -271,7 +271,7 @@ export class RequestProcessor
                     }
                 }
 
-                return ( typeof validatedResult === 'object' ? new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } }) : new Response( String( validatedResult || '' )));
+                return ( typeof validatedResult === 'object' ? new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } }) : new Response( validatedResult == null ? '' : String( validatedResult )));
             };
 
             // 4. Wrap in Interceptor Chain

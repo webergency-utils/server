@@ -123,6 +123,22 @@ describe( 'QueryParser', () =>
         });
     });
 
+    it( 'should index nested object appends from the nested keys, not the parent', () =>
+    {
+        // Arrange — sibling numeric key on the parent must not skew the nested index
+        // Act
+        const result = QueryParser.parse( '0=keep&items[name]=first&items=second' );
+
+        // Assert
+        expect( result ).toEqual({
+            0     : 'keep',
+            items : {
+                name : 'first',
+                0    : 'second'
+            }
+        });
+    });
+
     it( 'should parse explicit numeric keys inside brackets', () => 
     {
         // Arrange & Act
@@ -178,16 +194,16 @@ describe( 'QueryParser', () =>
         });
     });
 
-    it( 'should correctly evaluate parent numeric keys when map parses keys in line 55 logic', () => 
+    it( 'should append under nested numeric index 0 when the nested object has no int keys', () => 
     {
-        // Arrange & Act
+        // Arrange & Act — previously mis-indexed to 1 by scanning parent keys
         const result = QueryParser.parse( '0[name]=first&0=second' );
 
         // Assert
         expect( result ).toEqual({
             0 : {
                 name : 'first',
-                1    : 'second'
+                0    : 'second'
             }
         });
     });

@@ -69,7 +69,7 @@ export interface ServerOptions {
      * - true: trust only loopback peers
      * - string[]: CIDR allowlist of immediate peers (e.g. `['10.0.0.0/8', '172.16.0.0/12']`)
      */
-    trustProxy?      : boolean | string[]
+    trustProxy?      : string[]
 }
 
 export type ServerEvents = {
@@ -519,6 +519,41 @@ export class Server extends EventEmitter
                 }
             }
 
+            // OPTIONS rematch of GET/POST/… is only for CORS config lookup — never run that handler.
+            if( method === 'OPTIONS' && !match ) 
+            {
+                if( !finalMatch ) 
+                {
+                    if( this.options.logs ) 
+                    {
+                        const duration = Date.now() - startTime;
+                        this.logger.info( `<-- ${method} ${path} - 404 Not Found (${duration}ms)`, {
+                            type   : 'request_end',
+                            method,
+                            path,
+                            status : 404,
+                            duration
+                        });
+                    }
+
+                    return applySecurityHeaders( new Response( 'Not Found', { status : 404 }), securityConfig );
+                }
+
+                if( this.options.logs ) 
+                {
+                    const duration = Date.now() - startTime;
+                    this.logger.info( `<-- ${method} ${path} - 204 (${duration}ms)`, {
+                        type   : 'request_end',
+                        method,
+                        path,
+                        status : 204,
+                        duration
+                    });
+                }
+
+                return applySecurityHeaders( new Response( null, { status : 204 }), securityConfig );
+            }
+
             if( !finalMatch ) 
             {
                 if( this.options.logs ) 
@@ -589,6 +624,18 @@ export class Server extends EventEmitter
                     }
                     const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
                     await guardMethod.apply( guardInstance, finalArgs );
+                }
+
+                if( !ctx.success ) 
+                {
+                    return new Response( JSON.stringify({
+                        success : false,
+                        message : 'request validation failed',
+                        errors  : ctx.errors
+                    }), {
+                        status  : 400,
+                        headers : { 'Content-Type' : 'application/json' }
+                    });
                 }
 
                 if( this.serverAdapter && typeof this.serverAdapter.upgrade === 'function' ) 

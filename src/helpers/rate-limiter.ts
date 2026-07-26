@@ -1,6 +1,10 @@
+const EVICT_EVERY_OPS = 64;
+const EVICT_SIZE_THRESHOLD = 1024;
+
 export class RateLimiter 
 {
     private rateLimitStore = new Map<string, { count : number, resetTime : number }>();
+    private ops = 0;
 
     public checkLimit( ip: string, path: string, limitConfig: { max : number, window? : string | number }): boolean 
     {
@@ -28,6 +32,14 @@ export class RateLimiter
         }
     
         const now = Date.now();
+        this.ops++;
+
+        if( this.ops >= EVICT_EVERY_OPS || this.rateLimitStore.size >= EVICT_SIZE_THRESHOLD )
+        {
+            this.ops = 0;
+            this.evictExpired( now );
+        }
+
         const storeKey = `${path}:${ip}`;
         let clientRecord = this.rateLimitStore.get( storeKey );
 
@@ -39,5 +51,17 @@ export class RateLimiter
         this.rateLimitStore.set( storeKey, clientRecord );
 
         return clientRecord.count <= max;
+    }
+
+    /** Drop expired windows so rotating IPs cannot grow the store without bound. */
+    private evictExpired( now: number ): void
+    {
+        for( const [ key, record ] of this.rateLimitStore )
+        {
+            if( now > record.resetTime )
+            {
+                this.rateLimitStore.delete( key );
+            }
+        }
     }
 }

@@ -359,20 +359,20 @@ export class DIContainer
             if( store.resolving.has( token )) 
             {
                 return new Proxy({}, {
-                    get( target, prop, receiver ) 
+                    get( _target, prop ) 
                     {
                         const instance = DIContainer.resolve( token, currentContext );
 
                         if( !instance ) { return undefined }
-                        const value = Reflect.get( instance, prop, receiver );
+                        const value = Reflect.get( instance, prop, instance );
 
                         return typeof value === 'function' ? value.bind( instance ) : value;
                     },
-                    set( target, prop, value, receiver ) 
+                    set( _target, prop, value ) 
                     {
                         const instance = DIContainer.resolve( token, currentContext );
 
-                        return Reflect.set( instance, prop, value, receiver );
+                        return Reflect.set( instance, prop, value, instance );
                     }
                 });
             }
@@ -411,20 +411,20 @@ export class DIContainer
             if( store.resolving.has( token )) 
             {
                 return new Proxy({}, {
-                    get( target, prop, receiver ) 
+                    get( _target, prop ) 
                     {
                         const instance = DIContainer.resolve( token, currentContext );
 
                         if( !instance ) { return undefined }
-                        const value = Reflect.get( instance, prop, receiver );
+                        const value = Reflect.get( instance, prop, instance );
 
                         return typeof value === 'function' ? value.bind( instance ) : value;
                     },
-                    set( target, prop, value, receiver ) 
+                    set( _target, prop, value ) 
                     {
                         const instance = DIContainer.resolve( token, currentContext );
 
-                        return Reflect.set( instance, prop, value, receiver );
+                        return Reflect.set( instance, prop, value, instance );
                     }
                 });
             }
@@ -452,20 +452,20 @@ export class DIContainer
             if( store.resolving.has( token )) 
             {
                 return new Proxy({}, {
-                    get( target, prop, receiver ) 
+                    get( _target, prop ) 
                     {
                         const instance = DIContainer.resolve( token );
 
                         if( !instance ) { return undefined }
-                        const value = Reflect.get( instance, prop, receiver );
+                        const value = Reflect.get( instance, prop, instance );
 
                         return typeof value === 'function' ? value.bind( instance ) : value;
                     },
-                    set( target, prop, value, receiver ) 
+                    set( _target, prop, value ) 
                     {
                         const instance = DIContainer.resolve( token );
 
-                        return Reflect.set( instance, prop, value, receiver );
+                        return Reflect.set( instance, prop, value, instance );
                     }
                 });
             }
@@ -499,20 +499,20 @@ export class DIContainer
         if( store.resolving.has( token )) 
         {
             return new Proxy({}, {
-                get( target, prop, receiver ) 
+                get( _target, prop ) 
                 {
                     const instance = DIContainer.resolve( token, currentContext );
 
                     if( !instance ) { return undefined }
-                    const value = Reflect.get( instance, prop, receiver );
+                    const value = Reflect.get( instance, prop, instance );
 
                     return typeof value === 'function' ? value.bind( instance ) : value;
                 },
-                set( target, prop, value, receiver ) 
+                set( _target, prop, value ) 
                 {
                     const instance = DIContainer.resolve( token, currentContext );
 
-                    return Reflect.set( instance, prop, value, receiver );
+                    return Reflect.set( instance, prop, value, instance );
                 }
             });
         }

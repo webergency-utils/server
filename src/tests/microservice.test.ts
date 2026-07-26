@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 import { Microservice } from '../microservice/microservice.js';
 import { TcpMessageAdapter } from '../microservice/tcp-adapter.js';
 import { TcpClient } from '../microservice/tcp-client.js';
+import { MicroserviceAdapter, MicroserviceNoReply, MessageConnection } from '../microservice/adapter.js';
 import { runAot } from './aot/build.js';
 import { getControllerMeta, getInjectableMeta } from '../core/symbols.js';
+import { defineController } from '../testing.js';
 import net from 'node:net';
 
 describe( 'Microservice Integration Tests', () =>
@@ -181,6 +183,121 @@ describe( 'Microservice Integration Tests', () =>
                     reject( e );
                 }
             }, 80 );
+        });
+    });
+});
+
+describe( 'Microservice handler branches', () =>
+{
+    type Handler = (
+        pattern    : string,
+        payload    : any,
+        connection : MessageConnection
+    ) => Promise<any>;
+
+    let handler: Handler | undefined;
+    let ms: Microservice | undefined;
+    const noopConnection: MessageConnection =
+    {
+        send  : () => {},
+        close : () => {}
+    };
+
+    afterEach( async () =>
+    {
+        vi.restoreAllMocks();
+
+        if( ms )
+        {
+            await ms.shutdown();
+            ms = undefined;
+        }
+        handler = undefined;
+    });
+
+    async function startWith( controllers: any[] )
+    {
+        const adapter: MicroserviceAdapter =
+        {
+            listen : async ( h ) => { handler = h },
+            close  : async () => {}
+        };
+        ms = new Microservice( adapter, { controllers });
+        await ms.start();
+    }
+
+    it( 'should throw when the RPC pattern is not registered', async () =>
+    {
+        // Arrange
+        class Ctrl
+        {
+            ok(){ return 1 }
+        }
+        defineController( Ctrl, [{
+            methodName   : 'ok',
+            httpMethod   : 'RPC',
+            path         : 'known.ok',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            meta         : {}
+        }]);
+        await startWith( [Ctrl] );
+
+        // Act / Assert
+        await expect( handler!( 'unknown.pattern', {}, noopConnection ))
+            .rejects.toThrow( /Pattern "unknown.pattern" not registered/ );
+    });
+
+    it( 'should log EventPattern errors and return MicroserviceNoReply', async () =>
+    {
+        // Arrange
+        class EvCtrl
+        {
+            boom(){ throw new Error( 'event-boom' ) }
+        }
+        defineController( EvCtrl, [{
+            methodName   : 'boom',
+            httpMethod   : 'RPC',
+            path         : 'ev.boom',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            meta         : { event : true }
+        }]);
+        const spy = vi.spyOn( console, 'error' ).mockImplementation( () => {} );
+        await startWith( [EvCtrl] );
+
+        // Act
+        const result = await handler!( 'ev.boom', {}, noopConnection );
+
+        // Assert
+        expect( result ).toBe( MicroserviceNoReply );
+        expect( spy ).toHaveBeenCalledWith( '[EventPattern ev.boom]', 'event-boom' );
+    });
+
+    it( 'should wrap MessagePattern errors that lack .data', async () =>
+    {
+        // Arrange
+        class MsgCtrl
+        {
+            boom(){ throw new Error( 'msg-boom' ) }
+        }
+        defineController( MsgCtrl, [{
+            methodName   : 'boom',
+            httpMethod   : 'RPC',
+            path         : 'msg.boom',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            meta         : {}
+        }]);
+        await startWith( [MsgCtrl] );
+
+        // Act / Assert
+        await expect( handler!( 'msg.boom', {}, noopConnection )).rejects.toMatchObject({
+            message : 'msg-boom',
+            cause   : expect.objectContaining({ message : 'msg-boom' })
         });
     });
 });

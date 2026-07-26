@@ -69,7 +69,8 @@ const Query = new Proxy( Object, {
                             }
                             else if( typeof obj[k] === 'object' && obj[k] !== null )
                             {
-                                obj[k][Math.max( -1, ...Object.keys( obj ).map( k => intRE.test( k ) ? parseInt( k ) : -1 )) + 1] = value;
+                                const nested = obj[k];
+                                obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
                             }
                             else
                             {
