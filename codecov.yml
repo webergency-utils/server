@@ -1,0 +1,34 @@
+# Codecov merges all uploads for a commit (union of hit lines).
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+    patch:
+      default:
+        target: auto
+
+comment:
+  layout: 'reach,diff,flags,files'
+  behavior: default
+
+flag_management:
+  default_rules:
+    carryforward: true
+    statuses:
+      - type: project
+        target: auto
+
+flags:
+  unit-node:
+    paths:
+      - src
+  unit-bun:
+    paths:
+      - src
+  runtime-node:
+    paths:
+      - src
+  runtime-deno:
+    paths:
+      - src

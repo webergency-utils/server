@@ -5,10 +5,11 @@
  * can share one script without Vitest aliases or the TypeScript compiler.
  *
  *   npm run build
- *   node --import tsx scripts/runtime-suite.mjs   # tsx optional; plain node works
  *   node scripts/runtime-suite.mjs
  *   bun  scripts/runtime-suite.mjs
  *   deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-suite.mjs
+ *
+ * Coverage: wrap with c8 (Node) or deno --coverage; source maps remap dist → src for Codecov.
  */
 import { Server } from '../dist/index.js';
 import { seedInstanceController } from '../dist/testing.js';

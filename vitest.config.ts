@@ -22,9 +22,15 @@ export default defineConfig({
         include     : ['src/tests/**/*.test.ts'],
         coverage    : {
             provider : 'v8',
-            reporter : ['text', 'json', 'html'],
+            reporter : ['text', 'json', 'html', 'lcov'],
             include  : ['src/**/*.ts'],
-            exclude  : ['src/**/*.test.ts', 'src/cli.ts', 'src/transformer.ts', 'src/fuzz-runtime.ts']
+            exclude  : [
+                'src/**/*.test.ts',
+                'src/tests/**',
+                'src/cli.ts',
+                'src/transformer.ts',
+                'src/fuzz-runtime.ts'
+            ]
         }
     }
 });

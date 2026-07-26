@@ -11,8 +11,9 @@ import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/securit
 // Decoupled architectural imports
 import { RequestProcessor } from './core/request-processor.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
-import { ServerAdapter, TlsOptions } from './adapters/adapter.js';
-export { TlsOptions };
+import { ServerAdapter } from './adapters/adapter.js';
+import type { TlsOptions } from './adapters/adapter.js';
+export type { TlsOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';

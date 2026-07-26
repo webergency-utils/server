@@ -28,8 +28,17 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Run Node adapter suite
-        run: node scripts/runtime-suite.mjs
+      - name: Run Node adapter suite with coverage
+        run: npm run coverage:runtime:node
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: runtime-node
+          name: runtime-node
+          files: coverage/runtime-node/lcov.info
+          fail_ci_if_error: true
 
   bun:
     name: Bun
@@ -53,9 +62,19 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Run Bun Vitest (portable + skip Node-only mocks)
-        run: bun --bun ./node_modules/vitest/vitest.mjs run
+      - name: Run Bun Vitest with coverage
+        run: npm run coverage:bun
 
+      - name: Upload Bun unit coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unit-bun
+          name: unit-bun
+          files: coverage/lcov.info
+          fail_ci_if_error: true
+
+      # Native Bun adapter suite (JSC — c8 cannot instrument). Bun line hits come from unit-bun.
       - name: Run Bun adapter suite
         run: bun scripts/runtime-suite.mjs
 
@@ -83,7 +102,16 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Run Deno adapter suite
+      - name: Run Deno adapter suite with coverage
         # Use npm ci's node_modules (manual); min-dep-age=0 avoids Deno blocking
         # freshly published workspace deps like typechecker within 24h.
-        run: deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-suite.mjs
+        run: npm run coverage:runtime:deno
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: runtime-deno
+          name: runtime-deno
+          files: coverage/runtime-deno/lcov.info
+          fail_ci_if_error: true
