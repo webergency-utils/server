@@ -131,4 +131,6 @@ dist
 .pnp.*
 .DS_Store
 .npmrc
-package-lock.json
+
+# Fuzz build output
+dist-fuzz

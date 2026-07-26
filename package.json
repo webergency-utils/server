@@ -14,6 +14,9 @@
     ".": "./dist/index.js",
     "./transformer": "./dist/compiler/transformer.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "USAGE.md",
@@ -22,9 +25,12 @@
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run",
+    "fuzz": "npm run build:fuzz && jazzer fuzz_server.cjs",
     "coverage": "vitest run --coverage",
-    "clean": "rm -rf ./dist/* node_modules package-lock.json && npm i",
+    "clean": "rm -rf ./dist ./dist-fuzz",
+    "reset": "npm run clean && rm -rf node_modules package-lock.json && npm i",
     "build": "npm run clean && tsc -p tsconfig.build.json && node update_imports.js",
+    "build:fuzz": "esbuild src/fuzz-runtime.ts --bundle --platform=node --format=cjs --outfile=dist-fuzz/runtime.cjs",
     "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\"",
     "version": "npm run build && npm publish --access public && npm run commit && git push"
   },
@@ -37,17 +43,19 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.1.10"
+    "@webergency-utils/typechecker": "^0.2.2"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@jazzer.js/core": "^4.0.0",
     "@stylistic/eslint-plugin": "^5.10.0",
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.1.1",
     "@typescript/typescript6": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.6",
+    "esbuild": "^0.28.1",
     "eslint": "^10.4.1",
     "tsx": "^4.0.0",
     "typescript": "^6.0.3 || ^7.0.0",

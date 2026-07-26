@@ -1,11 +1,17 @@
 # @webergency-utils/server
 
-[![npm version](https://img.shields.io/npm/v/@webergency-utils/server.svg)](https://www.npmjs.com/package/@webergency-utils/server)
-[![Maintenance](https://img.shields.io/badge/maintenance-active-brightgreen.svg)](#maintenance)
-[![npm downloads](https://img.shields.io/npm/dm/@webergency-utils/server.svg)](https://www.npmjs.com/package/@webergency-utils/server)
-[![License](https://img.shields.io/npm/l/@webergency-utils/server.svg)](LICENSE)
-
 A high-performance, industrial-grade web server framework designed for the modern JavaScript ecosystem. Built on a "Zero-Reflection" philosophy, it offloads metadata discovery and validation to a compile-time transformer, resulting in near-instant startups and zero runtime overhead.
+
+[![npm version](https://img.shields.io/npm/v/%40webergency-utils%2Fserver)](https://www.npmjs.com/package/@webergency-utils/server)
+[![License](https://img.shields.io/npm/l/%40webergency-utils%2Fserver)](https://www.npmjs.com/package/@webergency-utils/server)
+[![Maintenance](https://img.shields.io/badge/maintenance-active-brightgreen.svg)](#maintenance)
+[![dependencies](https://img.shields.io/badge/dependencies-1-brightgreen.svg)](https://www.npmjs.com/package/@webergency-utils/server?activeTab=dependencies)
+[![npm downloads](https://img.shields.io/npm/dm/%40webergency-utils%2Fserver)](https://www.npmjs.com/package/@webergency-utils/server)
+<br>
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/webergency-utils/server/badge)](https://securityscorecards.dev/viewer/?uri=github.com/webergency-utils/server)
+[![codecov](https://codecov.io/gh/webergency-utils/server/branch/main/graph/badge.svg)](https://codecov.io/gh/webergency-utils/server)
+[![tests](https://github.com/webergency-utils/server/actions/workflows/ci.yml/badge.svg)](https://github.com/webergency-utils/server/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/webergency-utils/server/actions/workflows/codeql.yml/badge.svg)](https://github.com/webergency-utils/server/actions/workflows/codeql.yml)
 
 ---
 
@@ -79,6 +85,9 @@ The framework is built on a clean decoupling of compile-time logic and runtime a
 1. **Ahead-of-Time (AOT) Compiler Transformer:** AST transformations run during build/transpilation time. The transformer unrolls decorator metadata, registers routes, and compiles `@webergency-utils/typechecker` validators into inline binary/property checks directly. This eliminates dynamic reflection (`reflect-metadata`) and minimizes runtime startup latency.
 2. **Runtime HTTP Adapters:** The framework natively adopts Web Standard `Request` and `Response` fetch boundaries. A thin native bridge maps routing requests to runtime-specific server utilities (`Bun.serve`, `Deno.serve`, or Node's `http.createServer`).
 3. **Execution Pipeline:** Incoming requests are routed via a highly-optimized radix router, passed through middlewares, checked against class and method-level guards, intercepted by response adapters, and finally handled by controller endpoints.
+4. **Request coercion (`from`):** Parameter validators receive a typechecker `from` mode based on the source. Query, path params, and cookies use `from: 'query'` (string coercion and single-value→array wrapping). JSON bodies use `from: 'json'` (Date/RegExp/bigint/Set/Map revival only). `application/x-www-form-urlencoded` bodies are parsed like querystrings and validated with `from: 'query'`.
+
+**Runtime dependency:** `@webergency-utils/typechecker` (validators and AOT compilation). **Peer dependency:** `typescript` `>=5.0.0` (compiler API for the transform plugin).
 
 ---
 
@@ -87,6 +96,7 @@ The framework is built on a clean decoupling of compile-time logic and runtime a
 * **Controller:** A decorated class that groups related HTTP routes and provides Dependency Injection scopes.
 * **Endpoint:** An individual handler method within a controller mapped to an HTTP verb and path.
 * **Validation Mode:** A setting (`strict`, `strip`, or `relaxed`) controlling how type mismatches and extra body/query parameters are validated.
+* **`from`:** Typechecker input conversion mode applied per parameter source (`json` for JSON bodies, `query` for querystrings, path/cookie values, and urlencoded bodies).
 * **Radix Router:** The underlying tree-structured matcher used for fast parameter route resolution.
 * **Server Adapter:** A bridge mapping web standard Fetch API objects to native runtime socket/HTTP engines.
 
@@ -130,11 +140,11 @@ These decorators inject context variables directly into endpoint handler argumen
 
 ### Parameter Decorators (Hybrid / With Arguments)
 
-* **`@Body(mode?)`**: Injects the validated request body. Supports `strict`, `strip` (removes undeclared keys), and `relaxed` validation modes.
-* **`@Query(name?, mode?)`**: Injects a specific query parameter or parses the entire query object.
-* **`@Param(name)`**: Injects a named route path parameter.
+* **`@Body(mode?)`**: Injects the validated request body. Supports `strict`, `strip` (removes undeclared keys), and `relaxed` validation modes. Parses `application/json` (default) with `from: 'json'`, and `application/x-www-form-urlencoded` with `from: 'query'`.
+* **`@Query(name?, mode?)`**: Injects a specific query parameter or parses the entire query object. Validated with `from: 'query'` (string→number/boolean/Date coercion, array wrapping).
+* **`@Param(name)`**: Injects a named route path parameter (validated with `from: 'query'` when typed).
 * **`@Header(name)`**: Injects a specific header value.
-* **`@Cookie(name)`**: Injects a specific cookie value.
+* **`@Cookie(name)`**: Injects a specific cookie value (validated with `from: 'query'` when typed).
 * **`@ConnectedSocket()`**: Injects the raw websocket instance for `@Ws` channels.
 
 ---
@@ -157,6 +167,11 @@ Our AOT engine supports three distinct validation modes for `@Body` and `@Query`
 * **`strict` (Default)**: Rejects the request if it contains any properties not defined in your TypeScript interface.
 * **`strip`**: Automatically removes unknown properties, ensuring your controller only receives exactly what's defined in the type.
 * **`relaxed`**: Validates required fields but allows extra properties to pass through.
+
+Coercion is separate from mode and comes from typechecker `from`:
+
+* **JSON body** (`Content-Type: application/json`): `from: 'json'` — revives Date, RegExp, bigint, Set, and Map shapes. Does **not** coerce `"30"` → `30`.
+* **Query / Param / Cookie** and **urlencoded body** (`application/x-www-form-urlencoded`): `from: 'query'` — querystring-style coercion (including single values wrapped into arrays when an array is expected).
 
 ---
 

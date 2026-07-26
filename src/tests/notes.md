@@ -8,6 +8,7 @@ This document tracks observed rules, anti-patterns, and project-specific testing
 - **Strict Isolation:** Ensure zero shared state between tests. Use `beforeEach` to instantiate fresh objects and `vi.clearAllMocks()` or `vi.resetAllMocks()` where appropriate.
 - **Visual AAA structure:** Structure test cases clearly using Arrange, Act, and Assert comments separated by vertical whitespace.
 - **Test Observable Behavior:** Focus on testing the public boundaries and interface behavior instead of private internals.
+- **Content-Type normalization:** When asserting body parse / `from` selection, cover charset parameters (`application/json; charset=utf-8`) so mime stripping stays covered.
 
 ## Anti-Patterns
 
@@ -19,3 +20,6 @@ This document tracks observed rules, anti-patterns, and project-specific testing
 
 - **Simple Mocking:** Use `vi.fn()` for mock callbacks and functions.
 - **External Interfaces/Complex Objects:** When mocking complex classes, mock their interface rather than inheriting or instantiating them directly.
+- **AugmentedRequest fakes:** Prefer a thin typed fake (`headers.get`, `arrayBuffer`, `params`, `query`) cast via `as unknown as AugmentedRequest` over going through `Server` when unit-testing `RequestReader` / `RequestProcessor.resolveParam`.
+- **Validator `from` assertions:** Spy on the validator and read `ctx.from` / `ctx.mode` inside the spy; assert the outer ctx is restored after `resolveParam` returns.
+- **Prefer real helpers:** Use real `QueryParser`, `parseSize`, and `@webergency-utils/typechecker` validators at the boundary unless the seam under test is specifically those helpers.

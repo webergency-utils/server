@@ -143,8 +143,7 @@ describe( 'Actual AOT Integration Test', () =>
         expect( dataFlag.active ).toBe( true );
 
         const resMissing = await server.fetch( new Request( 'http://localhost/type-safety/coerce?age=25&date=2024-01-01&pattern=/test/&big=123' ));
-        const dataMissing = await resMissing.json();
-        expect( dataMissing.active ).toBe( false );
+        expect( resMissing.status ).toBe( 400 );
 
         const truthy = ['true', '1', 'yes', 'on'];
         const falsy = ['false', '0', 'no', 'off'];
@@ -205,9 +204,7 @@ describe( 'Actual AOT Integration Test', () =>
     it( 'should coerce deep boolean in nested objects when missing', async () => 
     {
         const res = await server.fetch( new Request( 'http://localhost/type-safety/deep-boolean?user[name]=John' ));
-        expect( res.status ).toBe( 200 );
-        const data = await res.json();
-        expect( data.user.active ).toBe( false );
+        expect( res.status ).toBe( 400 );
     });
 
     it( 'should NOT coerce types in Body (should remain strict)', async () => 

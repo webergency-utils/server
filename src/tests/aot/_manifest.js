@@ -96,13 +96,15 @@ var __val_473287f8298dba71 = validators.string;
 var __val_12886f9d00055adf = validators.number;
 
 var __val_04c78f82f98a8cf4 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["name", "age"], "User"))
+    const obj = validators.object(v, path, ctx, ["name", "age"], "User");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["age", false, __val_12886f9d00055adf]
     ]);
+    validators.stripExtras(data, ctx, ["name", "age"]);
     return data;
 };
 
@@ -113,26 +115,30 @@ var __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1], "Type<boolean>");
 
 var __val_c67915707769fcf5 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: User; }"))
+    const obj = validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: User; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_04c78f82f98a8cf4]
     ]);
+    validators.stripExtras(data, ctx, ["success", "data"]);
     return data;
 };
 
 var __val_6d1570e5b8d6d45a = (v, path, ctx) => validators.literal(v, path, ctx, "simple");
 
 var __val_2258654cc0f69d37 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["type", "val"], "{ type: \"simple\"; val: string; }"))
+    const obj = validators.object(v, path, ctx, ["type", "val"], "{ type: \"simple\"; val: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["type", false, __val_6d1570e5b8d6d45a],
         ["val", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["type", "val"]);
     return data;
 };
 
@@ -141,47 +147,55 @@ var __val_68056e96638382b6 = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_e5da2f9fabafe20e = (v, path, ctx) => validators.array(v, path, ctx, __val_473287f8298dba71);
 
 var __val_b421a9236dfde58e = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["id", "tags"], "{ id: number; tags: string[]; }"))
+    const obj = validators.object(v, path, ctx, ["id", "tags"], "{ id: number; tags: string[]; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["tags", false, __val_e5da2f9fabafe20e]
     ]);
+    validators.stripExtras(data, ctx, ["id", "tags"]);
     return data;
 };
 
 var __val_5c5ed695091ba342 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["type", "data"], "{ type: \"complex\"; data: { id: number; tags: string[]; }; }"))
+    const obj = validators.object(v, path, ctx, ["type", "data"], "{ type: \"complex\"; data: { id: number; tags: string[]; }; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["type", false, __val_68056e96638382b6],
         ["data", false, __val_b421a9236dfde58e]
     ]);
+    validators.stripExtras(data, ctx, ["type", "data"]);
     return data;
 };
 
 var __val_a41824426b6b1ede = (v, path, ctx) => validators.union(v, path, ctx, [__val_2258654cc0f69d37, __val_5c5ed695091ba342], "Type<MyUnion>");
 
 var __val_d74cefa44e345d17 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MyUnion; }"))
+    const obj = validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MyUnion; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_a41824426b6b1ede]
     ]);
+    validators.stripExtras(data, ctx, ["success", "data"]);
     return data;
 };
 
 var __val_55e3fcb8d722f805 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["reason"], "{ reason: string; }"))
+    const obj = validators.object(v, path, ctx, ["reason"], "{ reason: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["reason", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["reason"]);
     return data;
 };
 
@@ -192,13 +206,15 @@ var __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_857204a536cb022c = (v, path, ctx) => validators.union(v, path, ctx, [__val_55e3fcb8d722f805, __val_2d1db52869bf4329, __val_88e643147651d549], "Type<Status>");
 
 var __val_2d6ea820a293bacf = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "s"], "{ success: boolean; s: Status; }"))
+    const obj = validators.object(v, path, ctx, ["success", "s"], "{ success: boolean; s: Status; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["s", false, __val_857204a536cb022c]
     ]);
+    validators.stripExtras(data, ctx, ["success", "s"]);
     return data;
 };
 
@@ -207,13 +223,15 @@ var __val_affb28566d707e35 = (v, path, ctx) => validators.union(v, path, ctx, [_
 var __val_8c1c1b2d325f9de6 = (v, path, ctx) => validators.array(v, path, ctx, __val_affb28566d707e35);
 
 var __val_a042f9877fc2376a = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MixedArray; }"))
+    const obj = validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: MixedArray; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_8c1c1b2d325f9de6]
     ]);
+    validators.stripExtras(data, ctx, ["success", "data"]);
     return data;
 };
 
@@ -222,105 +240,98 @@ var __val_eb045d78d2731073 = validators.undefined;
 var __val_ca383f8818520f0b = (v, path, ctx) => validators.union(v, path, ctx, [__val_eb045d78d2731073, __val_04c78f82f98a8cf4], "Type<User|undefined>");
 
 var __val_68aecd6fa646cade = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["id", "user", "tags"], "Nested"))
+    const obj = validators.object(v, path, ctx, ["id", "user", "tags"], "Nested");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["user", true, __val_ca383f8818520f0b],
         ["tags", false, __val_e5da2f9fabafe20e]
     ]);
+    validators.stripExtras(data, ctx, ["id", "user", "tags"]);
     return data;
 };
 
 var __val_f0ac6e3a29009cf1 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Nested; }"))
+    const obj = validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Nested; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_68aecd6fa646cade]
     ]);
-    return data;
-};
-
-var __val_1ecb4c157494e4eb = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["a"], "{ a: string; }"))
-        return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
-        ["a", false, __val_473287f8298dba71]
-    ]);
-    return data;
-};
-
-var __val_5a59b4127f6bdb93 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["b"], "{ b: number; }"))
-        return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
-        ["b", false, __val_12886f9d00055adf]
-    ]);
+    validators.stripExtras(data, ctx, ["success", "data"]);
     return data;
 };
 
 var __val_f28f8acf7e68cbfd = (v, path, ctx) => {
-    const checks = [__val_1ecb4c157494e4eb, __val_5a59b4127f6bdb93];
-    let data = ctx.mode === "strip" ? (typeof v === "object" && v !== null && !Array.isArray(v) ? {} : v) : v;
-    for (let i = 0; i < checks.length; i++) {
-        const val = checks[i](v, path, ctx);
-        if (ctx.mode === "strip" && typeof val === "object" && val !== null)
-            Object.assign(data, val);
-    }
+    const obj = validators.object(v, path, ctx, ["a", "b"], "Intersection");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
+        ["a", false, __val_473287f8298dba71],
+        ["b", false, __val_12886f9d00055adf]
+    ]);
+    validators.stripExtras(data, ctx, ["a", "b"]);
     return data;
 };
 
 var __val_0d157d33684c0018 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Intersection; }"))
+    const obj = validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: Intersection; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_f28f8acf7e68cbfd]
     ]);
+    validators.stripExtras(data, ctx, ["success", "data"]);
     return data;
 };
 
 var __val_85a41b63d9a32b8b = (v, path, ctx) => validators.union(v, path, ctx, [__val_2d1db52869bf4329, __val_88e643147651d549], "Type<\"active\"|\"inactive\">");
 
 var __val_0084393b0d7248e4 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "status"], "{ success: boolean; status: \"active\" | \"inactive\"; }"))
+    const obj = validators.object(v, path, ctx, ["success", "status"], "{ success: boolean; status: \"active\" | \"inactive\"; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["status", false, __val_85a41b63d9a32b8b]
     ]);
+    validators.stripExtras(data, ctx, ["success", "status"]);
     return data;
 };
 
 var __val_d9bb28ea073c815e = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "tags"], "{ success: boolean; tags: string[]; }"))
+    const obj = validators.object(v, path, ctx, ["success", "tags"], "{ success: boolean; tags: string[]; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["tags", false, __val_e5da2f9fabafe20e]
     ]);
+    validators.stripExtras(data, ctx, ["success", "tags"]);
     return data;
 };
 
-var __val_52806c84462812de = validators.date;
+var __val_99c40ab405926cb5 = validators.date;
 
-var __val_b6e780bc51fff07e = validators.regexp;
+var __val_eefd1c8d7e793bf3 = validators.regexp;
 
 var __val_75d012fe28656e0a = validators.bigint;
 
 var __val_dfd1002a464a1dbf = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "age", "active", "date", "pattern", "big"], "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }"))
+    const obj = validators.object(v, path, ctx, ["success", "age", "active", "date", "pattern", "big"], "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["age", false, __val_12886f9d00055adf],
         ["active", false, __val_ced862ef1505bc73],
@@ -328,28 +339,33 @@ var __val_dfd1002a464a1dbf = (v, path, ctx) => {
         ["pattern", false, __val_473287f8298dba71],
         ["big", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["success", "age", "active", "date", "pattern", "big"]);
     return data;
 };
 
 var __val_91d782a2d0de1354 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["name", "active"], "{ name: string; active: boolean; }"))
+    const obj = validators.object(v, path, ctx, ["name", "active"], "{ name: string; active: boolean; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["active", false, __val_ced862ef1505bc73]
     ]);
+    validators.stripExtras(data, ctx, ["name", "active"]);
     return data;
 };
 
 var __val_d979aa00a685cb05 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "user"], "{ success: boolean; user: { name: string; active: boolean; }; }"))
+    const obj = validators.object(v, path, ctx, ["success", "user"], "{ success: boolean; user: { name: string; active: boolean; }; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["user", false, __val_91d782a2d0de1354]
     ]);
+    validators.stripExtras(data, ctx, ["success", "user"]);
     return data;
 };
 
@@ -372,27 +388,31 @@ var __val_9120d5d091aa5bf3 = (v, path, ctx) => validators.literal(v, path, ctx, 
 var __val_1e1a258db2184d0e = (v, path, ctx) => validators.union(v, path, ctx, [__val_32873a7f224f38d8, __val_628f6ca4b78e6b50, __val_46a7c6afe9b432e6, __val_1207c37d006fe9f8, __val_046317c2cffaf10d, __val_df6b16b0e625bf20, __val_e64d77191bc932bb, __val_9120d5d091aa5bf3], "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">");
 
 var __val_87e266a791052d41 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "val", "type"], "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }"))
+    const obj = validators.object(v, path, ctx, ["success", "val", "type"], "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["val", false, __val_affb28566d707e35],
         ["type", false, __val_1e1a258db2184d0e]
     ]);
+    validators.stripExtras(data, ctx, ["success", "val", "type"]);
     return data;
 };
 
 var __val_9a141e74a6c02429 = (v, path, ctx) => validators.templateLiteral(v, path, ctx, new RegExp("^id-[0-9]+(\\.[0-9]+)?$"), "`id-${number}`");
 
 var __val_6b50e5736cb6bb55 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "id"], "{ success: boolean; id: `id-${number}`; }"))
+    const obj = validators.object(v, path, ctx, ["success", "id"], "{ success: boolean; id: `id-${number}`; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["id", false, __val_9a141e74a6c02429]
     ]);
+    validators.stripExtras(data, ctx, ["success", "id"]);
     return data;
 };
 
@@ -421,18 +441,20 @@ var __val_ed601a97123e74a5 = (v, path, ctx) => {
 };
 
 var __val_80803d497f4cbcc3 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "pass", "age"], "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }"))
+    const obj = validators.object(v, path, ctx, ["success", "pass", "age"], "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["pass", false, __val_c615b105fba1f965],
         ["age", false, __val_ed601a97123e74a5]
     ]);
+    validators.stripExtras(data, ctx, ["success", "pass", "age"]);
     return data;
 };
 
-var __val_24e4d61e2e1a4723 = (v, path, ctx) => {
+var __val_61eb849c9ae845b0 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
@@ -444,34 +466,40 @@ var __val_24e4d61e2e1a4723 = (v, path, ctx) => {
     return v;
 };
 
-var __val_a10859723b6ceff9 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["val"], "CustomUser"))
+var __val_bf0f00a269610757 = (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, ["val"], "CustomUser");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
-        ["val", false, __val_24e4d61e2e1a4723]
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
+        ["val", false, __val_61eb849c9ae845b0]
     ]);
+    validators.stripExtras(data, ctx, ["val"]);
     return data;
 };
 
-var __val_ee5b8acdb0f32934 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: CustomUser; }"))
+var __val_70c31e2e47f17c8e = (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, ["success", "data"], "{ success: boolean; data: CustomUser; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_a10859723b6ceff9]
+        ["data", false, __val_bf0f00a269610757]
     ]);
+    validators.stripExtras(data, ctx, ["success", "data"]);
     return data;
 };
 
 var __val_b237870e8da1ad64 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["message"], "{ message: string; }"))
+    const obj = validators.object(v, path, ctx, ["message"], "{ message: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["message", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["message"]);
     return data;
 };
 
@@ -512,14 +540,16 @@ var __val_51b5abe7e1ba2c24 = (v, path, ctx) => {
 };
 
 var __val_a421e7e861811a22 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["min", "max", "mult"], "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }"))
+    const obj = validators.object(v, path, ctx, ["min", "max", "mult"], "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["min", false, __val_0cedac632a9d5281],
         ["max", false, __val_cfef021b8ec13350],
         ["mult", false, __val_51b5abe7e1ba2c24]
     ]);
+    validators.stripExtras(data, ctx, ["min", "max", "mult"]);
     return data;
 };
 
@@ -528,7 +558,7 @@ var __val_354ede58aec83f6c = (v, path, ctx) => {
     ctx.success = true;
     v = validators.string(v, path, ctx);
     if (ctx.success && v !== undefined && v !== null) {
-        validators.format(v, path, ctx, "email");
+        v = validators.format(v, path, ctx, "email");
     }
     if (_s === false)
         ctx.success = false;
@@ -540,7 +570,7 @@ var __val_646f574aa5d2b8f1 = (v, path, ctx) => {
     ctx.success = true;
     v = validators.string(v, path, ctx);
     if (ctx.success && v !== undefined && v !== null) {
-        validators.format(v, path, ctx, "uuid");
+        v = validators.format(v, path, ctx, "uuid");
     }
     if (_s === false)
         ctx.success = false;
@@ -552,22 +582,24 @@ var __val_4c9f67db765233c6 = (v, path, ctx) => {
     ctx.success = true;
     v = validators.string(v, path, ctx);
     if (ctx.success && v !== undefined && v !== null) {
-        validators.format(v, path, ctx, "date");
+        v = validators.format(v, path, ctx, "date");
     }
     if (_s === false)
         ctx.success = false;
     return v;
 };
 
-var __val_c3e54d25b37e6856 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["email", "uuid", "date"], "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string & Format<\"date\", string>; }"))
+var __val_3142ae88ce6e4c32 = (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, ["email", "uuid", "date"], "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["email", false, __val_354ede58aec83f6c],
         ["uuid", false, __val_646f574aa5d2b8f1],
-        ["date", false, __val_4c9f67db765233c6]
+        ["date", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["email", "uuid", "date"]);
     return data;
 };
 
@@ -599,45 +631,53 @@ var __val_68211ffefc1b2e01 = (v, path, ctx) => {
 };
 
 var __val_d6749fa8772de8dd = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["msg", "dbUrl", "logged"], "{ msg: string; dbUrl: string; logged: string; }"))
+    const obj = validators.object(v, path, ctx, ["msg", "dbUrl", "logged"], "{ msg: string; dbUrl: string; logged: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["msg", false, __val_473287f8298dba71],
         ["dbUrl", false, __val_473287f8298dba71],
         ["logged", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["msg", "dbUrl", "logged"]);
     return data;
 };
 
 var __val_ab68d46bd18d4a0a = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["dbUrl"], "{ dbUrl: string; }"))
+    const obj = validators.object(v, path, ctx, ["dbUrl"], "{ dbUrl: string; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["dbUrl", false, __val_473287f8298dba71]
     ]);
+    validators.stripExtras(data, ctx, ["dbUrl"]);
     return data;
 };
 
 var __val_e955dd67e417e2f5 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["success"], "{ success: boolean; }"))
+    const obj = validators.object(v, path, ctx, ["success"], "{ success: boolean; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73]
     ]);
+    validators.stripExtras(data, ctx, ["success"]);
     return data;
 };
 
 var __val_ccb10958b6aa7739 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["a", "b"], "SumPayload"))
+    const obj = validators.object(v, path, ctx, ["a", "b"], "SumPayload");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["a", false, __val_12886f9d00055adf],
         ["b", false, __val_12886f9d00055adf]
     ]);
+    validators.stripExtras(data, ctx, ["a", "b"]);
     return data;
 };
 
@@ -645,14 +685,16 @@ var __val_74234e98afe7498f = validators.null;
 
 var __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [__val_74234e98afe7498f, __val_473287f8298dba71], "Type<string|null>");
 
-var __val_8ee319793d943d85 = (v, path, ctx) => {
-    if (!validators.object(v, path, ctx, ["one", "two"], "{ one: string | null; two: string | null; }"))
+var __val_88d8ba68f2fde5fd = (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, ["one", "two"], "{ one: string | null; two: string | null; }");
+    if (obj === false)
         return v;
-    const data = ctx.mode === "strip" ? {} : v;
-    validators.props(v, data, path, ctx, [
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
         ["one", false, __val_6bd4d7da4d0dd205],
         ["two", false, __val_6bd4d7da4d0dd205]
     ]);
+    validators.stripExtras(data, ctx, ["one", "two"]);
     return data;
 };
 
@@ -898,12 +940,12 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Query',
 			name: 'date',
-			validator: __val_52806c84462812de
+			validator: __val_99c40ab405926cb5
 		},
 		{
 			source: 'Query',
 			name: 'pattern',
-			validator: __val_b6e780bc51fff07e
+			validator: __val_eefd1c8d7e793bf3
 		},
 		{
 			source: 'Query',
@@ -1008,7 +1050,7 @@ MetadataStore.registerEndpoint({
 		{
 			source: 'Body',
 			name: '',
-			validator: __val_a10859723b6ceff9,
+			validator: __val_bf0f00a269610757,
 			mode: 'strip'
 		}
 	],
@@ -1016,7 +1058,7 @@ MetadataStore.registerEndpoint({
 	interceptors: [],
 	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_ee5b8acdb0f32934
+	returnTypeValidator: __val_70c31e2e47f17c8e
 });
 
 MetadataStore.registerEndpoint({
@@ -1112,7 +1154,7 @@ MetadataStore.registerEndpoint({
 	interceptors: [],
 	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_c3e54d25b37e6856
+	returnTypeValidator: __val_3142ae88ce6e4c32
 });
 
 MetadataStore.registerEndpoint({
@@ -1797,7 +1839,7 @@ MetadataStore.registerEndpoint({
 		'CallbackTestMiddleware'
 	],
 	meta: {},
-	returnTypeValidator: __val_8ee319793d943d85
+	returnTypeValidator: __val_88d8ba68f2fde5fd
 });
 
 MetadataStore.registerEndpoint({
@@ -1818,7 +1860,7 @@ MetadataStore.registerEndpoint({
 		'SimpleTestMiddleware'
 	],
 	meta: {},
-	returnTypeValidator: __val_8ee319793d943d85
+	returnTypeValidator: __val_88d8ba68f2fde5fd
 });
 
 MetadataStore.registerEndpoint({
@@ -1839,7 +1881,7 @@ MetadataStore.registerEndpoint({
 		'CallbackTestMiddleware'
 	],
 	meta: {},
-	returnTypeValidator: __val_8ee319793d943d85
+	returnTypeValidator: __val_88d8ba68f2fde5fd
 });
 
 MetadataStore.registerEndpoint({
@@ -1858,7 +1900,7 @@ MetadataStore.registerEndpoint({
 	interceptors: [],
 	middlewares: [],
 	meta: {},
-	returnTypeValidator: __val_8ee319793d943d85
+	returnTypeValidator: __val_88d8ba68f2fde5fd
 });
 
 MetadataStore.registerEndpoint({

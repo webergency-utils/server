@@ -207,7 +207,10 @@ export class TagParityController
         @Query( 'date' ) date: string & constraint.Format<'date'>
     ) 
     {
-        return { email, uuid, date };
+        // from:query revives format.Date to a Date; serialize back for the string return shape
+        const dateStr = date instanceof Date ? date.toISOString().slice( 0, 10 ) : date;
+
+        return { email, uuid, date : dateStr };
     }
 
     @Post( '/array' )

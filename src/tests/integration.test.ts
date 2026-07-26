@@ -134,7 +134,10 @@ describe( 'Actual Server & Controllers Integration', () =>
             }));
             expect( res.status ).toBe( 400 );
             const data = await res.json();
-            const hasError = data.errors.some(( e: any ) => e.error && e.error.includes( 'PropertyNotAllowed<unknown>' ));
+            const hasError = data.errors.some(( e: any ) =>
+                ( e.error && e.error.includes( 'PropertyNotAllowed<unknown>' ))
+                || ( e.issues && e.issues.some(( i: any ) => i.error && i.error.includes( 'PropertyNotAllowed<unknown>' )))
+            );
             expect( hasError ).toBe( true );
         });
 

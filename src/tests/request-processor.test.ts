@@ -1,0 +1,297 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { RequestProcessor } from '../core/request-processor.js';
+import { MetadataStore } from '../core/metadata.js';
+import { validators } from '@webergency-utils/typechecker';
+import type { AugmentedRequest, ParamMetadata } from '../core/types.js';
+
+function createRequest( options:
+{
+    headers? : Record<string, string | null>
+    body?    : string
+    params?  : Record<string, string>
+    query?   : Record<string, unknown>
+    url?     : string
+}): AugmentedRequest
+{
+    const headerMap = new Map<string, string>();
+
+    for( const [ key, value ] of Object.entries( options.headers ?? {}))
+    {
+        if( value !== null )
+        {
+            headerMap.set( key.toLowerCase(), value );
+        }
+    }
+
+    const bodyText = options.body ?? '';
+
+    return {
+        headers : {
+            get     : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null,
+            entries : () => headerMap.entries()
+        },
+        arrayBuffer : async () => new TextEncoder().encode( bodyText ).buffer,
+        params      : options.params ?? {},
+        query       : options.query ?? {},
+        url         : options.url ?? 'http://localhost/path',
+        meta        : {}
+    } as unknown as AugmentedRequest;
+}
+
+describe( 'RequestProcessor.resolveParam', () =>
+{
+    beforeEach(() =>
+    {
+        MetadataStore.clear();
+        vi.clearAllMocks();
+    });
+
+    it( 'should set from:query for Query params and restore prior from', async () =>
+    {
+        // Arrange
+        const seen: { from?: unknown, mode?: unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown, mode?: unknown }) =>
+        {
+            seen.from = ctx.from;
+            seen.mode = ctx.mode;
+
+            return validators.number( v, 'a', ctx as never );
+        });
+        const param: ParamMetadata = { source : 'Query', name : 'a', validator };
+        const req = createRequest({ query : { a : '42' } });
+        const ctx = { success : true, errors : [], mode : 'strict', from : 'json' };
+
+        // Act
+        const result = await RequestProcessor.resolveParam( param, req, ctx );
+
+        // Assert
+        expect( result ).toBe( 42 );
+        expect( seen.from ).toBe( 'query' );
+        expect( ctx.from ).toBe( 'json' );
+        expect( ctx.mode ).toBe( 'strict' );
+    });
+
+    it( 'should set from:query for Param and Cookie sources', async () =>
+    {
+        // Arrange
+        const fromValues: unknown[] = [];
+        const capture = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        {
+            fromValues.push( ctx.from );
+
+            return validators.number( v, 'n', ctx as never );
+        });
+        const req = createRequest({
+            params  : { id : '7' },
+            headers : { cookie : 'age=9' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        await RequestProcessor.resolveParam(
+            { source : 'Param', name : 'id', validator : capture },
+            req,
+            ctx
+        );
+        await RequestProcessor.resolveParam(
+            { source : 'Cookie', name : 'age', validator : capture },
+            req,
+            ctx
+        );
+
+        // Assert
+        expect( fromValues ).toEqual([ 'query', 'query' ]);
+        expect( ctx.from ).toBeUndefined();
+    });
+
+    it( 'should set from:json for JSON Body and revive Date values', async () =>
+    {
+        // Arrange
+        const seen: { from?: unknown } = {};
+        const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown }) =>
+        {
+            seen.from = ctx.from;
+
+            return validators.date( v, path, ctx as never );
+        });
+        const req = createRequest({
+            body    : JSON.stringify( '2024-01-01T00:00:00.000Z' ),
+            headers : { 'Content-Type' : 'application/json' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+        const param: ParamMetadata = { source : 'Body', validator };
+
+        // Act
+        const result = await RequestProcessor.resolveParam( param, req, ctx );
+
+        // Assert
+        expect( seen.from ).toBe( 'json' );
+        expect( result ).toBeInstanceOf( Date );
+        expect(( result as Date ).toISOString()).toBe( '2024-01-01T00:00:00.000Z' );
+        expect( ctx.from ).toBeUndefined();
+    });
+
+    it( 'should set from:query for urlencoded Body and coerce numbers', async () =>
+    {
+        // Arrange
+        const seen: { from?: unknown } = {};
+        const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown, success: boolean, errors: unknown[], mode: string }) =>
+        {
+            seen.from = ctx.from;
+
+            if( !validators.object( v, path, ctx as never, [ 'age' ]))
+            {
+                return v;
+            }
+
+            validators.props( v, v, path, ctx as never, [
+                [ 'age', false, validators.number ]
+            ]);
+
+            return v;
+        });
+        const req = createRequest({
+            body    : 'age=25',
+            headers : { 'Content-Type' : 'application/x-www-form-urlencoded; charset=utf-8' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+        const param: ParamMetadata = { source : 'Body', validator };
+
+        // Act
+        const result = await RequestProcessor.resolveParam( param, req, ctx );
+
+        // Assert
+        expect( seen.from ).toBe( 'query' );
+        expect( result ).toEqual({ age : 25 });
+        expect( ctx.success ).toBe( true );
+    });
+
+    it( 'should default Body from to json when content-type is missing', async () =>
+    {
+        // Arrange
+        const seen: { from?: unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        {
+            seen.from = ctx.from;
+
+            return v;
+        });
+        const req = createRequest({ body : '{"ok":true}' });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Body', validator },
+            req,
+            ctx
+        );
+
+        // Assert
+        expect( seen.from ).toBe( 'json' );
+        expect( result ).toEqual({ ok : true });
+    });
+
+    it( 'should apply param mode for the validator then restore ctx.mode', async () =>
+    {
+        // Arrange
+        const seen: { mode?: unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { mode?: unknown }) =>
+        {
+            seen.mode = ctx.mode;
+
+            return v;
+        });
+        const req = createRequest({ query : { q : 'x' } });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        await RequestProcessor.resolveParam(
+            { source : 'Query', name : 'q', mode : 'strip', validator },
+            req,
+            ctx
+        );
+
+        // Assert
+        expect( seen.mode ).toBe( 'strip' );
+        expect( ctx.mode ).toBe( 'strict' );
+    });
+
+    it( 'should not mutate from when no validator is present', async () =>
+    {
+        // Arrange
+        const req = createRequest({ query : { a : '1' } });
+        const ctx = { success : true, errors : [], mode : 'strict', from : undefined };
+
+        // Act
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Query', name : 'a' },
+            req,
+            ctx
+        );
+
+        // Assert
+        expect( result ).toBe( '1' );
+        expect( ctx.from ).toBeUndefined();
+    });
+
+    it( 'should resolve Ip from x-forwarded-for or default to 127.0.0.1', async () =>
+    {
+        // Arrange
+        const withHeader = createRequest({
+            headers : { 'x-forwarded-for' : '10.0.0.1, 10.0.0.2' }
+        });
+        const without = createRequest({});
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        const ip1 = await RequestProcessor.resolveParam({ source : 'Ip' }, withHeader, ctx );
+        const ip2 = await RequestProcessor.resolveParam({ source : 'Ip' }, without, ctx );
+
+        // Assert
+        expect( ip1 ).toBe( '10.0.0.1' );
+        expect( ip2 ).toBe( '127.0.0.1' );
+    });
+
+    it( 'should parse Cookies with first-match-wins and named Cookie lookup', async () =>
+    {
+        // Arrange
+        const req = createRequest({
+            headers : { cookie : 'session=first; age=1; session=second' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        const all = await RequestProcessor.resolveParam({ source : 'Cookies' }, req, ctx );
+        const session = await RequestProcessor.resolveParam(
+            { source : 'Cookie', name : 'session' },
+            req,
+            ctx
+        );
+        const missing = await RequestProcessor.resolveParam(
+            { source : 'Cookie', name : 'missing' },
+            req,
+            ctx
+        );
+
+        // Assert
+        expect( all ).toEqual({ session : 'first', age : '1' });
+        expect( session ).toBe( 'first' );
+        expect( missing ).toBeUndefined();
+    });
+
+    it( 'should skip cookie pairs without equals and ignore empty cookie header', async () =>
+    {
+        // Arrange
+        const empty = createRequest({});
+        const malformed = createRequest({ headers : { cookie : 'lone; a=b' } });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        const a = await RequestProcessor.resolveParam({ source : 'Cookies' }, empty, ctx );
+        const b = await RequestProcessor.resolveParam({ source : 'Cookies' }, malformed, ctx );
+
+        // Assert
+        expect( a ).toEqual({});
+        expect( b ).toEqual({ a : 'b' });
+    });
+});

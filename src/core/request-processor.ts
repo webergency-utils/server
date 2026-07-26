@@ -1,6 +1,6 @@
 import { Context } from './context.js';
 import { MetadataStore } from './metadata.js';
-import { RequestReader } from '../helpers/request-reader.js';
+import { RequestReader, getContentType } from '../helpers/request-reader.js';
 import { EndpointMetadata, ParamMetadata, AugmentedRequest } from './types.js';
 import { SecurityOptions } from '../decorators.js';
 
@@ -77,20 +77,23 @@ export class RequestProcessor
         if( p.validator && typeof p.validator === 'function' ) 
         {
             const oldMode = ctx.mode;
-            const oldTryConvert = ctx.tryConvert;
-      
+            const oldFrom = ctx.from;
+
             if( p.mode ) { ctx.mode = p.mode }
 
             if( p.source === 'Query' || p.source === 'Param' || p.source === 'Cookie' ) 
             {
-                ctx.tryConvert = true;
-                ctx.wrapArrays = true;
+                ctx.from = 'query';
             }
-      
+            else if( p.source === 'Body' ) 
+            {
+                ctx.from = getContentType( req ) === 'application/x-www-form-urlencoded' ? 'query' : 'json';
+            }
+
             val = p.validator( val, p.name || p.source.toLowerCase(), ctx );
-      
+
             ctx.mode = oldMode;
-            ctx.tryConvert = oldTryConvert;
+            ctx.from = oldFrom;
         }
 
         return val;

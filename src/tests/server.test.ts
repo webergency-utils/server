@@ -312,6 +312,99 @@ describe( 'Server & Metadata', () =>
             expect( body2 ).toBeUndefined();
         });
 
+        it( 'should parse application/x-www-form-urlencoded bodies', async () => 
+        {
+            const server = new Server({ port : 3000 });
+            const req: any = new Request( 'http://localhost/', {
+                method  : 'POST',
+                body    : 'hello=world&count=2&count=3',
+                headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+            });
+
+            const body = await ( server as any ).getBody( req );
+
+            expect( body ).toEqual({ hello : 'world', count : ['2', '3'] });
+        });
+
+        it( 'should coerce urlencoded Body with from:query and revive JSON Body Date with from:json', async () => 
+        {
+            const formCtrl = {
+                form : ( body: any ) => body,
+                json : ( body: any ) => ({
+                    age  : body.age,
+                    when : body.when instanceof Date ? body.when.toISOString() : body.when,
+                    big  : typeof body.big === 'bigint' ? body.big.toString() : body.big
+                })
+            };
+            const bodyValidator = ( v: any, path: string, ctx: any ) => 
+            {
+                if( !validators.object( v, path, ctx, ['age', 'active'])) { return v }
+                validators.props( v, v, path, ctx, [
+                    ['age', false, validators.number],
+                    ['active', false, validators.boolean]
+                ]);
+
+                return v;
+            };
+            const jsonValidator = ( v: any, path: string, ctx: any ) => 
+            {
+                if( !validators.object( v, path, ctx, ['age', 'when', 'big'])) { return v }
+                validators.props( v, v, path, ctx, [
+                    ['age', false, validators.number],
+                    ['when', false, validators.date],
+                    ['big', false, validators.bigint]
+                ]);
+
+                return v;
+            };
+
+            MetadataStore.registerController( 'FromBodyCtrl', formCtrl );
+            MetadataStore.registerEndpoint({
+                controller : 'FromBodyCtrl', methodName : 'form', httpMethod : 'POST', path : '/from-form',
+                params     : [{ source : 'Body', validator : bodyValidator }],
+                guards     : [], interceptors : [], meta : {}
+            });
+            MetadataStore.registerEndpoint({
+                controller : 'FromBodyCtrl', methodName : 'json', httpMethod : 'POST', path : '/from-json',
+                params     : [{ source : 'Body', validator : jsonValidator }],
+                guards     : [], interceptors : [], meta : {}
+            });
+
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+
+            const formRes = await server.fetch( new Request( 'http://localhost/from-form', {
+                method  : 'POST',
+                body    : 'age=25&active=true',
+                headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+            }));
+            expect( formRes.status ).toBe( 200 );
+            expect( await formRes.json()).toEqual({ age : 25, active : true });
+
+            const jsonRes = await server.fetch( new Request( 'http://localhost/from-json', {
+                method  : 'POST',
+                body    : JSON.stringify({
+                    age  : 25,
+                    when : '2024-01-01T00:00:00.000Z',
+                    big  : '9007199254740991'
+                }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+            expect( jsonRes.status ).toBe( 200 );
+            expect( await jsonRes.json()).toEqual({
+                age  : 25,
+                when : '2024-01-01T00:00:00.000Z',
+                big  : '9007199254740991'
+            });
+
+            const strictRes = await server.fetch( new Request( 'http://localhost/from-json', {
+                method  : 'POST',
+                body    : JSON.stringify({ age : '25', when : '2024-01-01T00:00:00.000Z', big : '1' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+            expect( strictRes.status ).toBe( 400 );
+        });
+
         it( 'should pass undefined to handler when body param has no validator and no body is sent', async () => 
         {
             const ctrl = { echo : vi.fn(( body: any ) => ({ received : body })) };

@@ -577,8 +577,7 @@
                         "user": {
                           "anyOf": [
                             {
-                              "type": "null",
-                              "description": "undefined"
+                              "x-typescript-type": "undefined"
                             },
                             {
                               "type": "object",
@@ -635,8 +634,7 @@
                   "user": {
                     "anyOf": [
                       {
-                        "type": "null",
-                        "description": "undefined"
+                        "x-typescript-type": "undefined"
                       },
                       {
                         "type": "object",
@@ -688,7 +686,34 @@
                     "success": {
                       "type": "boolean"
                     },
-                    "data": {}
+                    "data": {
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "a": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "a"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "b": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "b"
+                          ]
+                        }
+                      ]
+                    }
                   },
                   "additionalProperties": false,
                   "required": [
@@ -704,7 +729,34 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "a"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "b": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "b"
+                    ]
+                  }
+                ]
+              }
             }
           }
         }
@@ -880,8 +932,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "date-time"
+              "x-typescript-type": "Date"
             }
           },
           {
@@ -889,8 +940,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "regex"
+              "x-typescript-type": "RegExp"
             }
           },
           {
@@ -898,7 +948,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "integer"
+              "x-typescript-type": "bigint"
             }
           }
         ]
@@ -1220,8 +1270,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "null",
-                  "description": "undefined"
+                  "x-typescript-type": "undefined"
                 }
               }
             }
@@ -1463,8 +1512,7 @@
                       "format": "uuid"
                     },
                     "date": {
-                      "type": "string",
-                      "format": "date"
+                      "type": "string"
                     }
                   },
                   "additionalProperties": false,
@@ -1855,8 +1903,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "null",
-                  "description": "undefined"
+                  "x-typescript-type": "undefined"
                 }
               }
             }

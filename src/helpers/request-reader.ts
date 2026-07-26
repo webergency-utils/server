@@ -1,6 +1,16 @@
 import { AugmentedRequest } from '../core/types.js';
 import { SecurityOptions } from '../decorators.js';
 import { parseSize } from './security.js';
+import { QueryParser } from './parsers.js';
+
+export function getContentType( req: AugmentedRequest ): string | null
+{
+    const raw = req.headers.get( 'content-type' );
+
+    if( !raw ){ return null }
+
+    return raw.split( ';' )[0]?.trim()?.toLowerCase() || null;
+}
 
 export class RequestReader 
 {
@@ -11,7 +21,15 @@ export class RequestReader
 
         if( !raw.byteLength ){ return req._json = undefined }
 
-        return req._json = JSON.parse( new TextDecoder().decode( raw ));
+        const text = new TextDecoder().decode( raw );
+        const contentType = getContentType( req );
+
+        if( contentType === 'application/x-www-form-urlencoded' )
+        {
+            return req._json = QueryParser.parse( text );
+        }
+
+        return req._json = JSON.parse( text );
     }
 
     public static async getRawBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<ArrayBuffer> 
