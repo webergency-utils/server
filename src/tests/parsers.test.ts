@@ -231,4 +231,15 @@ describe( 'QueryParser', () =>
         expect( QueryParser.parse( `__proto__=x` )).not.toHaveProperty( '__proto__' );
         expect( QueryParser.parse( `safe=1&__proto__[x]=2` )).toEqual({ safe : '1' });
     });
+
+    it( 'should return ordinary objects (not null-prototype)', () =>
+    {
+        const result = QueryParser.parse( 'user[name]=Ada&tags[]=a' ) as any;
+
+        expect( Object.getPrototypeOf( result )).toBe( Object.prototype );
+        expect( result instanceof Object ).toBe( true );
+        expect( Object.hasOwn( result, 'user' )).toBe( true );
+        expect( Object.getPrototypeOf( result.user )).toBe( Object.prototype );
+        expect( typeof result.hasOwnProperty ).toBe( 'function' );
+    });
 });

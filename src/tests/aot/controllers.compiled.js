@@ -528,6 +528,17 @@ const __val_e955dd67e417e2f5 = (v, path, ctx) => {
     validators.stripExtras(data, ctx, ["success"]);
     return data;
 };
+const __val_07a8cc3cc8aea7a1 = (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, ["val"], "{ val: number; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx);
+    validators.props(obj, data, path, ctx, [
+        ["val", false, __val_12886f9d00055adf]
+    ]);
+    validators.stripExtras(data, ctx, ["val"]);
+    return data;
+};
 const __val_ccb10958b6aa7739 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, ["a", "b"], "SumPayload");
     if (obj === false)
@@ -542,7 +553,7 @@ const __val_ccb10958b6aa7739 = (v, path, ctx) => {
 };
 const __val_74234e98afe7498f = validators.null;
 const __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [__val_74234e98afe7498f, __val_473287f8298dba71], "Type<string|null>");
-const __val_88d8ba68f2fde5fd = (v, path, ctx) => {
+const __val_8dc0b81821ea670e = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, ["one", "two"], "{ one: string | null; two: string | null; }");
     if (obj === false)
         return v;
@@ -1032,6 +1043,12 @@ let RealtimeController = class RealtimeController {
         yield { event: 'update', data: { val: 1 } };
         yield { event: 'update', data: { val: 2 } };
     }
+    async *handleSseStrip() {
+        yield { event: 'update', data: { val: 1, extra: 'gone' } };
+    }
+    async *handleSseInvalid() {
+        yield { event: 'update', data: { val: 'nope' } };
+    }
 };
 __decorate([
     Ws('/ws')
@@ -1050,6 +1067,14 @@ __decorate([
 __decorate([
     Sse('/sse')
 ], RealtimeController.prototype, "handleSse", null);
+__decorate([
+    Sse('/sse-strip'),
+    ResponseMode('strip')
+], RealtimeController.prototype, "handleSseStrip", null);
+__decorate([
+    Sse('/sse-invalid'),
+    ResponseMode('strict')
+], RealtimeController.prototype, "handleSseInvalid", null);
 RealtimeController = __decorate([
     Controller('/realtime')
 ], RealtimeController);
@@ -1059,6 +1084,7 @@ let MathMicroserviceController = class MathMicroserviceController {
         constructorDeps: [],
         propertyDeps: {}
     };
+    lastNotify;
     sum(data) {
         return data.a + data.b;
     }
@@ -1066,7 +1092,7 @@ let MathMicroserviceController = class MathMicroserviceController {
         return `Hello, ${name}!`;
     }
     notify(msg) {
-        // Event listener
+        this.lastNotify = msg;
     }
 };
 __decorate([
@@ -2278,7 +2304,38 @@ __server_metadata_store.endpoints.push({
     middlewares: [],
     meta: {
         sse: true
-    }
+    },
+    returnTypeValidator: __val_07a8cc3cc8aea7a1
+});
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleSseStrip",
+    httpMethod: "GET",
+    path: "/realtime/sse-strip",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {
+        sse: true
+    },
+    returnTypeMode: "strip",
+    returnTypeValidator: __val_07a8cc3cc8aea7a1
+});
+__server_metadata_store.endpoints.push({
+    controller: "RealtimeController",
+    methodName: "handleSseInvalid",
+    httpMethod: "GET",
+    path: "/realtime/sse-invalid",
+    params: [],
+    guards: [],
+    interceptors: [],
+    middlewares: [],
+    meta: {
+        sse: true
+    },
+    returnTypeMode: "strict",
+    returnTypeValidator: __val_07a8cc3cc8aea7a1
 });
 __server_metadata_store.endpoints.push({
     controller: "MathMicroserviceController",
@@ -2618,7 +2675,7 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
     meta: {},
-    returnTypeValidator: __val_88d8ba68f2fde5fd
+    returnTypeValidator: __val_8dc0b81821ea670e
 });
 __server_metadata_store.endpoints.push({
     controller: "MiddlewareTestController",
@@ -2635,7 +2692,7 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     middlewares: ["SimpleTestMiddleware"],
     meta: {},
-    returnTypeValidator: __val_88d8ba68f2fde5fd
+    returnTypeValidator: __val_8dc0b81821ea670e
 });
 __server_metadata_store.endpoints.push({
     controller: "MiddlewareUnmiddlewareController",
@@ -2652,7 +2709,7 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     middlewares: ["CallbackTestMiddleware"],
     meta: {},
-    returnTypeValidator: __val_88d8ba68f2fde5fd
+    returnTypeValidator: __val_8dc0b81821ea670e
 });
 __server_metadata_store.endpoints.push({
     controller: "MiddlewareUnmiddlewareController",
@@ -2669,7 +2726,7 @@ __server_metadata_store.endpoints.push({
     interceptors: [],
     middlewares: [],
     meta: {},
-    returnTypeValidator: __val_88d8ba68f2fde5fd
+    returnTypeValidator: __val_8dc0b81821ea670e
 });
 __server_metadata_store.endpoints.push({
     controller: "GuardInterceptorOrderController",

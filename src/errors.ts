@@ -6,6 +6,33 @@ export class ServerError extends Error
     {
         super( message );
     }
+
+    /** Alias so catch paths that read `err.status` match RequestProcessor. */
+    get status(): number
+    {
+        return this.code;
+    }
+}
+
+/** Resolve an HTTP status from thrown values (`status`, then `code`, else 500). */
+export function httpStatusFromError( err: unknown ): number
+{
+    if( err && typeof err === 'object' )
+    {
+        const e = err as { status?: unknown, code?: unknown };
+
+        if( typeof e.status === 'number' && e.status >= 100 && e.status < 600 )
+        {
+            return e.status;
+        }
+
+        if( typeof e.code === 'number' && e.code >= 100 && e.code < 600 )
+        {
+            return e.code;
+        }
+    }
+
+    return 500;
 }
 
 export class HTTPServerError extends ServerError

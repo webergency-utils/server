@@ -4,7 +4,11 @@ import {
     Context, 
     Response, 
     Headers, 
-    Ip, 
+    Ip,
+    Url,
+    Hostname,
+    Path,
+    RawBody,
     Body, 
     Query, 
     Param, 
@@ -37,6 +41,10 @@ describe( 'Decorators', () =>
         Response({}, 'test', 0 );
         Headers({}, 'test', 0 );
         Ip({}, 'test', 0 );
+        Url({}, 'test', 0 );
+        Hostname({}, 'test', 0 );
+        Path({}, 'test', 0 );
+        RawBody({}, 'test', 0 );
         
         Body({}, 'test', 0 );
         Body( 'strict' )({}, 'test', 0 );

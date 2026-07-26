@@ -1,5 +1,6 @@
 import { ServerAdapter, TlsOptions } from './adapter.js';
 import { EventEmitter } from 'node:events';
+import { needsNodeTlsCompat, tlsMaterialToString, attachClientCert } from '../helpers/peer-cert.js';
 
 export class DenoAdapter implements ServerAdapter
 {
@@ -10,7 +11,9 @@ export class DenoAdapter implements ServerAdapter
 
     async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void>
     {
-        if( tls )
+        // Native Deno.serve supports cert/key TLS, but not requestCert/SNI/@Peer.
+        // mTLS and SNI callbacks use Node's https adapter under Deno.
+        if( needsNodeTlsCompat( tls ))
         {
             this.isNodeCompat = true;
             const { NodeAdapter } = await import( './node-adapter.js' );
@@ -28,7 +31,35 @@ export class DenoAdapter implements ServerAdapter
             signal : this.abortController.signal
         };
 
-        this.server = ( globalThis as any ).Deno.serve( options, handler );
+        if( tls )
+        {
+            const cert = tlsMaterialToString( tls.cert as any );
+            const key = tlsMaterialToString( tls.key as any );
+
+            if( !cert || !key )
+            {
+                throw new Error( 'Deno TLS requires both tls.cert and tls.key PEM material' );
+            }
+
+            options.cert = cert;
+            options.key = key;
+        }
+
+        this.server = ( globalThis as any ).Deno.serve( options, ( req: Request, info: any ) =>
+        {
+            if( info?.remoteAddr?.hostname )
+            {
+                ( req as any ).remoteAddress = info.remoteAddr.hostname;
+            }
+
+            // Best-effort if a future Deno ConnInfo exposes peer certificates.
+            if( info?.peerCertificate || info?.tls?.peerCertificate )
+            {
+                attachClientCert( req, info.peerCertificate || info.tls.peerCertificate );
+            }
+
+            return handler( req );
+        });
     }
 
     async upgrade( request: Request, metadata: any, params: any ): Promise<Response>
@@ -47,7 +78,7 @@ export class DenoAdapter implements ServerAdapter
 
         const start = () =>
         {
-            RequestProcessor.executeWs( metadata, connection, request as any );
+            RequestProcessor.runWs( metadata, connection, request as any );
         };
 
         // Deno WebSockets cannot send until `open` (unlike Node/Bun upgrade paths).

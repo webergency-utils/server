@@ -1827,6 +1827,42 @@
         }
       }
     },
+    "/realtime/sse-strip": {
+      "get": {
+        "summary": "RealtimeController.handleSseStrip",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events Stream"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/realtime/sse-invalid": {
+      "get": {
+        "summary": "RealtimeController.handleSseInvalid",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events Stream"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "math.sum": {
       "rpc": {
         "summary": "MathMicroserviceController.sum",

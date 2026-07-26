@@ -26,29 +26,6 @@ function assert( condition, message )
     }
 }
 
-function silenceExit()
-{
-    const runtime = detectRuntime();
-
-    if( runtime === 'Deno' )
-    {
-        const original = globalThis.Deno.exit;
-        globalThis.Deno.exit = () => undefined;
-
-        return () => { globalThis.Deno.exit = original };
-    }
-
-    if( typeof process !== 'undefined' && process.exit )
-    {
-        const original = process.exit.bind( process );
-        process.exit = (() => undefined);
-
-        return () => { process.exit = original };
-    }
-
-    return () => undefined;
-}
-
 function waitForOpen( ws )
 {
     return new Promise(( resolve, reject ) =>
@@ -147,16 +124,7 @@ async function main()
     }
     finally
     {
-        const restoreExit = silenceExit();
-
-        try
-        {
-            await server.shutdown();
-        }
-        finally
-        {
-            restoreExit();
-        }
+        await server.shutdown();
     }
 
     console.log( `[runtime-smoke] ${runtime} passed` );

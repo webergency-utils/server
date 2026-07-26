@@ -16,7 +16,9 @@ export { TlsOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
-import { RequestReader } from './helpers/request-reader.js';
+import { RequestReader, getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
+import { httpStatusFromError } from './errors.js';
+import { resolveClientIp } from './helpers/client-ip.js';
 
 export class ConsoleLogger implements Logger 
 {
@@ -59,6 +61,13 @@ export interface ServerOptions {
     module?          : any | any[]
     responseMode?    : 'strict' | 'relaxed' | 'strip'
     tls?             : TlsOptions
+    /**
+     * When to trust X-Forwarded-For for @Ip and rate limiting.
+     * - false / omit: never trust XFF (use TCP peer / 127.0.0.1)
+     * - true: trust only loopback peers
+     * - string[]: CIDR allowlist of immediate peers (e.g. `['10.0.0.0/8', '172.16.0.0/12']`)
+     */
+    trustProxy?      : boolean | string[]
 }
 
 export type ServerEvents = {
@@ -421,9 +430,6 @@ export class Server extends EventEmitter
         }
 
         this.internalEmit( 'shutdown' );
-    
-        if( typeof process !== 'undefined' ) { process.exit( 0 ) }
-        else if(( globalThis as any ).Deno ) { ( globalThis as any ).Deno.exit( 0 ) }
     }
 
     private detectRuntime(): 'Bun' | 'Deno' | 'Node' 
@@ -566,6 +572,12 @@ export class Server extends EventEmitter
         const path = url.pathname;
         const isUpgrade = request.headers.get( 'upgrade' )?.toLowerCase() === 'websocket';
         const method = isUpgrade ? 'WS' : request.method;
+        const augmented = request as AugmentedRequest;
+        augmented.trustProxy = this.options.trustProxy;
+        if( ( request as any ).remoteAddress !== undefined )
+        {
+            augmented.remoteAddress = ( request as any ).remoteAddress;
+        }
     
         if( this.options.logs ) 
         {
@@ -678,7 +690,7 @@ export class Server extends EventEmitter
                             guardArgs.push( await RequestProcessor.resolveParam( p, req, ctx, undefined, guardModule ));
                         }
                         else if([
-                            'Param', 'Body', 'Header', 'Headers', 'Cookies', 'Cookie',
+                            'Param', 'Body', 'RawBody', 'Header', 'Headers', 'Cookies', 'Cookie',
                             'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
                         ].includes( p.source )) 
                         {
@@ -713,12 +725,20 @@ export class Server extends EventEmitter
             req.security = finalMatch.metadata.security;
             req.meta = finalMatch.metadata.meta;
 
-            // Enforce allowedContentTypes
+            // Enforce allowedContentTypes (require a matching CT when a body is indicated)
             if( securityConfig?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
             {
-                const contentType = request.headers.get( 'content-type' )?.split( ';' )[0]?.trim()?.toLowerCase();
+                const contentType = getContentType( req );
+                const allowed = securityConfig.allowedContentTypes.map( t => t.toLowerCase());
 
-                if( contentType && !securityConfig.allowedContentTypes.some( t => t.toLowerCase() === contentType )) 
+                if( requestLikelyHasBody( req ))
+                {
+                    if( !contentType || !allowed.includes( contentType ))
+                    {
+                        throw Object.assign( new Error( `Unsupported Media Type: ${contentType || 'missing'}` ), { status : 415 });
+                    }
+                }
+                else if( contentType && !allowed.includes( contentType ))
                 {
                     throw Object.assign( new Error( `Unsupported Media Type: ${contentType}` ), { status : 415 });
                 }
@@ -727,7 +747,7 @@ export class Server extends EventEmitter
             // Enforce rateLimit
             if( securityConfig?.rateLimit ) 
             {
-                const ip = request.headers.get( 'x-forwarded-for' )?.split( ',' )[0] || '127.0.0.1';
+                const ip = resolveClientIp( req, this.options.trustProxy );
                 const allowed = this.rateLimiter.checkLimit( ip, path, securityConfig.rateLimit );
 
                 if( !allowed ) 
@@ -743,23 +763,37 @@ export class Server extends EventEmitter
             {
                 const timeoutMs = securityConfig.timeout;
                 const controller = new AbortController();
+                req.abortSignal = controller.signal;
                 const timer = setTimeout(() => controller.abort(), timeoutMs );
+                const work = RequestProcessor.execute( finalMatch.metadata, req, securityConfig );
+
                 try 
                 {
                     response = await Promise.race([
-                        RequestProcessor.execute( finalMatch.metadata, req, securityConfig ),
+                        work,
                         new Promise<never>(( _, reject ) => 
                         {
-                            controller.signal.addEventListener( 'abort', () => 
+                            const fail = () =>
                             {
                                 reject( Object.assign( new Error( `Request Timeout (${timeoutMs}ms)` ), { status : 408 }));
-                            });
+                            };
+
+                            if( controller.signal.aborted )
+                            {
+                                fail();
+
+                                return;
+                            }
+
+                            controller.signal.addEventListener( 'abort', fail, { once : true });
                         })
                     ]);
                 }
                 finally 
                 {
                     clearTimeout( timer );
+                    // Timed-out work may still settle later; swallow to avoid unhandled rejection.
+                    void work.catch(() => undefined );
                 }
             }
             else 
@@ -796,6 +830,8 @@ export class Server extends EventEmitter
         catch ( err: any ) 
         {
             this.internalEmit( 'error', err );
+            const statusCode = httpStatusFromError( err );
+
             if( this.options.logs ) 
             {
                 this.logger.error( `Server Error: ${err.message}`, {
@@ -807,11 +843,11 @@ export class Server extends EventEmitter
             if( this.options.logs ) 
             {
                 const duration = Date.now() - startTime;
-                this.logger.info( `<-- ${method} ${path} - 500 Internal Server Error (${duration}ms)`, {
+                this.logger.info( `<-- ${method} ${path} - ${statusCode} (${duration}ms)`, {
                     type   : 'request_end',
                     method,
                     path,
-                    status : 500,
+                    status : statusCode,
                     duration
                 });
             }
@@ -819,9 +855,8 @@ export class Server extends EventEmitter
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
             const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
             const errSecurityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
-            const statusCode = err.status || 500;
       
-            let res = new Response( JSON.stringify({ success : false, error : err.message }), {
+            let res = new Response( JSON.stringify( err.data || { success : false, error : err.message }), {
                 status  : statusCode,
                 headers : { 'Content-Type' : 'application/json' }
             });

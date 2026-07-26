@@ -149,6 +149,17 @@ export class SwaggerSpecGenerator
             }
           };
                 }
+                else if( paramMeta.source === 'RawBody' )
+                {
+                    requestBody = {
+            required : true,
+            content  : {
+                'application/octet-stream' : {
+                    schema : { type : 'string', format : 'binary' }
+                }
+            }
+          };
+                }
             }
 
             const signature = checker.getSignatureFromDeclaration( methodDecl );

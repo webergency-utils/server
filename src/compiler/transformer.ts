@@ -17,7 +17,7 @@ const PARAM_DECORATORS: Record<string, string> = {
   'Params'          : 'Param',
   'Query'           : 'Query',
   'Body'            : 'Body',
-  'RawBody'         : 'Body',
+  'RawBody'         : 'RawBody',
   'Ctx'             : 'Context',
   'Context'         : 'Context',
   'ConnectedSocket' : 'WebSocket',
@@ -52,6 +52,48 @@ export function createRegistry(): ProjectRegistry
         requiredUtils     : new Set(),
         externalManifests : new Set()
     };
+}
+
+const STREAM_TYPE_NAMES = new Set([
+    'AsyncGenerator',
+    'AsyncIterable',
+    'AsyncIterableIterator',
+    'Generator',
+    'Iterable',
+    'IterableIterator'
+]);
+
+/**
+ * For @Sse handlers: unwrap AsyncGenerator/Iterable yield type, then prefer the `data`
+ * property type when the yield looks like an SSE envelope.
+ */
+function unwrapSsePayloadType( returnType: ts.Type, checker: ts.TypeChecker ): ts.Type | undefined
+{
+    let type = returnType;
+    const symbolName = type.aliasSymbol?.getName() || type.symbol?.getName();
+
+    if( symbolName && STREAM_TYPE_NAMES.has( symbolName ))
+    {
+        let typeArgs: readonly ts.Type[] | undefined;
+
+        try
+        {
+            typeArgs = checker.getTypeArguments( type as ts.TypeReference );
+        }
+        catch
+        {
+            typeArgs = ( type as ts.TypeReference ).typeArguments;
+        }
+
+        if( !typeArgs?.[0]){ return undefined }
+        type = typeArgs[0];
+    }
+
+    const dataType = checker.getTypeOfPropertyOfType( type, 'data' );
+
+    if( dataType ){ return dataType }
+
+    return type;
 }
 
 function parseExpression( expr: ts.Expression, sourceFile: ts.SourceFile ): any 
@@ -522,7 +564,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
 
                                 if( ts.isCallExpression( e )) 
                                 {
-                                    if([ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'Request', 'Context', 'Response' ].includes( dName )) 
+                                    if([ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'RawBody', 'Request', 'Context', 'Response' ].includes( dName )) 
                                     {
                                         const { line, character } = ts.getLineAndCharacterOfPosition( sourceFile, e.getStart());
                                         throw new Error( `[Compile Error] ${sourceFile.fileName}:${line + 1}:${character + 1} - Decorator "@${dName}" must not be called with parentheses. Use "@${dName}" instead of "@${dName}()".` );
@@ -547,7 +589,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                                             vMode = e.arguments[1].text as any;
                                         }
                                     }
-                                    else if( ![ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'Request', 'Context', 'Response' ].includes( dName ) && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
+                                    else if( ![ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'RawBody', 'Request', 'Context', 'Response' ].includes( dName ) && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
                                     {
                                         pName = e.arguments[0].text;
                                     }
@@ -1316,15 +1358,35 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                                         const isResponse = returnTypeStr === 'Response' || returnType.symbol?.name === 'Response';
                                         const isAnyOrUnknown = returnTypeStr === 'any' || returnTypeStr === 'unknown' || returnTypeStr === 'never';
 
-                                        if( !isVoid && !isResponse && !isAnyOrUnknown && !isWs && !isSse ) 
+                                        if( !isVoid && !isResponse && !isAnyOrUnknown && !isWs )
                                         {
-                                            const hash = generateHash( returnType, checker );
+                                            let typeForValidator: ts.Type | undefined = returnType;
 
-                                            if( !registry.validators.has( hash )) 
+                                            if( isSse )
                                             {
-                                                buildValidator( returnType, checker, registry.validators, registry.requiredUtils );
+                                                typeForValidator = unwrapSsePayloadType( returnType, checker );
+
+                                                if( typeForValidator )
+                                                {
+                                                    const payloadStr = checker.typeToString( typeForValidator );
+
+                                                    if( payloadStr === 'any' || payloadStr === 'unknown' || payloadStr === 'never' )
+                                                    {
+                                                        typeForValidator = undefined;
+                                                    }
+                                                }
                                             }
-                                            returnTypeValidatorHash = hash;
+
+                                            if( typeForValidator )
+                                            {
+                                                const hash = generateHash( typeForValidator, checker );
+
+                                                if( !registry.validators.has( hash ))
+                                                {
+                                                    buildValidator( typeForValidator, checker, registry.validators, registry.requiredUtils );
+                                                }
+                                                returnTypeValidatorHash = hash;
+                                            }
                                         }
                                     }
 

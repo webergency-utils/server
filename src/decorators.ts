@@ -8,6 +8,10 @@ export const Context = ( target: any, key: string | symbol, idx: number ) => {};
 export const Response = ( target: any, key: string | symbol, idx: number ) => {};
 export const Headers = ( target: any, key: string | symbol, idx: number ) => {};
 export const Ip = ( target: any, key: string | symbol, idx: number ) => {};
+export const Url = ( target: any, key: string | symbol, idx: number ) => {};
+export const Hostname = ( target: any, key: string | symbol, idx: number ) => {};
+export const Path = ( target: any, key: string | symbol, idx: number ) => {};
+export const RawBody = ( target: any, key: string | symbol, idx: number ) => {};
 export const Peer = ( target: any, key: string | symbol, idx: number ) => {};
 export const Cookies = ( target: any, key: string | symbol, idx: number ) => {};
 

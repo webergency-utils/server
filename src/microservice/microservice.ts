@@ -1,6 +1,6 @@
 import { MetadataStore } from '../core/metadata.js';
 import { RequestProcessor } from '../core/request-processor.js';
-import { MicroserviceAdapter } from './adapter.js';
+import { MicroserviceAdapter, MicroserviceNoReply } from './adapter.js';
 
 export class Microservice 
 {
@@ -8,7 +8,7 @@ export class Microservice
 
     async start(): Promise<void> 
     {
-        await this.adapter.listen( async ( pattern, payload, connection ) => 
+        await this.adapter.listen( async ( pattern, payload ) => 
         {
             const endpoint = MetadataStore.getEndpoints().find(
                 ( ep: any ) => ep.httpMethod === 'RPC' && ep.path === pattern
@@ -19,11 +19,24 @@ export class Microservice
                 throw new Error( `Pattern "${pattern}" not registered` );
             }
 
+            // Nest @EventPattern: fire-and-forget — no reply envelope, errors stay local.
+            if( endpoint.meta?.event )
+            {
+                try
+                {
+                    await RequestProcessor.executeRpc( endpoint, payload );
+                }
+                catch ( err: any )
+                {
+                    console.error( `[EventPattern ${pattern}]`, err?.message || err );
+                }
+
+                return MicroserviceNoReply;
+            }
+
             try 
             {
-                const result = await RequestProcessor.executeRpc( endpoint, payload );
-
-                return result;
+                return await RequestProcessor.executeRpc( endpoint, payload );
             }
             catch ( err: any ) 
             {

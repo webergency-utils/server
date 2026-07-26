@@ -150,10 +150,118 @@ describe( 'Server & Metadata', () =>
             expect( data.host ).toBe( 'example.com' );
             expect( data.url ).toBe( 'http://example.com/params?q=1' );
             expect( data.path ).toBe( '/params' );
-            expect( data.ip ).toBe( '1.2.3.4' );
-            expect( data.res ).toBeUndefined();
+            expect( data.ip ).toBe( '127.0.0.1' );
+            expect( data.res ).toEqual({ headers : {}});
             expect( data.ctx ).toBeDefined();
             expect( data.headers['x-test']).toBe( 'val' );
+        });
+
+        it( 'should apply @Response headers and status onto the outbound response', async () =>
+        {
+            const ctrl = {
+                get : ( res: { headers: Headers; status: number }) =>
+                {
+                    res.headers.set( 'x-from-handler', '1' );
+                    res.status = 201;
+
+                    return { ok : true };
+                }
+            };
+            MetadataStore.registerController( 'ResCtrl', ctrl );
+            MetadataStore.registerEndpoint({
+                controller   : 'ResCtrl',
+                methodName   : 'get',
+                httpMethod   : 'GET',
+                path         : '/res',
+                params       : [{ source : 'Response' }],
+                guards       : [],
+                interceptors : [],
+                meta         : {}
+            });
+
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+            const res = await server.fetch( new Request( 'http://localhost/res' ));
+            expect( res.status ).toBe( 201 );
+            expect( res.headers.get( 'x-from-handler' )).toBe( '1' );
+            expect( res.headers.get( 'content-type' )).toContain( 'application/json' );
+            expect( await res.json()).toEqual({ ok : true });
+        });
+
+        it( 'should validate each SSE chunk data and strip extras', async () =>
+        {
+            const ctrl = {
+                stream : async function *()
+                {
+                    yield { event : 'tick', data : { val : 1, extra : 'x' } };
+                }
+            };
+            MetadataStore.registerController( 'SseValCtrl', ctrl );
+            MetadataStore.registerEndpoint({
+                controller         : 'SseValCtrl',
+                methodName         : 'stream',
+                httpMethod         : 'GET',
+                path               : '/sse-val',
+                params             : [],
+                guards             : [],
+                interceptors       : [],
+                meta               : { sse : true },
+                returnTypeMode     : 'strip',
+                returnTypeValidator : ( v: any, _path: string, ctx: any ) =>
+                {
+                    if( ctx.mode === 'strip' && v && typeof v === 'object' )
+                    {
+                        const out : Record<string, any> = {};
+
+                        if( 'val' in v ){ out.val = v.val }
+
+                        return out;
+                    }
+
+                    return v;
+                }
+            });
+
+            const server = new Server({ port : 3000 });
+            ( server as any ).init();
+            const res = await server.fetch( new Request( 'http://localhost/sse-val' ));
+            expect( res.status ).toBe( 200 );
+            const text = await res.text();
+            expect( text ).toContain( 'event: tick\ndata: {"val":1}\n\n' );
+            expect( text ).not.toContain( 'extra' );
+        });
+
+        it( 'should honor X-Forwarded-For when trustProxy allows the peer', async () =>
+        {
+            const ctrl = {
+                get : ( ip: string ) => ({ ip })
+            };
+            MetadataStore.registerController( 'IpCtrl', ctrl );
+            MetadataStore.registerEndpoint({
+                controller   : 'IpCtrl',
+                methodName   : 'get',
+                httpMethod   : 'GET',
+                path         : '/ip',
+                params       : [{ source : 'Ip' }],
+                guards       : [],
+                interceptors : [],
+                meta         : {}
+            });
+
+            const server = new Server({
+                port       : 3000,
+                trustProxy : [ '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' ]
+            });
+            ( server as any ).init();
+
+            const req = new Request( 'http://example.com/ip', {
+                headers : { 'x-forwarded-for' : '203.0.113.50, 10.0.0.2' }
+            });
+            ( req as any ).remoteAddress = '10.0.0.5';
+
+            const res = await server.fetch( req );
+            const data = await res.json();
+            expect( data.ip ).toBe( '203.0.113.50' );
         });
 
         it( 'should handle body and duplex streams', async () => 
@@ -569,22 +677,16 @@ describe( 'Server & Metadata', () =>
             server.on( 'beforeShutdown', before );
             server.on( 'shutdown', after );
             
-            // Mock exit to prevent process from dying
-            const spy = vi.spyOn( process, 'exit' ).mockImplementation(() => { return undefined as never });
-            
             await server.shutdown();
             
             expect( server['isShuttingDown']).toBe( true );
             expect( before ).toHaveBeenCalled();
             expect( after ).toHaveBeenCalled();
-            expect( spy ).toHaveBeenCalled();
             
             // Second call should return early
             before.mockClear();
             await server.shutdown();
             expect( before ).not.toHaveBeenCalled();
-            
-            spy.mockRestore();
         });
 
         it( 'should handle shutdown timeout', async () => 
@@ -592,13 +694,11 @@ describe( 'Server & Metadata', () =>
             const server = new Server({ port : 3004, shutdownTimeout : 10, logs : true });
             ( server as any ).activeRequests = 1;
             
-            const spy = vi.spyOn( process, 'exit' ).mockImplementation(() => { return undefined as never });
             const warnSpy = vi.spyOn( console, 'warn' ).mockImplementation(() => {});
             
             await server.shutdown();
             
             expect( warnSpy ).toHaveBeenCalledWith( expect.stringContaining( 'Shutdown timed out' ));
-            spy.mockRestore();
             warnSpy.mockRestore();
         });
 
@@ -608,11 +708,9 @@ describe( 'Server & Metadata', () =>
             const mockNodeServer = { close : vi.fn( cb => cb()) };
             ( server as any ).nodeServer = mockNodeServer;
             
-            const spy = vi.spyOn( process, 'exit' ).mockImplementation(() => { return undefined as never });
             await server.shutdown();
             
             expect( mockNodeServer.close ).toHaveBeenCalled();
-            spy.mockRestore();
         });
 
         it.skipIf( !isNodeRuntime )( 'should detect different runtimes', () => 
@@ -1419,9 +1517,6 @@ describe( 'Server & Metadata', () =>
             }
 
             const server = new Server({ port : 3015, module : HookModule });
-            
-            // Mock exit to prevent process from dying
-            const exitSpy = vi.spyOn( process, 'exit' ).mockImplementation(() => { return undefined as never });
 
             // Start the server
             await server.start();
@@ -1445,8 +1540,6 @@ describe( 'Server & Metadata', () =>
             expect( sequence ).toContain( 'provider:onApplicationShutdown:SIGINT' );
             expect( sequence ).toContain( 'controller:onApplicationShutdown:SIGINT' );
             expect( sequence ).toContain( 'module:onApplicationShutdown:SIGINT' );
-
-            exitSpy.mockRestore();
         });
     });
 
@@ -1783,17 +1876,43 @@ describe( 'Server & Metadata', () =>
             expect( body.age ).toBe( 28 );
         });
 
-        it.skipIf( !isNodeRuntime )( 'should delegate to NodeAdapter in DenoAdapter when TLS is provided', async () => 
+        it.skipIf( !isNodeRuntime )( 'should use native Deno.serve TLS for cert/key without mTLS', async () =>
         {
             const { DenoAdapter } = await import( '../adapters/deno-adapter.js' );
             const adapter = new DenoAdapter();
-            
+
+            const serveMock = vi.fn().mockReturnValue({
+                shutdown : vi.fn().mockResolvedValue( undefined ),
+                finished : Promise.resolve()
+            });
+            ( globalThis as any ).Deno = { serve : serveMock };
+
+            const tlsOptions = { key : '-----BEGIN KEY-----\nK\n-----END KEY-----', cert : '-----BEGIN CERT-----\nC\n-----END CERT-----' };
+            await adapter.listen( 8443, async () => new Response( 'ok' ), tlsOptions );
+
+            expect( serveMock ).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    port : 8443,
+                    key  : tlsOptions.key,
+                    cert : tlsOptions.cert
+                }),
+                expect.any( Function )
+            );
+
+            await adapter.close();
+            delete ( globalThis as any ).Deno;
+        });
+
+        it.skipIf( !isNodeRuntime )( 'should delegate Deno mTLS (requestCert) to NodeAdapter', async () =>
+        {
+            const { DenoAdapter } = await import( '../adapters/deno-adapter.js' );
+            const adapter = new DenoAdapter();
+
             const serveMock = vi.fn();
             ( globalThis as any ).Deno = { serve : serveMock };
 
-            const tlsOptions = { key : 'key', cert : 'cert' };
-            
-            // Should not call Deno.serve but delegate to NodeAdapter (which uses node:https createServer)
+            const tlsOptions = { key : 'key', cert : 'cert', requestCert : true, ca : 'ca' };
+
             const mockNodeServer = { listen : vi.fn(( p, cb ) => cb()), close : vi.fn( cb => cb()) };
             const { createServer } = await import( 'https' );
             const mockCreateServer = vi.mocked( createServer ).mockReturnValue( mockNodeServer as any );

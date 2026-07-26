@@ -6,7 +6,7 @@ export { RequestContext, Context as RequestContextStore } from './core/context.j
 export { Reflector } from './core/reflector.js';
 export * from './errors.js';
 export * from './config.js';
-export { Logger, LogContext, ServerWebSocket, PeerCert, PeerCertSubject, EndpointRequest, EndpointResponse, MiddlewareClass, Middleware } from './core/types.js';
+export { Logger, LogContext, ServerWebSocket, PeerCert, PeerCertSubject, EndpointRequest, EndpointResponse, ResponseBag, MiddlewareClass, Middleware } from './core/types.js';
 export {
     pathCompiler,
     pathMatcher,
@@ -29,6 +29,19 @@ export {
     Key,
     Keys
 } from './helpers/match.js';
+export {
+    resolveClientIp,
+    normalizeIp,
+    ipInCidr,
+    compileTrustProxy,
+    TrustProxy
+} from './helpers/client-ip.js';
+export {
+    normalizePeerCert,
+    needsNodeTlsCompat,
+    tlsMaterialToString
+} from './helpers/peer-cert.js';
 export * from './microservice/microservice.js';
 export * from './microservice/adapter.js';
 export * from './microservice/tcp-adapter.js';
+export * from './microservice/tcp-client.js';

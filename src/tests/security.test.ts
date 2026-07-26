@@ -111,15 +111,17 @@ describe( 'Security Helper & Integration Tests', () =>
 
             // Within limit (7 bytes)
             const resOk = await server.fetch( new Request( 'http://localhost/body-test', {
-                method : 'POST',
-                body   : '"hello"'
+                method  : 'POST',
+                body    : '"hello"',
+                headers : { 'Content-Type' : 'application/json' }
             }));
             expect( resOk.status ).toBe( 200 );
 
             // Exceeds limit (13 bytes)
             const resTooBig = await server.fetch( new Request( 'http://localhost/body-test', {
-                method : 'POST',
-                body   : '"hello world"'
+                method  : 'POST',
+                body    : '"hello world"',
+                headers : { 'Content-Type' : 'application/json' }
             }));
             expect( resTooBig.status ).toBe( 413 );
         });
@@ -152,6 +154,64 @@ describe( 'Security Helper & Integration Tests', () =>
 
             const res = await server.fetch( new Request( 'http://localhost/timeout-test' ));
             expect( res.status ).toBe( 408 );
+        });
+
+        it( 'should abort the request signal when timeout fires', async () =>
+        {
+            const server = new Server({ port : 0 });
+            let aborted = false;
+
+            class DummyController
+            {
+                async delay( req: any )
+                {
+                    for( let i = 0; i < 40; i++ )
+                    {
+                        if( req.abortSignal?.aborted )
+                        {
+                            aborted = true;
+                            break;
+                        }
+
+                        await new Promise( r => setTimeout( r, 5 ));
+                    }
+
+                    return 'done';
+                }
+            }
+            MetadataStore.registerController( 'DummyController', new DummyController());
+            MetadataStore.registerEndpoint({
+                controller   : 'DummyController',
+                methodName   : 'delay',
+                httpMethod   : 'GET',
+                path         : '/timeout-abort',
+                params       : [{ source : 'Request' }],
+                guards       : [],
+                interceptors : [],
+                security     : { timeout : 10 },
+                meta         : {}
+            });
+            ( server as any ).init();
+
+            const res = await server.fetch( new Request( 'http://localhost/timeout-abort' ));
+            expect( res.status ).toBe( 408 );
+            await new Promise( r => setTimeout( r, 30 ));
+            expect( aborted ).toBe( true );
+        });
+
+        it( 'should map ServerError.code through the outer fetch catch', async () =>
+        {
+            const server = new Server({ port : 0 });
+            const { NotFoundError } = await import( '../errors.js' );
+            ( server as any ).router.find = () =>
+            {
+                throw new NotFoundError( 'missing route internals' );
+            };
+
+            const res = await server.fetch( new Request( 'http://localhost/any' ));
+            expect( res.status ).toBe( 404 );
+            const body = await res.json();
+            expect( body.error ).toContain( 'missing route internals' );
         });
 
         it( 'should enforce allowedContentTypes and return 415', async () => 
@@ -190,6 +250,19 @@ describe( 'Security Helper & Integration Tests', () =>
                 headers : { 'Content-Type' : 'text/plain' }
             }));
             expect( resBad.status ).toBe( 415 );
+
+            // Body present without Content-Type
+            const resMissing = await server.fetch( new Request( 'http://localhost/type-test', {
+                method : 'POST',
+                body   : '{"a":1}'
+            }));
+            expect( resMissing.status ).toBe( 415 );
+
+            // Empty body without Content-Type is allowed
+            const resEmpty = await server.fetch( new Request( 'http://localhost/type-test', {
+                method : 'POST'
+            }));
+            expect( resEmpty.status ).toBe( 200 );
         });
 
         it( 'should enforce rateLimit and return 429', async () => 
@@ -221,6 +294,77 @@ describe( 'Security Helper & Integration Tests', () =>
 
             const res3 = await server.fetch( new Request( 'http://localhost/rate-test' ));
             expect( res3.status ).toBe( 429 );
+        });
+
+        it( 'should not let spoofed XFF bypass rate limits without trustProxy', async () =>
+        {
+            const server = new Server({ port : 0 });
+            class DummyController
+            {
+                index(){ return 'ok' }
+            }
+            MetadataStore.registerController( 'DummyController', new DummyController());
+            MetadataStore.registerEndpoint({
+                controller   : 'DummyController',
+                methodName   : 'index',
+                httpMethod   : 'GET',
+                path         : '/rate-xff',
+                params       : [],
+                guards       : [],
+                interceptors : [],
+                security     : { rateLimit : { max : 1, window : '1s' } },
+                meta         : {}
+            });
+            ( server as any ).init();
+
+            const first = await server.fetch( new Request( 'http://localhost/rate-xff', {
+                headers : { 'x-forwarded-for' : '203.0.113.1' }
+            }));
+            const second = await server.fetch( new Request( 'http://localhost/rate-xff', {
+                headers : { 'x-forwarded-for' : '203.0.113.2' }
+            }));
+
+            expect( first.status ).toBe( 200 );
+            expect( second.status ).toBe( 429 );
+        });
+
+        it( 'should rate-limit by XFF client when trustProxy matches the peer', async () =>
+        {
+            const server = new Server({
+                port       : 0,
+                trustProxy : [ '10.0.0.0/8' ]
+            });
+            class DummyController
+            {
+                index(){ return 'ok' }
+            }
+            MetadataStore.registerController( 'DummyController', new DummyController());
+            MetadataStore.registerEndpoint({
+                controller   : 'DummyController',
+                methodName   : 'index',
+                httpMethod   : 'GET',
+                path         : '/rate-trusted',
+                params       : [],
+                guards       : [],
+                interceptors : [],
+                security     : { rateLimit : { max : 1, window : '1s' } },
+                meta         : {}
+            });
+            ( server as any ).init();
+
+            const make = ( client: string ) =>
+            {
+                const req = new Request( 'http://localhost/rate-trusted', {
+                    headers : { 'x-forwarded-for' : client }
+                });
+                ( req as any ).remoteAddress = '10.0.0.5';
+
+                return server.fetch( req );
+            };
+
+            expect(( await make( '203.0.113.1' )).status ).toBe( 200 );
+            expect(( await make( '203.0.113.1' )).status ).toBe( 429 );
+            expect(( await make( '203.0.113.2' )).status ).toBe( 200 );
         });
     });
 });

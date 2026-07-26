@@ -1,8 +1,10 @@
 import { Context } from './context.js';
 import { MetadataStore } from './metadata.js';
-import { RequestReader, getContentType } from '../helpers/request-reader.js';
-import { EndpointMetadata, ParamMetadata, AugmentedRequest } from './types.js';
+import { RequestReader, getEffectiveBodyContentType } from '../helpers/request-reader.js';
+import { EndpointMetadata, ParamMetadata, AugmentedRequest, ResponseBag } from './types.js';
 import { SecurityOptions } from '../decorators.js';
+import { httpStatusFromError } from '../errors.js';
+import { resolveClientIp } from '../helpers/client-ip.js';
 
 function parseCookies( cookieHeader: string | null ): Record<string, string> 
 {
@@ -31,26 +33,88 @@ function parseCookies( cookieHeader: string | null ): Record<string, string>
 
 export class RequestProcessor 
 {
+    private static throwIfAborted( req: AugmentedRequest )
+    {
+        if( req.abortSignal?.aborted )
+        {
+            throw Object.assign( new Error( 'Request Timeout' ), { status : 408 });
+        }
+    }
+
+    /** Validate one SSE yield: prefer `chunk.data` when present, else the whole chunk. */
+    private static validateSseChunk( chunk: any, validator: (( v: any, path: string, ctx: any ) => any) | undefined, mode: string ): any
+    {
+        if( !validator ){ return chunk }
+
+        const responseCtx = { success : true, errors : [] as any[], mode };
+
+        if( typeof chunk === 'object' && chunk !== null && 'data' in chunk )
+        {
+            const data = validator( chunk.data, 'response', responseCtx );
+
+            if( !responseCtx.success )
+            {
+                throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
+            }
+
+            return { ...chunk, data };
+        }
+
+        const validated = validator( chunk, 'response', responseCtx );
+
+        if( !responseCtx.success )
+        {
+            throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
+        }
+
+        return validated;
+    }
+
+    private static formatSseChunk( chunk: any ): string
+    {
+        if( typeof chunk === 'object' && chunk !== null )
+        {
+            let sseString = '';
+
+            if( 'event' in chunk ){ sseString += `event: ${chunk.event}\n` }
+
+            if( 'id' in chunk ){ sseString += `id: ${chunk.id}\n` }
+
+            if( 'retry' in chunk ){ sseString += `retry: ${chunk.retry}\n` }
+            const dataVal = 'data' in chunk ? chunk.data : chunk;
+            const dataStr = typeof dataVal === 'object' ? JSON.stringify( dataVal ) : String( dataVal );
+            sseString += `data: ${dataStr}\n\n`;
+
+            return sseString;
+        }
+
+        return `data: ${String( chunk )}\n\n`;
+    }
+
     public static async resolveParam(
         p: ParamMetadata,
         req: AugmentedRequest,
         ctx: any,
         securityConfig?: SecurityOptions,
         contextModule?: any,
-        ws?: any
+        ws?: any,
+        responseBag?: ResponseBag
     ): Promise<any> 
     {
+        this.throwIfAborted( req );
+
         let val: any;
         switch ( p.source ) 
         {
             case 'Param': val = req.params[p.name!]; break;
             case 'Body': val = await RequestReader.getBody( req, securityConfig ); break;
+            case 'RawBody': val = await RequestReader.getRawBody( req, securityConfig ); break;
             case 'Query': val = p.name ? req.query[p.name] : req.query; break;
             case 'Header': val = req.headers.get( p.name! ); break;
             case 'Headers': val = Object.fromEntries( req.headers.entries()); break;
             case 'Request': val = req; break;
-            case 'Response': val = undefined; break;
-            case 'Ip': val = req.headers.get( 'x-forwarded-for' )?.split( ',' )[0] || '127.0.0.1'; break;
+            case 'Response': val = responseBag; break;
+            case 'Ip': val = resolveClientIp( req ); break;
             case 'Url': val = req.url; break;
             case 'Hostname': val = new URL( req.url ).hostname; break;
             case 'Path': val = new URL( req.url ).pathname; break;
@@ -87,7 +151,7 @@ export class RequestProcessor
             }
             else if( p.source === 'Body' ) 
             {
-                ctx.from = getContentType( req ) === 'application/x-www-form-urlencoded' ? 'query' : 'json';
+                ctx.from = getEffectiveBodyContentType( req ) === 'application/x-www-form-urlencoded' ? 'query' : 'json';
             }
 
             val = p.validator( val, p.name || p.source.toLowerCase(), ctx );
@@ -113,17 +177,21 @@ export class RequestProcessor
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
             const ctx = { success : true, errors : [], mode : 'strict' };
-            const middlewareResponse = new Response();
+            const middlewareResponse = new ResponseBag();
 
             const finalHandler = async () => 
             {
+                this.throwIfAborted( req );
+
                 // 2. Resolve parameters (Parsing & Validation)
                 const args: any[] = [];
 
                 for( const p of metadata.params ) 
                 {
-                    args.push( await this.resolveParam( p, req, ctx, securityConfig, controllerModule ));
+                    args.push( await this.resolveParam( p, req, ctx, securityConfig, controllerModule, undefined, middlewareResponse ));
                 }
+
+                this.throwIfAborted( req );
 
                 if( !ctx.success ) 
                 {
@@ -136,21 +204,9 @@ export class RequestProcessor
                 // 3. Execute Method
                 const result = await controller[metadata.methodName]( ...args );
 
+                this.throwIfAborted( req );
+
                 if( result instanceof Response ) { return result }
-
-                let validatedResult = result;
-
-                if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
-                {
-                    const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
-                    const responseCtx = { success : true, errors : [], mode };
-                    validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
-
-                    if( !responseCtx.success ) 
-                    {
-                        throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
-                    }
-                }
 
                 if( metadata.meta?.sse ) 
                 {
@@ -159,6 +215,11 @@ export class RequestProcessor
                         'Cache-Control' : 'no-cache',
                         'Connection'    : 'keep-alive'
                     });
+
+                    const validator = typeof metadata.returnTypeValidator === 'function'
+                        ? metadata.returnTypeValidator
+                        : undefined;
+                    const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
 
                     let bodyStream: any;
 
@@ -172,24 +233,8 @@ export class RequestProcessor
                                 {
                                     for await ( const chunk of result ) 
                                     {
-                                        let sseString = '';
-
-                                        if( typeof chunk === 'object' && chunk !== null ) 
-                                        {
-                                            if( 'event' in chunk ) { sseString += `event: ${chunk.event}\n` }
-
-                                            if( 'id' in chunk ) { sseString += `id: ${chunk.id}\n` }
-
-                                            if( 'retry' in chunk ) { sseString += `retry: ${chunk.retry}\n` }
-                                            const dataVal = 'data' in chunk ? chunk.data : chunk;
-                                            const dataStr = typeof dataVal === 'object' ? JSON.stringify( dataVal ) : String( dataVal );
-                                            sseString += `data: ${dataStr}\n\n`;
-                                        }
-                                        else 
-                                        {
-                                            sseString += `data: ${String( chunk )}\n\n`;
-                                        }
-                                        controller.enqueue( encoder.encode( sseString ));
+                                        const validated = RequestProcessor.validateSseChunk( chunk, validator, mode );
+                                        controller.enqueue( encoder.encode( RequestProcessor.formatSseChunk( validated )));
                                     }
                                     controller.close();
                                 }
@@ -212,6 +257,20 @@ export class RequestProcessor
                     return new Response( bodyStream, { headers });
                 }
 
+                let validatedResult = result;
+
+                if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
+                {
+                    const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+                    const responseCtx = { success : true, errors : [], mode };
+                    validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
+
+                    if( !responseCtx.success ) 
+                    {
+                        throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
+                    }
+                }
+
                 return ( typeof validatedResult === 'object' ? new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } }) : new Response( String( validatedResult || '' )));
             };
 
@@ -227,11 +286,15 @@ export class RequestProcessor
 
             try 
             {
+                this.throwIfAborted( req );
+
                 // Run Middlewares before guards
                 if( metadata.middlewares && metadata.middlewares.length > 0 ) 
                 {
                     for( const mName of metadata.middlewares ) 
                     {
+                        this.throwIfAborted( req );
+
                         const middlewareInstance = MetadataStore.getInjectable( mName, controllerModule );
                         if( !middlewareInstance ) 
                         {
@@ -277,6 +340,8 @@ export class RequestProcessor
                 // 1. Run Guards FIRST (Security gate)
                 for( const g of metadata.guards ) 
                 {
+                    this.throwIfAborted( req );
+
                     const guardModule = g.type === 'class' ? MetadataStore.getTokenModule( g.name ) : controllerModule;
                     const guardInstance = g.type === 'class' ? MetadataStore.getGuard( g.name, guardModule ) : controller;
                     const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
@@ -292,11 +357,11 @@ export class RequestProcessor
                             guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
                         }
                         else if([
-                            'Param', 'Body', 'Header', 'Headers', 'Cookies', 'Cookie',
-                            'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
+                            'Param', 'Body', 'RawBody', 'Header', 'Headers', 'Cookies', 'Cookie',
+                            'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer', 'Response'
                         ].includes( p.source )) 
                         {
-                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
+                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule, undefined, middlewareResponse ));
                         }
                         else 
                         {
@@ -309,34 +374,44 @@ export class RequestProcessor
                     await guardMethod.apply( guardInstance, finalArgs );
                 }
 
-                const response = await chain();
-                for( const [key, value] of middlewareResponse.headers.entries()) 
-                {
-                    response.headers.set( key, value );
-                }
-                return response;
+                this.throwIfAborted( req );
+
+                return middlewareResponse.applyTo( await chain());
             }
             catch ( err: any ) 
             {
                 if( err instanceof Response ) 
                 {
-                    for( const [key, value] of middlewareResponse.headers.entries()) 
-                    {
-                        err.headers.set( key, value );
-                    }
-                    return err;
+                    return middlewareResponse.applyTo( err );
                 }
-                const status = err.status || err.code || 500;
+                const status = httpStatusFromError( err );
 
                 const response = new Response( JSON.stringify( err.data || { success : false, error : err.message }), { 
                     status, 
                     headers : { 'Content-Type' : 'application/json' } 
                 });
-                for( const [key, value] of middlewareResponse.headers.entries()) 
-                {
-                    response.headers.set( key, value );
-                }
-                return response;
+
+                return middlewareResponse.applyTo( response );
+            }
+        });
+    }
+
+    /** Start a WS handler without blocking the upgrade response; never leave an unhandled rejection. */
+    public static runWs(
+        metadata: EndpointMetadata,
+        ws: any,
+        req: AugmentedRequest
+    ): void
+    {
+        void this.executeWs( metadata, ws, req ).catch(( err: any ) =>
+        {
+            try
+            {
+                ws.close( 1011, err?.message || 'Internal WS Handler Error' );
+            }
+            catch
+            {
+                // ignore secondary close failures
             }
         });
     }
@@ -378,7 +453,14 @@ export class RequestProcessor
             }
             catch ( err: any ) 
             {
-                ws.close( 4001, err.message || 'Internal WS Handler Error' );
+                try
+                {
+                    ws.close( 4001, err.message || 'Internal WS Handler Error' );
+                }
+                catch
+                {
+                    // ignore secondary close failures
+                }
             }
         });
     }
@@ -423,7 +505,7 @@ export class RequestProcessor
                         guardArgs.push( await this.resolveParam( p, req, ctx, undefined, guardModule ));
                     }
                     else if([
-                        'Param', 'Body', 'Header', 'Headers', 'Cookies', 'Cookie',
+                        'Param', 'Body', 'RawBody', 'Header', 'Headers', 'Cookies', 'Cookie',
                         'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
                     ].includes( p.source )) 
                     {

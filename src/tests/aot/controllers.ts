@@ -429,10 +429,24 @@ export class RealtimeController
     }
 
     @Sse( '/sse' )
-    async *handleSse() 
+    async *handleSse(): AsyncGenerator<{ event : string; data : { val : number } }> 
     {
         yield { event : 'update', data : { val : 1 } };
         yield { event : 'update', data : { val : 2 } };
+    }
+
+    @Sse( '/sse-strip' )
+    @ResponseMode( 'strip' )
+    async *handleSseStrip(): AsyncGenerator<{ event : string; data : { val : number } }> 
+    {
+        yield { event : 'update', data : { val : 1, extra : 'gone' } as any };
+    }
+
+    @Sse( '/sse-invalid' )
+    @ResponseMode( 'strict' )
+    async *handleSseInvalid(): AsyncGenerator<{ event : string; data : { val : number } }> 
+    {
+        yield { event : 'update', data : { val : 'nope' } as any };
     }
 }
 
@@ -444,6 +458,8 @@ export interface SumPayload {
 @Controller()
 export class MathMicroserviceController 
 {
+    lastNotify: string | undefined;
+
     @MessagePattern( 'math.sum' )
     sum( @Payload() data: SumPayload ) 
     {
@@ -459,7 +475,7 @@ export class MathMicroserviceController
     @EventPattern( 'logs.notify' )
     notify( @Payload() msg: string ) 
     {
-        // Event listener
+        this.lastNotify = msg;
     }
 }
 

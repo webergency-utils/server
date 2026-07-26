@@ -38,7 +38,7 @@ export interface PeerCert {
 }
 
 export interface ParamMetadata {
-    source     : 'Param' | 'Body' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer' | 'Cookies' | 'Cookie'
+    source     : 'Param' | 'Body' | 'RawBody' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer' | 'Cookies' | 'Cookie'
     name?      : string
     validator? : string | Validator
     mode?      : ValidationMode
@@ -78,8 +78,16 @@ export interface AugmentedRequest extends Request {
     globalSecurity? : any
     security?       : any
     meta            : Record<string, any>
-    _json?          : any
-    _raw?           : ArrayBuffer
+    /** Set when `security.timeout` is active; aborted when the request times out. */
+    abortSignal?    : AbortSignal
+    /** TCP peer address attached by the runtime adapter (if available). */
+    remoteAddress?  : string
+    /** Copied from ServerOptions.trustProxy for @Ip resolution. */
+    trustProxy?     : boolean | string[]
+    _json?             : any
+    _raw?              : ArrayBuffer
+    /** Set by getBody when Content-Type was missing and the body was sniffed. */
+    _bodyContentType?  : 'application/json' | 'application/x-www-form-urlencoded'
 }
 
 export interface LogContext {
@@ -106,7 +114,73 @@ export interface Logger {
 }
 
 export type EndpointRequest = AugmentedRequest;
-export type EndpointResponse = Response;
+
+/**
+ * Mutable status/headers bag shared by middleware and `@Response`.
+ * Headers and status are merged onto the final Fetch `Response` after the handler returns.
+ */
+export class ResponseBag
+{
+    #status = 200;
+    #statusSet = false;
+    public readonly headers = new Headers();
+
+    public get status(): number
+    {
+        return this.#status;
+    }
+
+    public set status( value: number )
+    {
+        this.#status = value;
+        this.#statusSet = true;
+    }
+
+    /** Nest-style alias for `status`. */
+    public get statusCode(): number
+    {
+        return this.#status;
+    }
+
+    public set statusCode( value: number )
+    {
+        this.status = value;
+    }
+
+    public get statusSet(): boolean
+    {
+        return this.#statusSet;
+    }
+
+    /** Merge this bag onto a Fetch Response (headers always; status when explicitly set). */
+    public applyTo( response: Response ): Response
+    {
+        if( this.#statusSet )
+        {
+            const headers = new Headers( response.headers );
+
+            for( const [key, value] of this.headers.entries())
+            {
+                headers.set( key, value );
+            }
+
+            return new Response( response.body, {
+                status     : this.#status,
+                statusText : response.statusText,
+                headers
+            });
+        }
+
+        for( const [key, value] of this.headers.entries())
+        {
+            response.headers.set( key, value );
+        }
+
+        return response;
+    }
+}
+
+export type EndpointResponse = ResponseBag;
 
 export interface Middleware 
 {

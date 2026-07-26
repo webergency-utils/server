@@ -3,6 +3,7 @@ import { SimpleMultibuffer, WebsocketFrame } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
+import { attachClientCert } from '../helpers/peer-cert.js';
 
 export class NodeAdapter implements ServerAdapter 
 {
@@ -22,26 +23,14 @@ export class NodeAdapter implements ServerAdapter
                 duplex  : 'half'
             });
 
+            if( req.socket?.remoteAddress )
+            {
+                ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
+            }
+
             if( req.socket && typeof req.socket.getPeerCertificate === 'function' ) 
             {
-                const rawCert = req.socket.getPeerCertificate();
-
-                if( rawCert && Object.keys( rawCert ).length > 0 ) 
-                {
-                    const serial = rawCert.serialNumber || '';
-                    ( fetchReq as any ).clientCert = {
-            subject : rawCert.subject || {},
-            issuer  : rawCert.issuer || {},
-            valid   : {
-                from : rawCert.valid_from ? new Date( rawCert.valid_from ) : new Date( 0 ),
-                to   : rawCert.valid_to ? new Date( rawCert.valid_to ) : new Date( 0 )
-            },
-            fingerprint    : rawCert.fingerprint || '',
-            fingerprint256 : rawCert.fingerprint256,
-            serialNumber   : serial,
-            serial         : serial
-          };
-                }
+                attachClientCert( fetchReq, req.socket.getPeerCertificate());
             }
             const response = await handler( fetchReq );
             res.statusCode = response.status;
@@ -127,6 +116,11 @@ export class NodeAdapter implements ServerAdapter
                 ( fetchReq as any ).nodeSocket = socket;
                 ( fetchReq as any ).nodeHead = head;
 
+                if( req.socket?.remoteAddress )
+                {
+                    ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
+                }
+
                 await handler( fetchReq );
             });
         }
@@ -174,7 +168,7 @@ export class NodeAdapter implements ServerAdapter
         const query = Object.fromEntries( url.searchParams.entries());
 
         const connection = new NodeServerWebSocket( socket, head, request.headers, params, query, metadata.meta?.wsOptions );
-        RequestProcessor.executeWs( metadata, connection, request as any );
+        RequestProcessor.runWs( metadata, connection, request as any );
 
         return new Response( null, { status : 200 });
     }

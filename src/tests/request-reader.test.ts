@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RequestReader, getContentType } from '../helpers/request-reader.js';
+import { RequestReader, getContentType, requestLikelyHasBody } from '../helpers/request-reader.js';
 import type { AugmentedRequest } from '../core/types.js';
 
 function createRequest( options:
@@ -98,6 +98,31 @@ describe( 'getContentType', () =>
 
         // Assert
         expect( result ).toBeNull();
+    });
+});
+
+describe( 'requestLikelyHasBody', () =>
+{
+    it( 'should detect Content-Length greater than zero', () =>
+    {
+        expect( requestLikelyHasBody( createRequest({
+            headers : { 'content-length' : '12' }
+        }))).toBe( true );
+        expect( requestLikelyHasBody( createRequest({
+            headers : { 'content-length' : '0' }
+        }))).toBe( false );
+    });
+
+    it( 'should treat non-identity Transfer-Encoding as a body', () =>
+    {
+        expect( requestLikelyHasBody( createRequest({
+            headers : { 'transfer-encoding' : 'chunked' }
+        }))).toBe( true );
+    });
+
+    it( 'should return false when no body indicators are present', () =>
+    {
+        expect( requestLikelyHasBody( createRequest({}))).toBe( false );
     });
 });
 
@@ -276,25 +301,36 @@ describe( 'RequestReader.getBody', () =>
         expect( body ).toEqual({ name : 'Ada' });
     });
 
-    it( 'should fall back to JSON.parse when content-type is missing or other', async () =>
+    it( 'should sniff JSON or urlencoded when Content-Type is missing', async () =>
     {
-        // Arrange
-        const missing = createRequest({ body : '{"x":1}' });
+        const jsonReq = createRequest({ body : '{"x":1}' });
+        const formReq = createRequest({ body : 'a=1&b=2' });
+
+        expect( await RequestReader.getBody( jsonReq )).toEqual({ x : 1 });
+        expect( jsonReq._bodyContentType ).toBe( 'application/json' );
+
+        expect( await RequestReader.getBody( formReq )).toEqual({ a : '1', b : '2' });
+        expect( formReq._bodyContentType ).toBe( 'application/x-www-form-urlencoded' );
+    });
+
+    it( 'should reject unsupported Content-Types and unsniffable bodies', async () =>
+    {
         const other = createRequest({
             body    : '{"y":2}',
             headers : { 'Content-Type' : 'text/plain' }
         });
+        const multipart = createRequest({
+            body    : '--boundary',
+            headers : { 'Content-Type' : 'multipart/form-data; boundary=boundary' }
+        });
+        const garbage = createRequest({ body : 'not-json-or-form' });
 
-        // Act
-        const a = await RequestReader.getBody( missing );
-        const b = await RequestReader.getBody( other );
-
-        // Assert
-        expect( a ).toEqual({ x : 1 });
-        expect( b ).toEqual({ y : 2 });
+        await expect( RequestReader.getBody( other )).rejects.toMatchObject({ status : 415 });
+        await expect( RequestReader.getBody( multipart )).rejects.toMatchObject({ status : 415 });
+        await expect( RequestReader.getBody( garbage )).rejects.toMatchObject({ status : 400 });
     });
 
-    it( 'should throw SyntaxError for invalid JSON bodies', async () =>
+    it( 'should throw 400 for invalid JSON bodies', async () =>
     {
         // Arrange
         const req = createRequest({
@@ -306,7 +342,7 @@ describe( 'RequestReader.getBody', () =>
         const act = RequestReader.getBody( req );
 
         // Assert
-        await expect( act ).rejects.toBeInstanceOf( SyntaxError );
+        await expect( act ).rejects.toMatchObject({ status : 400, message : 'Invalid JSON body' });
     });
 
     it( 'should propagate 413 from getRawBody when maxBodySize is exceeded', async () =>

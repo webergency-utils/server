@@ -166,7 +166,7 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( ctx.success ).toBe( true );
     });
 
-    it( 'should default Body from to json when content-type is missing', async () =>
+    it( 'should sniff JSON Body when content-type is missing', async () =>
     {
         // Arrange
         const seen: { from?: unknown } = {};
@@ -177,6 +177,65 @@ describe( 'RequestProcessor.resolveParam', () =>
             return v;
         });
         const req = createRequest({ body : '{"ok":true}' });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Act
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Body', validator },
+            req,
+            ctx
+        );
+
+        // Assert
+        expect( seen.from ).toBe( 'json' );
+        expect( result ).toEqual({ ok : true });
+    });
+
+    it( 'should sniff urlencoded Body when content-type is missing', async () =>
+    {
+        const seen: { from?: unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        {
+            seen.from = ctx.from;
+
+            return v;
+        });
+        const req = createRequest({ body : 'age=25' });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Body', validator },
+            req,
+            ctx
+        );
+
+        expect( seen.from ).toBe( 'query' );
+        expect( result ).toEqual({ age : '25' });
+    });
+
+    it( 'should reject Body when content-type is missing on a non-empty body', async () =>
+    {
+        const req = createRequest({ body : 'not-json-or-form' });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        await expect( RequestProcessor.resolveParam({ source : 'Body' }, req, ctx ))
+            .rejects.toMatchObject({ status : 400 });
+    });
+
+    it( 'should set Body from to json for application/json', async () =>
+    {
+        // Arrange
+        const seen: { from?: unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        {
+            seen.from = ctx.from;
+
+            return v;
+        });
+        const req = createRequest({
+            body    : '{"ok":true}',
+            headers : { 'Content-Type' : 'application/json' }
+        });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
         // Act
@@ -234,22 +293,58 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( ctx.from ).toBeUndefined();
     });
 
-    it( 'should resolve Ip from x-forwarded-for or default to 127.0.0.1', async () =>
+    it( 'should resolve RawBody as ArrayBuffer without JSON parsing', async () =>
     {
-        // Arrange
+        const req = createRequest({
+            body    : '{"x":1}',
+            headers : { 'Content-Type' : 'application/octet-stream' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const raw = await RequestProcessor.resolveParam({ source : 'RawBody' }, req, ctx );
+
+        expect( raw ).toBeInstanceOf( ArrayBuffer );
+        expect( new TextDecoder().decode( raw as ArrayBuffer )).toBe( '{"x":1}' );
+        expect( ( req as any )._json ).toBeUndefined();
+    });
+
+    it( 'should resolve Url Hostname and Path from the request URL', async () =>
+    {
+        const req = createRequest({ url : 'https://api.example.com:8443/v1/items?x=1' });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        expect( await RequestProcessor.resolveParam({ source : 'Url' }, req, ctx )).toBe( 'https://api.example.com:8443/v1/items?x=1' );
+        expect( await RequestProcessor.resolveParam({ source : 'Hostname' }, req, ctx )).toBe( 'api.example.com' );
+        expect( await RequestProcessor.resolveParam({ source : 'Path' }, req, ctx )).toBe( '/v1/items' );
+    });
+
+    it( 'should resolve Ip from remoteAddress and ignore XFF by default', async () =>
+    {
         const withHeader = createRequest({
             headers : { 'x-forwarded-for' : '10.0.0.1, 10.0.0.2' }
         });
+        ( withHeader as any ).remoteAddress = '192.0.2.1';
         const without = createRequest({});
         const ctx = { success : true, errors : [], mode : 'strict' };
 
-        // Act
         const ip1 = await RequestProcessor.resolveParam({ source : 'Ip' }, withHeader, ctx );
         const ip2 = await RequestProcessor.resolveParam({ source : 'Ip' }, without, ctx );
 
-        // Assert
-        expect( ip1 ).toBe( '10.0.0.1' );
+        expect( ip1 ).toBe( '192.0.2.1' );
         expect( ip2 ).toBe( '127.0.0.1' );
+    });
+
+    it( 'should resolve Ip from XFF when trustProxy matches the peer', async () =>
+    {
+        const req = createRequest({
+            headers : { 'x-forwarded-for' : '203.0.113.7, 10.0.0.2' }
+        });
+        ( req as any ).remoteAddress = '10.0.0.5';
+        ( req as any ).trustProxy = [ '10.0.0.0/8' ];
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const ip = await RequestProcessor.resolveParam({ source : 'Ip' }, req, ctx );
+        expect( ip ).toBe( '203.0.113.7' );
     });
 
     it( 'should parse Cookies with first-match-wins and named Cookie lookup', async () =>

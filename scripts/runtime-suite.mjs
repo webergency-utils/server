@@ -45,27 +45,6 @@ function assert( condition, message )
     }
 }
 
-function silenceExit()
-{
-    if( globalThis.Deno?.exit )
-    {
-        const original = globalThis.Deno.exit.bind( globalThis.Deno );
-        globalThis.Deno.exit = () => undefined;
-
-        return () => { globalThis.Deno.exit = original };
-    }
-
-    if( globalThis.process?.exit )
-    {
-        const original = globalThis.process.exit.bind( globalThis.process );
-        globalThis.process.exit = () => undefined;
-
-        return () => { globalThis.process.exit = original };
-    }
-
-    return () => undefined;
-}
-
 function failExit( code )
 {
     if( globalThis.Deno?.exit )
@@ -469,16 +448,7 @@ async function main()
     }
     finally
     {
-        const restore = silenceExit();
-
-        try
-        {
-            await server.shutdown();
-        }
-        finally
-        {
-            restore();
-        }
+        await server.shutdown();
     }
 }
 

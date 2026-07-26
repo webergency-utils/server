@@ -670,9 +670,7 @@ describe( 'Actual AOT Integration Test', () =>
 
         afterAll( async () => 
         {
-            const exitSpy = vi.spyOn( process, 'exit' ).mockImplementation(() => undefined as never );
             await testServer.shutdown();
-            exitSpy.mockRestore();
         });
 
         it( 'should handle SSE stream correctly', async () => 
@@ -694,6 +692,24 @@ describe( 'Actual AOT Integration Test', () =>
             }
             expect( content ).toContain( 'event: update\ndata: {"val":1}\n\n' );
             expect( content ).toContain( 'event: update\ndata: {"val":2}\n\n' );
+        });
+
+        it( 'should strip extra fields from each SSE chunk data', async () =>
+        {
+            const res = await testServer.fetch( new Request( `http://localhost:${port}/realtime/sse-strip` ));
+            expect( res.status ).toBe( 200 );
+            const content = await res.text();
+            expect( content ).toContain( 'data: {"val":1}\n\n' );
+            expect( content ).not.toContain( 'extra' );
+        });
+
+        it( 'should error the SSE stream when chunk data fails validation', async () =>
+        {
+            const res = await testServer.fetch( new Request( `http://localhost:${port}/realtime/sse-invalid` ));
+            expect( res.status ).toBe( 200 );
+            expect( res.headers.get( 'content-type' )).toBe( 'text/event-stream' );
+
+            await expect( res.text()).rejects.toThrow();
         });
 
         it( 'should establish WebSocket connection and echo messages', async () => 

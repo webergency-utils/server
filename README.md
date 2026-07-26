@@ -1,6 +1,6 @@
 # @webergency-utils/server
 
-A high-performance, industrial-grade web server framework designed for the modern JavaScript ecosystem. Built on a "Zero-Reflection" philosophy, it offloads metadata discovery and validation to a compile-time transformer, resulting in near-instant startups and zero runtime overhead.
+A high-performance, industrial-grade web server with compile-time type validation for the modern JavaScript ecosystem. Built on a zero-reflection model: route metadata and validators are generated ahead of time, so startup stays fast and the runtime stays lean across Node.js, Bun, and Deno.
 
 [![npm version](https://img.shields.io/npm/v/%40webergency-utils%2Fserver)](https://www.npmjs.com/package/@webergency-utils/server)
 [![License](https://img.shields.io/npm/l/%40webergency-utils%2Fserver)](https://www.npmjs.com/package/@webergency-utils/server)
@@ -12,8 +12,6 @@ A high-performance, industrial-grade web server framework designed for the moder
 [![codecov](https://codecov.io/gh/webergency-utils/server/branch/main/graph/badge.svg)](https://codecov.io/gh/webergency-utils/server)
 [![tests](https://github.com/webergency-utils/server/actions/workflows/ci.yml/badge.svg)](https://github.com/webergency-utils/server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/webergency-utils/server/actions/workflows/codeql.yml/badge.svg)](https://github.com/webergency-utils/server/actions/workflows/codeql.yml)
-
----
 
 ## TL;DR
 
@@ -38,7 +36,6 @@ export class UserController {
   }
 }
 
-// Start the server (automatically detects runtimes like Bun, Deno, or Node.js)
 const server = new Server({
   port: 3000,
   controllers: [UserController]
@@ -47,20 +44,29 @@ const server = new Server({
 await server.start();
 ```
 
----
-
 ## Installation & Setup
-
-Install the core package along with development dependencies (TypeScript compiler transformer components):
 
 ```bash
 npm install @webergency-utils/server
-npm install -D typescript ts-patch @webergency-utils/typechecker
+npm install -D typescript
 ```
 
-### `tsconfig.json` Configuration
+**Runtime dependency:** `@webergency-utils/typechecker` (validators; pulled in automatically).  
+**Peer dependency:** `typescript` `>=5.0.0` (compiler API for the AOT transformer / CLI).  
+**Engines:** Node.js `>=22` (Bun and Deno are also supported via native adapters).
 
-Enable ahead-of-time (AOT) routing and validation by registering the server plugin transformer in your compiler options:
+### AOT metadata
+
+Decorators are compile-time markers. Generate the route/validator manifest with the package CLI:
+
+```bash
+npx webergency-server-build
+# optional: --entry src/main.ts  --output ./_metadata.webergency-server.js  --watch
+```
+
+`Server` loads `_metadata.webergency-server.js` automatically when present (searches upward from `process.cwd()`).
+
+Alternatively, register the TypeScript transform plugin (requires a transform host such as [ts-patch](https://github.com/nonara/ts-patch)):
 
 ```json
 {
@@ -76,45 +82,55 @@ Enable ahead-of-time (AOT) routing and validation by registering the server plug
 }
 ```
 
----
+Entry points:
+
+| Export | Purpose |
+| --- | --- |
+| `@webergency-utils/server` | Runtime API |
+| `@webergency-utils/server/transformer` | AOT compiler plugin |
 
 ## Architecture & Internals
 
-The framework is built on a clean decoupling of compile-time logic and runtime abstraction:
-
-1. **Ahead-of-Time (AOT) Compiler Transformer:** AST transformations run during build/transpilation time. The transformer unrolls decorator metadata, registers routes, and compiles `@webergency-utils/typechecker` validators into inline binary/property checks directly. This eliminates dynamic reflection (`reflect-metadata`) and minimizes runtime startup latency.
-2. **Runtime HTTP Adapters:** The framework natively adopts Web Standard `Request` and `Response` fetch boundaries. A thin native bridge maps routing requests to runtime-specific server utilities (`Bun.serve`, `Deno.serve`, or Node's `http.createServer`).
-3. **Execution Pipeline:** Incoming requests are routed via a highly-optimized radix router, passed through middlewares, checked against class and method-level guards, intercepted by response adapters, and finally handled by controller endpoints.
-4. **Request coercion (`from`):** Parameter validators receive a typechecker `from` mode based on the source. Query, path params, and cookies use `from: 'query'` (string coercion and single-value→array wrapping). JSON bodies use `from: 'json'` (Date/RegExp/bigint/Set/Map revival only). `application/x-www-form-urlencoded` bodies are parsed like querystrings and validated with `from: 'query'`.
-
-**Runtime dependency:** `@webergency-utils/typechecker` (validators and AOT compilation). **Peer dependency:** `typescript` `>=5.0.0` (compiler API for the transform plugin).
-
----
+1. **AOT transformer / CLI** — Analyzes controllers at build time, emits route metadata and typechecker validators. Decorators are no-ops at runtime without that metadata.
+2. **Adapters** — Maps Web Standard `Request` / `Response` to `Bun.serve`, `Deno.serve`, or Node `http`/`https` (Node 22+). Runtime is auto-detected.
+3. **Pipeline** — Match route (linear first-match registration order) → security checks → middlewares → guards → interceptors → handler → response merge (`ResponseBag` headers/status).
+4. **Body `from` modes** — Query, path, cookie, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON bodies use `from: 'json'`. Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
+5. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
 
 ## Glossary
 
-* **Controller:** A decorated class that groups related HTTP routes and provides Dependency Injection scopes.
-* **Endpoint:** An individual handler method within a controller mapped to an HTTP verb and path.
-* **Validation Mode:** A setting (`strict`, `strip`, or `relaxed`) controlling how type mismatches and extra body/query parameters are validated.
-* **`from`:** Typechecker input conversion mode applied per parameter source (`json` for JSON bodies, `query` for querystrings, path/cookie values, and urlencoded bodies).
-* **Radix Router:** The underlying tree-structured matcher used for fast parameter route resolution.
-* **Server Adapter:** A bridge mapping web standard Fetch API objects to native runtime socket/HTTP engines.
-
----
+* **Controller** — Decorated class grouping HTTP/WS/SSE/RPC endpoints.
+* **Endpoint** — Handler mapped to a verb + path (or RPC pattern).
+* **Validation mode** — `strict` | `strip` | `relaxed` for body/query/response shaping.
+* **`from`** — Typechecker coercion mode (`json` vs `query`) chosen from the parameter source / Content-Type.
+* **ResponseBag** — Mutable headers/status bag shared by middleware and `@Response`.
+* **Guard / Interceptor / Middleware** — Auth gate, wrap-around handler, and pre-handler hooks.
+* **Adapter** — Runtime bridge (`Node` / `Bun` / `Deno`) under `Server`.
+* **Manifest** — Generated `_metadata.webergency-server.js` with routes and validators.
 
 ## API Reference
 
-### Classes
+### `Server`
 
-#### `Server`
-The main class to orchestrate, initialize, and start the application server.
+Orchestrates routing, adapters, security, and lifecycle.
 
-**Options Config Interface (`ServerOptions`):**
-* `port` (`number`): Port to bind the server to.
-* `controllers` (`any[]`): Array of controller classes to register.
-* `cors?` (`CorsOptions`): Server-wide Cross-Origin Resource Sharing rules.
-* `security?` (`SecurityOptions | boolean`): Global security settings (e.g. allowed content types).
-* `tls?` (`TlsOptions`): mTLS cert configuration keys.
+#### `new Server(options: ServerOptions)`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `port` | `number` | Listen port |
+| `controllers?` | `any[]` | Controller classes to register |
+| `guards?` / `interceptors?` | `any[]` | Global guards / interceptors |
+| `module?` | `any \| any[]` | Application module(s) |
+| `cors?` | `CorsOptions` | Global CORS |
+| `security?` | `SecurityOptions \| boolean` | Global security / headers |
+| `responseMode?` | `'strict' \| 'relaxed' \| 'strip'` | Default response validation mode |
+| `tls?` | `TlsOptions` | TLS / mTLS |
+| `trustProxy?` | `boolean \| string[]` | XFF trust: omit/`false` = never; `true` = loopback peer only; `string[]` = peer CIDR allowlist |
+| `logger?` / `logs?` | `Logger` / `boolean` | Logging |
+| `shutdownTimeout?` | `number` | Graceful shutdown wait |
+
+**Methods:** `start()`, `shutdown()`, `fetch(request)` (in-process), `getBody` / `getRawBody`, `on` / `off` for `start` | `beforeShutdown` | `shutdown` | `request` | `error`.
 
 ```typescript
 const server = new Server({ port: 3000, controllers: [UserController] });
@@ -122,79 +138,124 @@ await server.start();
 await server.shutdown();
 ```
 
----
+### Microservices
 
-### Parameter Decorators (Strict - Parentheses-Free)
+#### `Microservice` + `TcpMessageAdapter` + `TcpClient`
 
-These decorators inject context variables directly into endpoint handler arguments. **Must be called without parentheses.**
+TCP JSON-lines microservice protocol (`MessagePattern` request/response, `EventPattern` fire-and-forget).
 
-* **`@Request`**: Injects the raw web standard `Request` object.
-* **`@Context`**: Injects the current request execution context.
-* **`@Response`**: Injects the custom response mapping wrapper.
-* **`@Headers`**: Injects the request headers map.
-* **`@Ip`**: Injects the caller IP address.
-* **`@Peer`**: Injects the TLS client certificate information (`PeerCert`) for secure connections.
-* **`@Cookies`**: Injects parsed request cookies as a `Record<string, string>`.
-
----
-
-### Parameter Decorators (Hybrid / With Arguments)
-
-* **`@Body(mode?)`**: Injects the validated request body. Supports `strict`, `strip` (removes undeclared keys), and `relaxed` validation modes. Parses `application/json` (default) with `from: 'json'`, and `application/x-www-form-urlencoded` with `from: 'query'`.
-* **`@Query(name?, mode?)`**: Injects a specific query parameter or parses the entire query object. Validated with `from: 'query'` (string→number/boolean/Date coercion, array wrapping).
-* **`@Param(name)`**: Injects a named route path parameter (validated with `from: 'query'` when typed).
-* **`@Header(name)`**: Injects a specific header value.
-* **`@Cookie(name)`**: Injects a specific cookie value (validated with `from: 'query'` when typed).
-* **`@ConnectedSocket()`**: Injects the raw websocket instance for `@Ws` channels.
-
----
-
-### Route Decorators
-
-Class and method-level route endpoints:
-
-* **`@Controller(path)`**: Declares the base path and scopes for all nested endpoints in the class.
-* **`@Get(path?)` / `@Post(path?)` / `@Put(path?)` / `@Delete(path?)` / `@Patch(path?)` / `@Head(path?)` / `@All(path?)`**: Maps methods to standard HTTP route verbs.
-* **`@Ws(path?, options?)`**: Binds endpoint to a WebSocket connection channel.
-* **`@Sse(path?)`**: Binds endpoint to a Server-Sent Events stream.
-
----
-
-## 🚦 Validation Modes
-
-Our AOT engine supports three distinct validation modes for `@Body` and `@Query`:
-
-* **`strict` (Default)**: Rejects the request if it contains any properties not defined in your TypeScript interface.
-* **`strip`**: Automatically removes unknown properties, ensuring your controller only receives exactly what's defined in the type.
-* **`relaxed`**: Validates required fields but allows extra properties to pass through.
-
-Coercion is separate from mode and comes from typechecker `from`:
-
-* **JSON body** (`Content-Type: application/json`): `from: 'json'` — revives Date, RegExp, bigint, Set, and Map shapes. Does **not** coerce `"30"` → `30`.
-* **Query / Param / Cookie** and **urlencoded body** (`application/x-www-form-urlencoded`): `from: 'query'` — querystring-style coercion (including single values wrapped into arrays when an array is expected).
-
----
-
-## 🌍 Multi-Runtime Support
-
-The server is built on the Fetch API, allowing it to run natively anywhere:
-
-* **Bun**: Uses `Bun.serve` for maximum throughput.
-* **Deno**: Uses `Deno.serve` with native Fetch support.
-* **Node.js**: Uses a high-performance bridge to adapt Node's HTTP module to the Fetch API (requires Node 22+).
-
----
-
-## 🔒 Mutual TLS (mTLS) & `@Peer` Decorator
-
-The framework supports mutual TLS authentication (client certificate validation) across Node.js and Bun adapters.
-
-### 1. Configure the Server for mTLS
-Provide `requestCert: true` and `rejectUnauthorized: true` inside `tls` options:
+| Decorator | Client | Behavior |
+| --- | --- | --- |
+| `@MessagePattern(pattern)` | `TcpClient.send` | Request/response (`id` correlation) |
+| `@EventPattern(pattern)` | `TcpClient.emit` | Fire-and-forget (no reply; errors logged) |
 
 ```typescript
-import { Server } from '@webergency-utils/server';
-import fs from 'fs';
+import {
+  Microservice, TcpMessageAdapter, TcpClient,
+  Controller, MessagePattern, EventPattern, Payload
+} from '@webergency-utils/server';
+
+@Controller()
+class MathService {
+  @MessagePattern('math.sum')
+  sum(@Payload() data: { a: number; b: number }) {
+    return data.a + data.b;
+  }
+
+  @EventPattern('logs.notify')
+  notify(@Payload() msg: string) {
+    console.log(msg);
+  }
+}
+
+const ms = new Microservice(new TcpMessageAdapter(3999));
+await ms.start();
+
+const client = new TcpClient({ port: 3999 });
+await client.connect();
+await client.send('math.sum', { a: 1, b: 2 }); // → 3
+await client.emit('logs.notify', 'booted');
+```
+
+`MicroserviceNoReply` — sentinel returned for `@EventPattern` so adapters never write a reply envelope.
+
+### Route decorators
+
+* `@Controller(prefixOrOptions?)` — Base path / controller options.
+* `@Get` / `@Post` / `@Put` / `@Delete` / `@Patch` / `@Head` / `@All` — HTTP verbs (`path` default `''`).
+* `@Ws(path?, options?)` — WebSocket channel (`WsOptions`: `maxPayload?`, `pingInterval?`, `pingTimeout?`).
+* `@Sse(path?)` — Server-Sent Events. Yield `{ event?, id?, retry?, data }` or a bare payload. Declared return types validate **each chunk’s `data`** (or the whole chunk); `strict` / `strip` / `relaxed` apply; failure aborts the stream after headers are sent.
+* `@MessagePattern(pattern)` / `@EventPattern(pattern)` — TCP microservice patterns.
+* `@Cors(config?)` / `@Security(config?)` — Per-route CORS / security.
+* `@ResponseMode(mode)` — Per-handler response validation mode.
+* `@Protect` / `@OverrideProtect` / `@Unprotect` — Guards.
+* `@Intercept` / `@OverrideIntercept` / `@Unintercept` — Interceptors.
+* `@Use` / `@OverrideUse` / `@Unuse` — Middlewares.
+* `@Public` — Marks route/class public (framework-specific bypass metadata).
+* `@Meta(...)` / `@SetMetadata(key, value)` — Arbitrary metadata for `Reflector`.
+* `@Injectable(options?)` / `@Inject(token?)` / `@Module(metadata)` / `@Global()` — DI.
+* Lifecycle interfaces: `OnModuleInit`, `OnApplicationBootstrap`, `OnModuleDestroy`, `BeforeApplicationShutdown`, `OnApplicationShutdown`.
+
+### Parameter decorators
+
+**No parentheses** (parameter index metadata): `@Request`, `@Context`, `@Response`, `@Headers`, `@Ip`, `@Url`, `@Hostname`, `@Path`, `@RawBody`, `@Peer`, `@Cookies`, `@Payload` (RPC body alias).
+
+**With arguments:**
+
+* `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `from: 'json'`; urlencoded → `from: 'query'`. Missing CT sniffs JSON then form; unsupported CT (including multipart) → **415**; bad JSON → **400**. Uploads: `@Request` + `req.formData()`.
+* `@Query(name?, mode?)` — Query string (`from: 'query'`).
+* `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie.
+* `@ConnectedSocket()` — WebSocket instance for `@Ws`.
+
+`@Response` injects the shared `ResponseBag` (same as middleware). Set `headers` / `status` (`statusCode` alias); the handler return value still supplies the body.
+
+`@Ip` uses `trustProxy` + TCP peer / `X-Forwarded-For` (see `ServerOptions.trustProxy`).
+
+### Validation modes
+
+* **`strict` (default)** — Reject undeclared properties.
+* **`strip`** — Remove undeclared properties.
+* **`relaxed`** — Validate known fields; allow extras.
+
+Coercion via `from`:
+
+* JSON body: revive Date / RegExp / bigint / Set / Map shapes; no `"30"` → `30`.
+* Query / Param / Cookie / urlencoded: string coercion and single→array wrapping when needed.
+
+### Types & helpers
+
+* `EndpointRequest` / `EndpointResponse` (`ResponseBag`) / `Middleware` / `MiddlewareClass`
+* `ServerWebSocket`, `PeerCert`, `PeerCertSubject`, `TlsOptions`
+* `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
+* `Scope` (`DEFAULT` | `TRANSIENT` | `REQUEST`)
+* `ConsoleLogger` / `NoOpLogger`
+* `MetadataStore`, `Router`, `Reflector`, `RequestContext` / `RequestContextStore`
+* `loadAutoMetadata()` — Load nearest `_metadata.webergency-server.js`
+* Path helpers: `pathCompiler`, `pathMatcher`, `pathToRE`, …
+* IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`
+* Peer helpers: `normalizePeerCert`, `needsNodeTlsCompat`, `tlsMaterialToString`
+
+### Errors
+
+`ServerError` (with `.status`), `HTTPServerError`, `BadRequestError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `NotFoundError` (404), `ConflictError` (409), `PreconditionFailedError` (412), `RateLimitError` (429), `InternalServerError` (500), `ServiceUnavailableError` (503).  
+`httpStatusFromError(err)` maps thrown values to an HTTP status for the fetch pipeline.
+
+### Multi-runtime & mTLS
+
+* **Bun / Deno** — Native serve for HTTP and basic TLS; mTLS/`requestCert`/SNI use Node `https`.
+* **Node** — `http` / `https` Fetch bridge.
+
+```typescript
+import { Server, Controller, Get, Peer, PeerCert } from '@webergency-utils/server';
+import fs from 'node:fs';
+
+@Controller('/secure')
+class SecureController {
+  @Get('/profile')
+  profile(@Peer cert: PeerCert) {
+    return { cn: cert.subject.CN, serial: cert.serial };
+  }
+}
 
 const server = new Server({
   port: 443,
@@ -202,7 +263,7 @@ const server = new Server({
   tls: {
     key: fs.readFileSync('server-key.pem'),
     cert: fs.readFileSync('server-cert.pem'),
-    ca: fs.readFileSync('ca-cert.pem'), // Trusted CA for client certs
+    ca: fs.readFileSync('ca-cert.pem'),
     requestCert: true,
     rejectUnauthorized: true
   }
@@ -211,27 +272,23 @@ const server = new Server({
 await server.start();
 ```
 
-### 2. Inject Client Certificate Details
-Use the `@Peer` parameter decorator to inject the peer certificate:
+## Troubleshooting
 
-```typescript
-import { Controller, Get, Peer, PeerCert } from '@webergency-utils/server';
+### Decorators do nothing / routes 404
 
-@Controller('/secure')
-export class SecureController {
-  @Get('/profile')
-  getSecureProfile(@Peer cert: PeerCert) {
-    return {
-      message: `Hello ${cert.subject.CN}!`,
-      organization: cert.subject.O,
-      validTo: cert.valid.to,
-      serial: cert.serial
-    };
-  }
-}
-```
+**Cause:** No AOT manifest or transform output.  
+**Check:** `_metadata.webergency-server.js` exists and is importable from the process cwd.  
+**Fix:** Run `npx webergency-server-build` (or enable the transformer plugin) before `server.start()`.
 
----
+### `@Body` returns 415
+
+**Cause:** Non-empty body with unsupported Content-Type, or `allowedContentTypes` set and Content-Type missing/not allowlisted when a body is indicated.  
+**Fix:** Send `application/json` or `application/x-www-form-urlencoded`, or omit the body. Use `@Request` + `formData()` for multipart.
+
+### `@Ip` ignores `X-Forwarded-For`
+
+**Cause:** `trustProxy` not set, or the immediate peer is outside the allowlist.  
+**Fix:** Set `trustProxy: true` (loopback only) or `trustProxy: ['10.0.0.0/8', ...]`.
 
 ## Maintenance
 

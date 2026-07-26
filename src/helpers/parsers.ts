@@ -8,7 +8,9 @@ function isUnsafeKey( key: string | number ): boolean
 
 function createPlainObject(): Record<string | number, any>
 {
-    return Object.create( null );
+    // Ordinary objects: denylist already blocks pollution vectors.
+    // Null-prototype objects break instanceof Object / hasOwnProperty for consumers.
+    return {};
 }
 
 const Query = new Proxy( Object, {
