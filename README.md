@@ -181,7 +181,7 @@ The server is built on the Fetch API, allowing it to run natively anywhere:
 
 * **Bun**: Uses `Bun.serve` for maximum throughput.
 * **Deno**: Uses `Deno.serve` with native Fetch support.
-* **Node.js**: Uses a high-performance bridge to adapt Node's HTTP module to the Fetch API (requires Node 18+).
+* **Node.js**: Uses a high-performance bridge to adapt Node's HTTP module to the Fetch API (requires Node 22+).
 
 ---
 

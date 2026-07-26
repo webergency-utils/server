@@ -7,6 +7,11 @@ import { validators } from '@webergency-utils/typechecker';
 import { Context } from '../core/context.js';
 import { createServer } from 'http';
 
+/** Mocked http/https + fake Bun/Deno globals only make sense on Node. */
+const isNodeRuntime =
+    typeof ( globalThis as { Bun?: unknown }).Bun === 'undefined'
+    && typeof ( globalThis as { Deno?: unknown }).Deno === 'undefined';
+
 vi.mock( 'http', () => ({
     createServer : vi.fn()
 }));
@@ -597,7 +602,7 @@ describe( 'Server & Metadata', () =>
             warnSpy.mockRestore();
         });
 
-        it( 'should close Node.js server on shutdown', async () => 
+        it.skipIf( !isNodeRuntime )( 'should close Node.js server on shutdown', async () => 
         {
             const server = new Server({ port : 3005 });
             const mockNodeServer = { close : vi.fn( cb => cb()) };
@@ -610,7 +615,7 @@ describe( 'Server & Metadata', () =>
             spy.mockRestore();
         });
 
-        it( 'should detect different runtimes', () => 
+        it.skipIf( !isNodeRuntime )( 'should detect different runtimes', () => 
         {
             const server = new Server({ port : 3000 });
             
@@ -628,7 +633,7 @@ describe( 'Server & Metadata', () =>
             expect(( server as any ).detectRuntime()).toBe( 'Node' );
         });
 
-        it( 'should start Node.js bridge server', async () => 
+        it.skipIf( !isNodeRuntime )( 'should start Node.js bridge server', async () => 
         {
             // Mock http.createServer
             const mockServer = {
@@ -677,7 +682,7 @@ describe( 'Server & Metadata', () =>
             expect( mockRes.setHeader ).toHaveBeenCalledWith( 'content-type', 'application/json' );
         });
 
-        it( 'should start HTTPS server when tls is provided', async () => 
+        it.skipIf( !isNodeRuntime )( 'should start HTTPS server when tls is provided', async () => 
         {
             const mockServer = {
                 listen : vi.fn(( port, cb ) => cb()),
@@ -694,7 +699,7 @@ describe( 'Server & Metadata', () =>
             expect( mockServer.listen ).toHaveBeenCalledWith( 4430, expect.any( Function ));
         });
 
-        it( 'should start Bun server', async () => 
+        it.skipIf( !isNodeRuntime )( 'should start Bun server', async () => 
         {
             ( globalThis as any ).Bun = { serve : vi.fn() };
             try 
@@ -709,7 +714,7 @@ describe( 'Server & Metadata', () =>
             }
         });
 
-        it( 'should start Deno server', async () => 
+        it.skipIf( !isNodeRuntime )( 'should start Deno server', async () => 
         {
             ( globalThis as any ).Deno = { serve : vi.fn() };
             try 
@@ -724,7 +729,7 @@ describe( 'Server & Metadata', () =>
             }
         });
 
-        it( 'should handle Node.js bridge with empty body', async () => 
+        it.skipIf( !isNodeRuntime )( 'should handle Node.js bridge with empty body', async () => 
         {
             const mockServer = { listen : vi.fn(( p, cb ) => cb()), close : vi.fn() };
             const { createServer } = await import( 'http' );
@@ -1778,7 +1783,7 @@ describe( 'Server & Metadata', () =>
             expect( body.age ).toBe( 28 );
         });
 
-        it( 'should delegate to NodeAdapter in DenoAdapter when TLS is provided', async () => 
+        it.skipIf( !isNodeRuntime )( 'should delegate to NodeAdapter in DenoAdapter when TLS is provided', async () => 
         {
             const { DenoAdapter } = await import( '../adapters/deno-adapter.js' );
             const adapter = new DenoAdapter();
@@ -1804,12 +1809,11 @@ describe( 'Server & Metadata', () =>
             delete ( globalThis as any ).Deno;
         });
 
-        it( 'should close Deno native server gracefully when no TLS is provided', async () => 
+        it.skipIf( !isNodeRuntime )( 'should close Deno native server gracefully when no TLS is provided', async () => 
         {
             const { DenoAdapter } = await import( '../adapters/deno-adapter.js' );
             const adapter = new DenoAdapter();
 
-            const abortMock = vi.fn();
             const shutdownMock = vi.fn().mockResolvedValue( undefined );
             const finishedPromise = Promise.resolve();
 

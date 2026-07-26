@@ -25,6 +25,10 @@
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run",
+    "test:runtime": "node scripts/runtime-suite.mjs",
+    "test:runtime:smoke": "node scripts/runtime-smoke.mjs",
+    "test:bun": "bun --bun ./node_modules/vitest/vitest.mjs run && bun scripts/runtime-suite.mjs",
+    "test:deno": "deno run --allow-net --allow-env --allow-read --node-modules-dir=auto scripts/runtime-suite.mjs",
     "fuzz": "npm run build:fuzz && jazzer fuzz_server.cjs",
     "coverage": "vitest run --coverage",
     "clean": "rm -rf ./dist ./dist-fuzz",
@@ -47,6 +51,9 @@
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
