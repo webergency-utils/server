@@ -441,8 +441,10 @@ async function main()
         await check( 'WebSocket path + query params', async () =>
         {
             const ws = new WebSocket( `${wsBase}/suite/ws-params/vip-room?token=super-secret` );
+            // Listen before open — server may send the welcome as soon as the socket opens.
+            const welcomeP = waitForMessage( ws );
             await waitForOpen( ws );
-            const welcome = await waitForMessage( ws );
+            const welcome = await welcomeP;
             assert( welcome === 'Room: vip-room, Token: super-secret', `welcome ${welcome}` );
             ws.close();
             await waitForClose( ws );

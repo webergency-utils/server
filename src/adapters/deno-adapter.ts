@@ -1,16 +1,16 @@
 import { ServerAdapter, TlsOptions } from './adapter.js';
 import { EventEmitter } from 'node:events';
 
-export class DenoAdapter implements ServerAdapter 
+export class DenoAdapter implements ServerAdapter
 {
     private server? : any;
     private abortController? : AbortController;
     private isNodeCompat = false;
     private nodeAdapterInstance? : any;
 
-    async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void> 
+    async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void>
     {
-        if( tls ) 
+        if( tls )
         {
             this.isNodeCompat = true;
             const { NodeAdapter } = await import( './node-adapter.js' );
@@ -23,49 +23,63 @@ export class DenoAdapter implements ServerAdapter
 
         this.isNodeCompat = false;
         this.abortController = new AbortController();
-        const options: any = { 
+        const options: any = {
             port,
-            signal: this.abortController.signal
+            signal : this.abortController.signal
         };
 
         this.server = ( globalThis as any ).Deno.serve( options, handler );
     }
 
-    async upgrade( request: Request, metadata: any, params: any ): Promise<Response> 
+    async upgrade( request: Request, metadata: any, params: any ): Promise<Response>
     {
-        if( this.isNodeCompat && this.nodeAdapterInstance ) 
+        if( this.isNodeCompat && this.nodeAdapterInstance )
         {
             return this.nodeAdapterInstance.upgrade( request, metadata, params );
         }
 
+        // Import before upgrade so we can attach `open` without missing a sync readyState change.
+        const { RequestProcessor } = await import( '../core/request-processor.js' );
         const url = new URL( request.url );
         const query = Object.fromEntries( url.searchParams.entries());
         const { socket, response } = ( globalThis as any ).Deno.upgradeWebSocket( request );
-    
-        const { RequestProcessor } = await import( '../core/request-processor.js' );
         const connection = new DenoServerWebSocket( socket, request.headers, params, query, metadata.meta?.wsOptions );
-        RequestProcessor.executeWs( metadata, connection, request as any );
-    
+
+        const start = () =>
+        {
+            RequestProcessor.executeWs( metadata, connection, request as any );
+        };
+
+        // Deno WebSockets cannot send until `open` (unlike Node/Bun upgrade paths).
+        if( socket.readyState === 1 )
+        {
+            start();
+        }
+        else
+        {
+            socket.addEventListener( 'open', start, { once : true });
+        }
+
         return response;
     }
 
-    async close(): Promise<void> 
+    async close(): Promise<void>
     {
-        if( this.isNodeCompat && this.nodeAdapterInstance ) 
+        if( this.isNodeCompat && this.nodeAdapterInstance )
         {
             await this.nodeAdapterInstance.close();
 
             return;
         }
 
-        if( this.abortController ) 
+        if( this.abortController )
         {
             this.abortController.abort();
         }
 
-        if( this.server ) 
+        if( this.server )
         {
-            if( typeof this.server.shutdown === 'function' ) 
+            if( typeof this.server.shutdown === 'function' )
             {
                 await this.server.shutdown();
             }
@@ -74,12 +88,14 @@ export class DenoAdapter implements ServerAdapter
     }
 }
 
-class DenoServerWebSocket 
+class DenoServerWebSocket
 {
     private emitter            : any;
     private pingIntervalTimer? : any;
     private pingTimeoutTimer?  : any;
     private lastPongReceived = true;
+    private isOpen = false;
+    private pending: any[] = [];
 
     constructor(
         private socket: any,
@@ -87,19 +103,34 @@ class DenoServerWebSocket
         public params: Record<string, string>,
         public query: Record<string, string>,
         private wsOptions?: { pingInterval? : number, pingTimeout? : number, maxPayload? : number }
-    ) 
+    )
     {
         this.emitter = new EventEmitter();
 
-        this.socket.addEventListener( 'message', ( e: any ) => 
+        if( this.socket.readyState === 1 )
+        {
+            this.isOpen = true;
+            this.startHeartbeat();
+        }
+        else
+        {
+            this.socket.addEventListener( 'open', () =>
+            {
+                this.isOpen = true;
+                this.flushPending();
+                this.startHeartbeat();
+            }, { once : true });
+        }
+
+        this.socket.addEventListener( 'message', ( e: any ) =>
         {
             const maxPayload = this.wsOptions?.maxPayload;
 
-            if( maxPayload !== undefined ) 
+            if( maxPayload !== undefined )
             {
                 const len = typeof e.data === 'string' ? new TextEncoder().encode( e.data ).length : ( e.data.byteLength !== undefined ? e.data.byteLength : e.data.length || 0 );
 
-                if( len > maxPayload ) 
+                if( len > maxPayload )
                 {
                     this.close( 1009, 'Message Too Big' );
 
@@ -108,108 +139,126 @@ class DenoServerWebSocket
             }
             this.emitter.emit( 'message', e.data );
         });
-        this.socket.addEventListener( 'close', ( e: any ) => 
+        this.socket.addEventListener( 'close', ( e: any ) =>
         {
             this.clearTimers();
             this.emitter.emit( 'close', e.code, e.reason );
         });
-        this.socket.addEventListener( 'error', ( e: any ) => 
+        this.socket.addEventListener( 'error', ( e: any ) =>
         {
             this.clearTimers();
             this.emitter.emit( 'error', e.error );
         });
 
-        this.socket.addEventListener( 'pong', () => 
+        this.socket.addEventListener( 'pong', () =>
         {
             this.lastPongReceived = true;
 
-            if( this.pingTimeoutTimer ) 
+            if( this.pingTimeoutTimer )
             {
                 clearTimeout( this.pingTimeoutTimer );
                 this.pingTimeoutTimer = undefined;
             }
         });
+    }
 
-        // Heartbeat logic
-        if( this.wsOptions?.pingInterval ) 
+    private flushPending()
+    {
+        for( const data of this.pending )
         {
-            this.pingIntervalTimer = setInterval(() => 
+            this.socket.send( data );
+        }
+        this.pending = [];
+    }
+
+    private startHeartbeat()
+    {
+        if( !this.wsOptions?.pingInterval ){ return }
+
+        this.pingIntervalTimer = setInterval(() =>
+        {
+            if( !this.lastPongReceived )
             {
-                if( !this.lastPongReceived ) 
+                if( !this.wsOptions?.pingTimeout )
                 {
-                    if( !this.wsOptions?.pingTimeout ) 
-                    {
-                        this.close( 1002, 'Ping Timeout' );
-
-                        return;
-                    }
-                }
-
-                this.lastPongReceived = false;
-                try 
-                {
-                    if( typeof this.socket.ping === 'function' ) 
-                    {
-                        this.socket.ping();
-                    }
-                    else 
-                    {
-                        this.lastPongReceived = true;
-                    }
-                }
-                catch ( e ) 
-                {
-                    this.close( 1002, 'Ping failed' );
+                    this.close( 1002, 'Ping Timeout' );
 
                     return;
                 }
+            }
 
-                if( this.wsOptions?.pingTimeout ) 
+            this.lastPongReceived = false;
+            try
+            {
+                if( typeof this.socket.ping === 'function' )
                 {
-                    this.pingTimeoutTimer = setTimeout(() => 
-                    {
-                        if( !this.lastPongReceived ) 
-                        {
-                            this.close( 1002, 'Ping Timeout' );
-                        }
-                    }, this.wsOptions.pingTimeout );
+                    this.socket.ping();
                 }
-            }, this.wsOptions.pingInterval );
-        }
+                else
+                {
+                    this.lastPongReceived = true;
+                }
+            }
+            catch( e )
+            {
+                this.close( 1002, 'Ping failed' );
+
+                return;
+            }
+
+            if( this.wsOptions?.pingTimeout )
+            {
+                this.pingTimeoutTimer = setTimeout(() =>
+                {
+                    if( !this.lastPongReceived )
+                    {
+                        this.close( 1002, 'Ping Timeout' );
+                    }
+                }, this.wsOptions.pingTimeout );
+            }
+        }, this.wsOptions.pingInterval );
     }
 
-    private clearTimers() 
+    private clearTimers()
     {
-        if( this.pingIntervalTimer ) 
+        if( this.pingIntervalTimer )
         {
             clearInterval( this.pingIntervalTimer );
             this.pingIntervalTimer = undefined;
         }
 
-        if( this.pingTimeoutTimer ) 
+        if( this.pingTimeoutTimer )
         {
             clearTimeout( this.pingTimeoutTimer );
             this.pingTimeoutTimer = undefined;
         }
     }
 
-    send( data: any ) 
+    send( data: any )
     {
+        if( !this.isOpen )
+        {
+            this.pending.push( data );
+
+            return;
+        }
+
         this.socket.send( data );
     }
 
-    close( code?: number, reason?: string ) 
+    close( code?: number, reason?: string )
     {
         this.clearTimers();
+        this.pending = [];
         this.socket.close( code, reason );
     }
 
-    on( event: string, cb: Function ) 
+    on( event: string, cb: Function )
     {
         this.emitter.on( event, cb as any );
     }
 
-    off( event: string, cb: Function ) 
+    off( event: string, cb: Function )
     {
         this.emitter.off( event, cb as any );
     }
