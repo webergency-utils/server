@@ -84,4 +84,6 @@ jobs:
         run: npm run build
 
       - name: Run Deno adapter suite
-        run: deno run --allow-net --allow-env --allow-read --node-modules-dir=auto scripts/runtime-suite.mjs
+        # Use npm ci's node_modules (manual); min-dep-age=0 avoids Deno blocking
+        # freshly published workspace deps like typechecker within 24h.
+        run: deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-suite.mjs

@@ -214,4 +214,21 @@ describe( 'QueryParser', () =>
             search : 'hello world'
         });
     });
+
+    it( 'should not pollute Object.prototype via __proto__ keys', () =>
+    {
+        // Arrange
+        const marker = `__fuzz_${Date.now()}`;
+
+        // Act
+        QueryParser.parse( `__proto__[${marker}]=polluted` );
+        QueryParser.parse( `constructor[prototype][${marker}]=polluted` );
+        QueryParser.parse( `__proto__[K` );
+
+        // Assert
+        expect( Object.prototype ).not.toHaveProperty( marker );
+        expect( Object.prototype ).not.toHaveProperty( 'K' );
+        expect( QueryParser.parse( `__proto__=x` )).not.toHaveProperty( '__proto__' );
+        expect( QueryParser.parse( `safe=1&__proto__[x]=2` )).toEqual({ safe : '1' });
+    });
 });

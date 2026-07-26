@@ -5,7 +5,7 @@
  *   npm run build
  *   node scripts/runtime-smoke.mjs
  *   bun  scripts/runtime-smoke.mjs
- *   deno run --allow-net --allow-env --allow-read --node-modules-dir=auto scripts/runtime-smoke.mjs
+ *   deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-smoke.mjs
  */
 import { Server, MetadataStore } from '../dist/index.js';
 

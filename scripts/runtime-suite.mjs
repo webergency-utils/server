@@ -8,7 +8,7 @@
  *   node --import tsx scripts/runtime-suite.mjs   # tsx optional; plain node works
  *   node scripts/runtime-suite.mjs
  *   bun  scripts/runtime-suite.mjs
- *   deno run --allow-net --allow-env --allow-read --node-modules-dir=auto scripts/runtime-suite.mjs
+ *   deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-suite.mjs
  */
 import { Server, MetadataStore } from '../dist/index.js';
 import { validators } from '@webergency-utils/typechecker';
