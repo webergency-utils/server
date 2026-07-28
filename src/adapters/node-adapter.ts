@@ -1,18 +1,56 @@
-import { ServerAdapter, TlsOptions } from './adapter.js';
-import { SimpleMultibuffer, WebsocketFrame } from '../helpers/ws-frame.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
+import { SimpleMultibuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
+import { toAllowList } from '../core/router.js';
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 import { attachClientCert } from '../helpers/peer-cert.js';
+import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
+import { upgradeQuery } from './ws-upgrade.js';
+
+/** Applied whenever the caller omits a timeout so the listener is never left unprotected. */
+export const DEFAULT_NODE_HTTP: Required<NodeHttpOptions> = {
+    headersTimeout   : 60_000,
+    requestTimeout   : 300_000,
+    keepAliveTimeout : 5_000
+};
+
+function applyHttpTimeouts( server: any, http?: NodeHttpOptions ): void
+{
+    server.headersTimeout = http?.headersTimeout ?? DEFAULT_NODE_HTTP.headersTimeout;
+    server.requestTimeout = http?.requestTimeout ?? DEFAULT_NODE_HTTP.requestTimeout;
+    server.keepAliveTimeout = http?.keepAliveTimeout ?? DEFAULT_NODE_HTTP.keepAliveTimeout;
+}
 
 export class NodeAdapter implements ServerAdapter 
 {
     private nodeServer? : any;
 
-    async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void> 
+    async listen(
+        port: number,
+        handler: ( request: Request ) => Promise<Response>,
+        tls?: TlsOptions,
+        http?: NodeHttpOptions
+    ): Promise<void> 
     {
+        const { getRegistry } = await import( '../core/registry.js' );
+        const registry = getRegistry();
+
         const connectionHandler = async ( req: any, res: any ) => 
         {
+            // RFC 9110 asterisk-form (`OPTIONS * HTTP/1.1`) asks about server-wide
+            // capabilities. It is not a path, so it must never reach URL parsing or routing.
+            if( req.url === '*' ) 
+            {
+                const allowed = toAllowList( registry.getEndpoints().map(( ep: any ) => ep.httpMethod ));
+                res.statusCode = 204;
+
+                if( allowed.length > 0 ) { res.setHeader( 'Allow', allowed.join( ', ' )) }
+                res.end();
+
+                return;
+            }
+
             const protocol = ( req.socket as any ).encrypted ? 'https' : 'http';
             const url = `${protocol}://${req.headers.host}${req.url}`;
             const fetchReq = new Request( url, {
@@ -100,8 +138,9 @@ export class NodeAdapter implements ServerAdapter
             this.nodeServer = createServer( connectionHandler );
         }
 
-        const { getRegistry } = await import( '../core/registry.js' );
-        const hasWs = getRegistry().getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
+        applyHttpTimeouts( this.nodeServer, http );
+
+        const hasWs = registry.getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
 
         if( hasWs && this.nodeServer && typeof this.nodeServer.on === 'function' ) 
         {
@@ -164,8 +203,7 @@ export class NodeAdapter implements ServerAdapter
       `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
         );
 
-        const url = new URL( request.url );
-        const query = Object.fromEntries( url.searchParams.entries());
+        const query = upgradeQuery( request );
 
         const connection = new NodeServerWebSocket( socket, head, request.headers, params, query, metadata.meta?.wsOptions );
         RequestProcessor.runWs( metadata, connection, request as any );
@@ -175,9 +213,23 @@ export class NodeAdapter implements ServerAdapter
 
     async close(): Promise<void> 
     {
-        if( this.nodeServer ) 
+        if( !this.nodeServer ) { return }
+
+        // Stop accepting new connections without waiting for active ones — Server.shutdown
+        // drains activeRequests, then calls closeAllConnections for anything left.
+        this.nodeServer.close(() => {});
+
+        if( typeof this.nodeServer.closeIdleConnections === 'function' )
         {
-            this.nodeServer.close(() => {});
+            this.nodeServer.closeIdleConnections();
+        }
+    }
+
+    closeAllConnections(): void
+    {
+        if( this.nodeServer && typeof this.nodeServer.closeAllConnections === 'function' )
+        {
+            this.nodeServer.closeAllConnections();
         }
     }
 }
@@ -187,9 +239,9 @@ class NodeServerWebSocket
     private emitter = new EventEmitter();
     private rx_buffer = new SimpleMultibuffer();
     private tx_buffer = new SimpleMultibuffer();
-    private pingIntervalTimer? : any;
-    private pingTimeoutTimer?  : any;
-    private lastPongReceived = true;
+    /** Fragmented messages span reads, so the reader's state lives with the connection. */
+    private frameState         : FrameReadState = {};
+    private readonly heartbeat : WsHeartbeat;
 
     constructor(
         private socket: any,
@@ -197,9 +249,14 @@ class NodeServerWebSocket
         public headers: Headers,
         public params: Record<string, string>,
         public query: Record<string, string>,
-        private wsOptions?: { pingInterval? : number, pingTimeout? : number, maxPayload? : number }
+        private wsOptions?: WsHeartbeatOptions & { maxPayload? : number }
     ) 
     {
+        this.heartbeat = new WsHeartbeat({
+            ping  : () => { this.send( Buffer.alloc( 0 ), { opcode : 0x09 }) },
+            close : ( code, reason ) => this.close( code, reason )
+        }, this.wsOptions );
+
         this.socket.setTimeout( 0 );
         this.socket.setNoDelay();
 
@@ -216,7 +273,7 @@ class NodeServerWebSocket
         this.socket.on( 'data', ( data: Buffer ) => 
         {
             this.rx_buffer.append( data );
-            WebsocketFrame.read( this.rx_buffer, emit, { maxPayload : this.wsOptions?.maxPayload });
+            WebsocketFrame.read( this.rx_buffer, emit, { maxPayload : this.wsOptions?.maxPayload }, this.frameState );
         });
 
         this.socket.on( 'end', () => this.close( 1000 ));
@@ -230,64 +287,21 @@ class NodeServerWebSocket
         {
             this.send( payload, { opcode : 0x0a });
         });
-        this.on( 'pong', () => 
-        {
-            this.lastPongReceived = true;
-
-            if( this.pingTimeoutTimer ) 
-            {
-                clearTimeout( this.pingTimeoutTimer );
-                this.pingTimeoutTimer = undefined;
-            }
-        });
+        this.on( 'pong', () => this.heartbeat.pong());
         this.on( 'limit_exceeded', () => 
         {
             this.close( 1009, 'Message Too Big' );
+        });
+        this.on( 'protocol_error', ( code: number, reason: string ) => 
+        {
+            this.close( code, reason );
         });
         this.on( 'closing', ( code: number, reason: string ) => 
         {
             this.close( code, reason );
         });
 
-        // Heartbeat logic
-        if( this.wsOptions?.pingInterval ) 
-        {
-            this.pingIntervalTimer = setInterval(() => 
-            {
-                if( !this.lastPongReceived ) 
-                {
-                    if( !this.wsOptions?.pingTimeout ) 
-                    {
-                        this.close( 1002, 'Ping Timeout' );
-
-                        return;
-                    }
-                }
-
-                this.lastPongReceived = false;
-                try 
-                {
-                    this.send( Buffer.alloc( 0 ), { opcode : 0x09 });
-                }
-                catch ( e ) 
-                {
-                    this.close( 1002, 'Ping failed' );
-
-                    return;
-                }
-
-                if( this.wsOptions?.pingTimeout ) 
-                {
-                    this.pingTimeoutTimer = setTimeout(() => 
-                    {
-                        if( !this.lastPongReceived ) 
-                        {
-                            this.close( 1002, 'Ping Timeout' );
-                        }
-                    }, this.wsOptions.pingTimeout );
-                }
-            }, this.wsOptions.pingInterval );
-        }
+        this.heartbeat.start();
     }
 
     send( data: any, options: { opcode? : number } = {}) 
@@ -302,17 +316,7 @@ class NodeServerWebSocket
 
     close( code?: number, reason?: string ) 
     {
-        if( this.pingIntervalTimer ) 
-        {
-            clearInterval( this.pingIntervalTimer );
-            this.pingIntervalTimer = undefined;
-        }
-
-        if( this.pingTimeoutTimer ) 
-        {
-            clearTimeout( this.pingTimeoutTimer );
-            this.pingTimeoutTimer = undefined;
-        }
+        this.heartbeat.stop();
 
         let payload = Buffer.alloc( code !== undefined ? 2 : 0 );
 

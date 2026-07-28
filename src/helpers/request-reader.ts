@@ -99,6 +99,50 @@ function payloadTooLarge( maxSize: string | number ): never
     throw Object.assign( new Error( `Payload Too Large (limit: ${maxSize})` ), { status : 413 });
 }
 
+/**
+ * Applied unless `maxBodySize` is set explicitly. An uncapped body is a trivial memory
+ * DoS, so the safe value is the default rather than something callers must opt into.
+ */
+export const DEFAULT_MAX_BODY_SIZE = '1mb';
+
+const DEFAULT_MAX_BODY_BYTES = parseSize( DEFAULT_MAX_BODY_SIZE );
+
+/** `0` and `Infinity` opt out of the cap entirely. */
+function resolveBodyLimit( securityConfig?: SecurityOptions ): { limit : number | undefined, label : string | number }
+{
+    const configured = securityConfig?.maxBodySize;
+
+    if( configured === undefined )
+    {
+        return { limit : DEFAULT_MAX_BODY_BYTES, label : DEFAULT_MAX_BODY_SIZE };
+    }
+
+    if( configured === 0 || configured === Infinity )
+    {
+        return { limit : undefined, label : configured };
+    }
+
+    return { limit : parseSize( configured ), label : configured };
+}
+
+/**
+ * `parseInt` accepts trailing garbage (`'10abc'` -> `10`) and duplicate headers arrive
+ * joined as `'10, 20'`, so require a single fully numeric value and reject the rest.
+ */
+function parseContentLength( raw: string | null ): number | undefined
+{
+    if( raw === null ){ return undefined }
+
+    const trimmed = raw.trim();
+
+    if( !/^\d+$/.test( trimmed ) || !Number.isSafeInteger( Number( trimmed )))
+    {
+        throw Object.assign( new Error( `Invalid Content-Length: ${raw}` ), { status : 400 });
+    }
+
+    return Number( trimmed );
+}
+
 function concatChunks( chunks: Uint8Array[], total: number ): ArrayBuffer
 {
     const out = new Uint8Array( total );
@@ -188,31 +232,26 @@ export class RequestReader
     public static async getRawBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<ArrayBuffer> 
     {
         if( req._raw !== undefined ) { return req._raw }
-        const maxSize = securityConfig?.maxBodySize;
-        const limit = maxSize !== undefined ? parseSize( maxSize ) : undefined;
+        const { limit, label } = resolveBodyLimit( securityConfig );
+        const declared = parseContentLength( req.headers.get( 'content-length' ));
 
-        if( limit !== undefined ) 
+        if( limit !== undefined && declared !== undefined && declared > limit ) 
         {
-            const contentLength = req.headers.get( 'content-length' );
-
-            if( contentLength && parseInt( contentLength, 10 ) > limit ) 
-            {
-                payloadTooLarge( maxSize! );
-            }
+            payloadTooLarge( label );
         }
 
         // Prefer streaming when a size cap is set so chunked/omitted Content-Length
         // cannot force the entire payload into memory before rejection.
         if( limit !== undefined && req.body != null && typeof ( req.body as ReadableStream<Uint8Array> ).getReader === 'function' )
         {
-            return req._raw = await readStreamWithLimit( req.body as ReadableStream<Uint8Array>, limit, maxSize! );
+            return req._raw = await readStreamWithLimit( req.body as ReadableStream<Uint8Array>, limit, label );
         }
 
         const buffer = await req.arrayBuffer();
 
         if( limit !== undefined && buffer.byteLength > limit ) 
         {
-            payloadTooLarge( maxSize! );
+            payloadTooLarge( label );
         }
 
         return req._raw = buffer;

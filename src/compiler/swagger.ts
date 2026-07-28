@@ -2,7 +2,7 @@ import ts from 'typescript';
 import * as path from 'path';
 import * as fs from 'fs';
 import { buildJsonSchema } from '@webergency-utils/typechecker/transformer';
-import { ProjectRegistry } from './transformer.js';
+import { ProjectRegistry } from './registry.js';
 
 export class SwaggerSpecGenerator 
 {
@@ -193,7 +193,12 @@ export class SwaggerSpecGenerator
                         const rawSchema = buildJsonSchema( returnType, checker );
                         responseSchema = registerSchema( rawSchema );
                     }
-                    catch ( e ) {}
+                    catch ( e ) 
+                    {
+                        // The response stays `{ type: 'string' }`, which is wrong often enough
+                        // that it must not be silent.
+                        console.warn( `⚠️ [swagger] Could not derive a response schema for ${ep.controller}.${ep.methodName} (${checker.typeToString( returnType )}): ${( e as Error ).message}` );
+                    }
                 }
             }
 

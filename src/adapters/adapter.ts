@@ -18,8 +18,29 @@ export interface TlsOptions {
     } | null
 }
 
+/**
+ * Node `http.Server` / `https.Server` timeouts. Bun and Deno ignore these — their native
+ * listeners do not expose the same knobs. Defaults match Node's documented values and are
+ * applied explicitly so a directly-reachable deployment is not left with unset timers.
+ */
+export interface NodeHttpOptions {
+    /** Time to receive the complete HTTP headers. Default: 60_000. */
+    headersTimeout?   : number
+    /** Time for the entire request to complete. Default: 300_000. */
+    requestTimeout?   : number
+    /** Idle keep-alive socket timeout. Default: 5_000. */
+    keepAliveTimeout? : number
+}
+
 export interface ServerAdapter {
-    listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void>
+    listen(
+        port: number,
+        handler: ( request: Request ) => Promise<Response>,
+        tls?: TlsOptions,
+        http?: NodeHttpOptions
+    ): Promise<void>
     close(): Promise<void>
+    /** Drop every remaining socket after the graceful drain window. Node only. */
+    closeAllConnections?(): void
     upgrade?( request: Request, metadata: any, params: any ): Response | Promise<Response>
 }

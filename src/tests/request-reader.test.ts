@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RequestReader, getContentType, requestLikelyHasBody } from '../helpers/request-reader.js';
+import { RequestReader, getContentType, requestLikelyHasBody, DEFAULT_MAX_BODY_SIZE } from '../helpers/request-reader.js';
+import { mergeSecurityConfigs, parseSize } from '../helpers/security.js';
 import type { AugmentedRequest } from '../core/types.js';
+
+const DEFAULT_MAX_BODY_BYTES = parseSize( DEFAULT_MAX_BODY_SIZE );
 
 function createRequest( options:
 {
@@ -181,7 +184,7 @@ describe( 'RequestReader.getRawBody', () =>
         expect( req.arrayBufferCalls()).toBe( 1 );
     });
 
-    it( 'should skip size checks when maxBodySize is undefined', async () =>
+    it( 'should accept bodies under the default cap when maxBodySize is undefined', async () =>
     {
         // Arrange
         const large = 'x'.repeat( 100 );
@@ -192,6 +195,92 @@ describe( 'RequestReader.getRawBody', () =>
 
         // Assert
         expect( raw.byteLength ).toBe( 100 );
+    });
+
+    it( 'should apply the 1mb default cap when maxBodySize is undefined', async () =>
+    {
+        // Arrange
+        const req = createRequest({ body : 'x'.repeat( DEFAULT_MAX_BODY_BYTES + 1 ) });
+
+        // Act
+        const act = RequestReader.getRawBody( req );
+
+        // Assert
+        await expect( act ).rejects.toMatchObject({
+            status  : 413,
+            message : expect.stringContaining( DEFAULT_MAX_BODY_SIZE )
+        });
+    });
+
+    it( 'should reject early against the default cap using content-length', async () =>
+    {
+        // Arrange
+        const req = createRequest({
+            body    : 'tiny',
+            headers : { 'content-length' : String( DEFAULT_MAX_BODY_BYTES + 1 ) }
+        });
+
+        // Act
+        const act = RequestReader.getRawBody( req );
+
+        // Assert
+        await expect( act ).rejects.toMatchObject({ status : 413 });
+        expect( req.arrayBuffer ).not.toHaveBeenCalled();
+    });
+
+    it( 'should treat maxBodySize 0 as unlimited', async () =>
+    {
+        // Arrange
+        const req = createRequest({ body : 'x'.repeat( DEFAULT_MAX_BODY_BYTES + 64 ) });
+
+        // Act
+        const raw = await RequestReader.getRawBody( req, { maxBodySize : 0 });
+
+        // Assert
+        expect( raw.byteLength ).toBe( DEFAULT_MAX_BODY_BYTES + 64 );
+    });
+
+    it( 'should treat security:false as unlimited via merged config', async () =>
+    {
+        // Arrange
+        const req = createRequest({ body : 'x'.repeat( DEFAULT_MAX_BODY_BYTES + 8 ) });
+
+        // Act
+        const raw = await RequestReader.getRawBody( req, mergeSecurityConfigs([false]));
+
+        // Assert
+        expect( raw.byteLength ).toBe( DEFAULT_MAX_BODY_BYTES + 8 );
+    });
+
+    it( 'should reject a non-numeric content-length with 400', async () =>
+    {
+        // Arrange
+        const req = createRequest({ body : 'hello', headers : { 'content-length' : '5abc' } });
+
+        // Act
+        const act = RequestReader.getRawBody( req );
+
+        // Assert
+        await expect( act ).rejects.toMatchObject({ status : 400 });
+        expect( req.arrayBuffer ).not.toHaveBeenCalled();
+    });
+
+    it( 'should reject a negative content-length with 400', async () =>
+    {
+        // Arrange
+        const req = createRequest({ body : 'hello', headers : { 'content-length' : '-1' } });
+
+        // Act / Assert
+        await expect( RequestReader.getRawBody( req )).rejects.toMatchObject({ status : 400 });
+    });
+
+    it( 'should reject duplicate content-length values with 400', async () =>
+    {
+        // Arrange — duplicate headers arrive joined by the Headers API
+        const req = createRequest({ body : 'hello', headers : { 'content-length' : '5, 5' } });
+
+        // Act / Assert
+        await expect( RequestReader.getRawBody( req )).rejects.toMatchObject({ status : 400 });
     });
 
     it( 'should reject early when content-length exceeds maxBodySize', async () =>

@@ -17,6 +17,20 @@ export function parseSize( size: string | number ): number
     return Math.floor( parseFloat( match[1]) * SIZE_UNITS[match[2]]);
 }
 
+/** RFC-defined `Referrer-Policy` tokens; anything else is dropped rather than emitted. */
+const REFERRER_POLICIES = new Set([
+    'no-referrer',
+    'no-referrer-when-downgrade',
+    'origin',
+    'origin-when-cross-origin',
+    'same-origin',
+    'strict-origin',
+    'strict-origin-when-cross-origin',
+    'unsafe-url'
+]);
+
+const CROSS_DOMAIN_POLICIES = new Set([ 'none', 'master-only', 'by-content-type', 'by-ftp-filename', 'all' ]);
+
 export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | undefined )[]): SecurityOptions | undefined 
 {
     let merged: SecurityOptions | undefined = undefined;
@@ -32,6 +46,8 @@ export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | und
         else if( config === false ) 
         {
             merged = {
+        // `0` disables the default body cap; `security: false` opts out of protection wholesale.
+        maxBodySize                  : 0,
         frameguard                   : false,
         noSniff                      : false,
         hsts                         : false,
@@ -140,11 +156,11 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
     {
         const val = options.permittedCrossDomainPolicies;
 
-        if( val === undefined || val === true || val === 'none' ) 
+        if( val === undefined || val === true ) 
         {
             headers['X-Permitted-Cross-Domain-Policies'] = 'none';
         }
-        else if( typeof val === 'string' ) 
+        else if( typeof val === 'string' && CROSS_DOMAIN_POLICIES.has( val )) 
         {
             headers['X-Permitted-Cross-Domain-Policies'] = val;
         }
@@ -155,11 +171,11 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
     {
         const val = options.referrerPolicy;
 
-        if( val === undefined || val === true || val === 'no-referrer' ) 
+        if( val === undefined || val === true ) 
         {
             headers['Referrer-Policy'] = 'no-referrer';
         }
-        else if( typeof val === 'string' ) 
+        else if( typeof val === 'string' && REFERRER_POLICIES.has( val )) 
         {
             headers['Referrer-Policy'] = val;
         }
@@ -219,6 +235,34 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
     if( options.corp ) 
     {
         headers['Cross-Origin-Resource-Policy'] = options.corp === true ? 'same-origin' : options.corp;
+    }
+
+    // 12. Permissions-Policy (permissionsPolicy - Disabled by default)
+    if( options.permissionsPolicy ) 
+    {
+        const val = options.permissionsPolicy;
+
+        if( val === true ) 
+        {
+            // Deny the most commonly abused features.
+            headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()';
+        }
+        else if( typeof val === 'string' ) 
+        {
+            headers['Permissions-Policy'] = val;
+        }
+        else if( typeof val === 'object' ) 
+        {
+            const parts: string[] = [];
+
+            for( const [ feature, allowlist ] of Object.entries( val )) 
+            {
+                const origins = Array.isArray( allowlist ) ? allowlist : [allowlist];
+                parts.push( `${feature}=(${origins.join( ' ' )})` );
+            }
+
+            if( parts.length > 0 ) { headers['Permissions-Policy'] = parts.join( ', ' ) }
+        }
     }
 
     return headers;

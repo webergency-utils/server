@@ -1,3 +1,4 @@
+import { BadRequestError } from '../errors.js';
 
 const DEFAULT_DELIMITER = '/';
 const NOOP_VALUE = ( value: string ) => value;
@@ -546,6 +547,26 @@ export type MatchFunction<P extends ParamData> = ( path: string ) => Match<P>;
 export type Path = string | TokenData;
 
 /**
+ * `decodeURIComponent` throws `URIError` on malformed percent-encoding (e.g. `%ZZ`).
+ * A bad URL is the client's fault, so report 400 rather than letting it reach the
+ * generic 500 handler.
+ */
+function safeDecode( decode: Decode, name: string ): Decode
+{
+    return ( value: string ) =>
+    {
+        try
+        {
+            return decode( value );
+        }
+        catch
+        {
+            throw new BadRequestError( `Malformed percent-encoding in path parameter "${name}"` );
+        }
+    };
+}
+
+/**
  * Transform a path into a match function.
  */
 export function pathMatcher<P extends ParamData>(
@@ -561,9 +582,11 @@ export function pathMatcher<P extends ParamData>(
     {
         if( decode === false ) { return NOOP_VALUE }
 
-        if( key.type === 'param' ) { return decode }
+        const decodeOne = safeDecode( decode, key.name );
 
-        return ( value: string ) => value.split( delimiter ).map( decode as Decode );
+        if( key.type === 'param' ) { return decodeOne }
+
+        return ( value: string ) => value.split( delimiter ).map( v => decodeOne( v ));
     });
 
     return function match( input: string ): Match<P> 

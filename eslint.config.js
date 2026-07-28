@@ -7,7 +7,7 @@ export default tseslint.config(
         ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/build/**'],
     },
     {
-        files: ['src/**/*.ts', 'tests/**/*.ts'],
+        files: ['src/**/*.ts', 'tests/**/*.ts', 'bench/**/*.ts'],
         extends: [
             js.configs.recommended,
             ...tseslint.configs.recommended,

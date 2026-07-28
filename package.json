@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "license": "MIT",
   "type": "module",
@@ -26,6 +26,7 @@
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run",
+    "bench": "tsx bench/index.ts",
     "test:runtime": "node scripts/runtime-suite.mjs",
     "test:runtime:smoke": "node scripts/runtime-smoke.mjs",
     "test:bun": "bun --bun ./node_modules/vitest/vitest.mjs run && bun scripts/runtime-suite.mjs",
@@ -51,7 +52,7 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.3.0"
+    "@webergency-utils/typechecker": "^0.4.0"
   },
   "peerDependencies": {
     "typescript": "^5 || ^6"
@@ -70,6 +71,7 @@
     "c8": "^10.1.3",
     "esbuild": "^0.28.1",
     "eslint": "^10.4.1",
+    "tinybench": "^6.1.2",
     "tsx": "^4.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",

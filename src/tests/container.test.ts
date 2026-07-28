@@ -281,6 +281,145 @@ describe( 'DIContainer', () =>
         });
     });
 
+    it( 'should report a dependency cycle as a path', () =>
+    {
+        // Arrange
+        class A
+        {
+            static __injections__ = { constructorDeps : [ 'B' ], propertyDeps : {} };
+            constructor( public b: any ){}
+        }
+        class B
+        {
+            static __injections__ = { constructorDeps : [ 'A' ], propertyDeps : {} };
+            constructor( public a: any ){}
+        }
+
+        const registry = new ApplicationRegistry();
+        registry.registerProvider( 'A', A );
+        registry.registerProvider( 'B', B );
+
+        // Act
+        runWithRegistry( registry, () => DIContainer.resolve( 'A' ));
+
+        // Assert
+        expect([ ...registry.dependencyCycles ]).toContain( 'A -> B -> A' );
+    });
+
+    it( 'should serve a repeated resolution from the instance cache', () =>
+    {
+        // Arrange
+        class Svc { id = Math.random(); }
+        const registry = new ApplicationRegistry();
+        registry.registerProvider( 'Svc', Svc );
+
+        // Act
+        const [ first, second ] = runWithRegistry( registry, () => [
+            DIContainer.resolve( 'Svc' ),
+            DIContainer.resolve( 'Svc' )
+        ]);
+
+        // Assert
+        expect( first ).toBe( second );
+    });
+
+    it( 'should pick up providers registered after an earlier resolution', () =>
+    {
+        // Arrange
+        class Late { tag = 'late'; }
+        const registry = new ApplicationRegistry();
+        registry.registerProvider( 'Early', class Early {});
+
+        // Act / Assert — the memoized binding for Late must not be a cached miss
+        runWithRegistry( registry, () =>
+        {
+            DIContainer.resolve( 'Early' );
+            expect(() => DIContainer.resolve( 'Late' )).toThrow( /No provider registered/ );
+            registry.registerProvider( 'Late', Late );
+
+            expect( DIContainer.resolve( 'Late' ).tag ).toBe( 'late' );
+        });
+    });
+
+    it( 'should reject the same token being claimed by two modules', () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        class M1 {}
+        class M2 {}
+        const m1 = registry.createModuleInstance( 'M1', M1 );
+        const m2 = registry.createModuleInstance( 'M2', M2 );
+
+        // Act / Assert
+        registry.mapTokenToModule( 'Shared', m1 );
+        expect(() => registry.mapTokenToModule( 'Shared', m2 )).toThrow( /both M1 and M2/ );
+    });
+
+    it( 'should not serve a module-owned token from the flat provider map', () =>
+    {
+        // Arrange — the token is registered flat but claimed by a module that lacks it
+        const registry = new ApplicationRegistry();
+        class Owner {}
+        class Ghost {}
+        const owner = registry.createModuleInstance( 'Owner', Owner );
+        registry.registerProvider( 'Ghost', Ghost );
+        registry.mapTokenToModule( 'Ghost', owner );
+
+        // Act / Assert
+        runWithRegistry( registry, () =>
+        {
+            expect(() => DIContainer.resolve( 'Ghost' )).toThrow( /No provider registered for token: Ghost in module Owner/ );
+        });
+    });
+
+    it( 'should still resolve a module provider without an explicit context', () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        class Owner {}
+        class Priv { tag = 'private'; }
+        const owner = registry.createModuleInstance( 'Owner', Owner );
+        owner.providers.set( 'Priv', Priv );
+        registry.mapClassToModule( Priv, owner );
+        registry.mapTokenToModule( 'Priv', owner );
+
+        // Act / Assert
+        runWithRegistry( registry, () =>
+        {
+            expect( DIContainer.resolve( 'Priv' ).tag ).toBe( 'private' );
+        });
+    });
+
+    it( 'should run init hooks dependency-first and destroy hooks in reverse', async () =>
+    {
+        // Arrange
+        const calls: string[] = [];
+        class Dep
+        {
+            onModuleInit(){ calls.push( 'init:dep' ) }
+            onApplicationShutdown(){ calls.push( 'down:dep' ) }
+        }
+        class Host
+        {
+            static __injections__ = { constructorDeps : [ 'Dep' ], propertyDeps : {} };
+            constructor( public dep: any ){}
+            onModuleInit(){ calls.push( 'init:host' ) }
+            onApplicationShutdown(){ calls.push( 'down:host' ) }
+        }
+
+        const registry = new ApplicationRegistry();
+        registry.registerProvider( 'Host', Host );
+        registry.registerProvider( 'Dep', Dep );
+        runWithRegistry( registry, () => registry.resolveAll());
+
+        // Act
+        await registry.invokeHook( 'onModuleInit' );
+        await registry.invokeHook( 'onApplicationShutdown' );
+
+        // Assert
+        expect( calls ).toEqual([ 'init:dep', 'init:host', 'down:host', 'down:dep' ]);
+    });
+
     it( 'should resolve TRANSIENT circular deps via lazy proxy', () =>
     {
         // Arrange

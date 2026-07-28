@@ -104,19 +104,27 @@ const program = ts.createProgram({
     host
 });
 
+// Decorator problems arrive here during emit and are printed alongside tsc's own output.
+const aotDiagnostics: ts.Diagnostic[] = [];
+
 const emitResult = program.emit(
     undefined,
     undefined,
     undefined,
     undefined,
     {
-        before : [compilerPlugin( program ) as unknown as ts.TransformerFactory<ts.SourceFile>]
+        before : [
+            compilerPlugin( program, undefined, {
+                addDiagnostic : ( d ) => { aotDiagnostics.push( d as ts.Diagnostic ) }
+            }) as unknown as ts.TransformerFactory<ts.SourceFile>
+        ]
     }
 );
 
 const diagnostics = [
     ...ts.getPreEmitDiagnostics( program ),
-    ...emitResult.diagnostics
+    ...emitResult.diagnostics,
+    ...aotDiagnostics
 ];
 
 if( diagnostics.length )

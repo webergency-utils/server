@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware } from '../../index.js';
 
 import { constraint, format, tag } from '@webergency-utils/typechecker';
 
@@ -172,6 +172,12 @@ export class TypeSafetyController
     headExplicit(): void 
     {
         // void return
+    }
+
+    @Options( '/options-explicit' )
+    optionsExplicit() 
+    {
+        return { message : 'hello from options' };
     }
 
     @Get( '/get-fallback' )

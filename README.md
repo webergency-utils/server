@@ -105,9 +105,13 @@ Entry points:
 1. **AOT transformer / `webergency-tsc`** — Analyzes controllers at build time; emits `Symbol.for` meta + typechecker validators into each file’s JS. Decorators are no-ops without that emit.
 2. **Per-Server registry** — `ApplicationRegistry` is owned by each `Server` / `Microservice`. Bootstrap walks modules/controllers lazily on first `start()`/`fetch()`. Active registry is available to the request/DI stack via `getRegistry()` / `runWithRegistry()`.
 3. **Adapters** — Maps Web Standard `Request` / `Response` to `Bun.serve`, `Deno.serve`, or Node `http`/`https` (Node 22+). Runtime is auto-detected.
-4. **Pipeline** — Match route (linear first-match registration order) → security checks → middlewares → guards → interceptors → handler → response merge (`ResponseBag` headers/status).
-5. **Body `from` modes** — Query, path, cookie, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON bodies use `from: 'json'`. Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
-6. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
+4. **Pipeline** — Match route → security checks → middlewares → guards → interceptors → handler → response merge (`ResponseBag` headers/status).
+5. **Routing** — Exact paths resolve through a per-method map with no regex. Pattern routes are bucketed per method and tried most-specific first, so `/users/me` beats `/users/:id` and `/files/:name` beats `/files/*rest` no matter what order they were registered in. Registration order only breaks ties between equally specific patterns, and a pattern that can never be reached (e.g. a second `/u/:key` after `/u/:id`) is warned about at bootstrap. A request whose path matches only under other verbs gets **405** with `Allow`; an unknown path is still 404. A WebSocket upgrade to a non-WS path stays 404, since WS is a transport rather than an advertised method.
+6. **OPTIONS** — Genuine CORS preflight is answered by the framework before guards, using the target route's own `@Cors` config. A plain `OPTIONS` request routes normally to `@Options` / `@All`, or gets `204` + `Allow`. Asterisk-form `OPTIONS *` reports server-wide `Allow` without routing.
+7. **Body `from` modes** — Query, path, cookie, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON bodies use `from: 'json'`. Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
+8. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
+9. **Request ID** — Every request accepts or generates `X-Request-Id`, exposes it on `RequestContext` / `LogContext`, and echoes it on the response.
+10. **Health** — Optional `health` probes answer before routing: liveness while the process can answer, readiness only when bootstrapped, listening, and not shutting down. OpenTelemetry is left to consumer interceptors / `Server` events — see `docs/adr/0005-observability.md`.
 
 **Dependencies:** `@webergency-utils/typechecker` supplies runtime validators referenced by AOT-emitted code. Peer `typescript` (`^5 || ^6`) is required for `webergency-tsc`, the transformer plugin, and `register`. Package type is ESM (`"type": "module"`).
 
@@ -139,9 +143,13 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `guards?` / `interceptors?` | `any[]` | Flat guards / interceptors when not using `module` |
 | `module?` | `any \| any[]` | Application module(s) |
 | `cors?` | `CorsOptions` | Global CORS |
-| `security?` | `SecurityOptions \| boolean` | Global security / headers |
+| `security?` | `SecurityOptions \| boolean` | Global security / headers. `maxBodySize` defaults to `1mb`; set `0` (or `security: false`) for no cap |
 | `responseMode?` | `'strict' \| 'relaxed' \| 'strip'` | Default response validation mode |
 | `tls?` | `TlsOptions` | TLS / mTLS |
+| `headersTimeout?` | `number` | Node only: time to receive complete headers (default `60000`) |
+| `requestTimeout?` | `number` | Node only: time for the entire request (default `300000`) |
+| `keepAliveTimeout?` | `number` | Node only: idle keep-alive socket timeout (default `5000`) |
+| `health?` | `boolean \| { path?, readyPath? }` | Optional `GET /health` (live) and `GET /ready` (ready) probes |
 | `trustProxy?` | `string[]` | Peer CIDR allowlist for XFF; omit/`[]` = never trust. Use `TRUST_PROXY_LOOPBACK` for local loopback peers. |
 | `logger?` / `logs?` | `Logger` / `boolean` | Logging |
 | `shutdownTimeout?` | `number` | Graceful shutdown wait |
@@ -154,6 +162,20 @@ const server = new Server({ port: 3000, controllers: [UserController] });
 await server.start();
 await server.shutdown();
 ```
+
+#### CORS defaults (`CorsOptions`)
+
+* `allowedHeaders` is **deny-by-default**. When unset, a preflight only allows `Accept`, `Accept-Language`, `Content-Language`, `Content-Type`, and `Authorization`; anything else in `Access-Control-Request-Headers` is dropped instead of echoed back. Set `allowedHeaders` to replace that list.
+* A preflight whose `Origin` is not allowed gets **403**, not a 204 that looks successful.
+* Reflected (non-`*`) origins add `Vary: Origin`.
+
+#### Security header defaults (`SecurityOptions`)
+
+`security: true` (or any object) emits `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`, `X-Download-Options`, `X-Permitted-Cross-Domain-Policies`, `Referrer-Policy`, and `X-XSS-Protection: 0`. Off unless configured: `csp`, `coep`, `coop`, `corp`, `permissionsPolicy`.
+
+* `permissionsPolicy` — `true` sends `camera=(), microphone=(), geolocation=()`; a string is used verbatim; an object maps features to allowlists, e.g. `{ camera: [], geolocation: ["'self'"] }` → `camera=(), geolocation=('self')`.
+* `referrerPolicy` and `permittedCrossDomainPolicies` accept only their RFC-defined tokens. An unrecognized value is dropped rather than emitted as a malformed header.
+* `rateLimit` — `{ max, window?, strategy? }`. `window` accepts `'30s'` / `'5m'` / `'1h'` or milliseconds (default `1m`). `strategy: 'fixed'` (default) allows up to 2x `max` across a window boundary; `'sliding'` weights the previous window to smooth that. A rejection returns 429 with `Retry-After`. The limiter is in-memory and per-process — not distributed — and tracks at most 10 000 `path:ip` keys, evicting least-recently-used ones beyond that.
 
 ### Microservices
 
@@ -205,7 +227,8 @@ await ms.shutdown();
 
 * `@Controller(prefixOrOptions?)` — Base path / controller options.
 * `@Get` / `@Post` / `@Put` / `@Delete` / `@Patch` / `@Head` / `@All` — HTTP verbs (`path` default `''`).
-* `@Ws(path?, options?)` — WebSocket channel (`WsOptions`: `maxPayload?`, `pingInterval?`, `pingTimeout?`).
+* `@Options(path?)` — Non-preflight `OPTIONS` only. A genuine CORS preflight (both `Origin` and `Access-Control-Request-Method` present) is always answered by the framework **before guards run**, so it never reaches your handler — browsers omit credentials on preflight, and dispatching it into a `@Protect`ed route would reject it and break CORS. When no `@Options` route matches, the framework answers `204` with `Allow`.
+* `@Ws(path?, options?)` — WebSocket channel (`WsOptions`: `maxPayload?`, `pingInterval?`, `pingTimeout?`). On Node the frame reader enforces RFC 6455: unmasked client frames, non-zero RSV bits, unknown opcodes, oversized or fragmented control frames, bad close codes, and invalid UTF-8 all close the connection. Fragmented messages are reassembled, and `maxPayload` applies to the assembled message.
 * `@Sse(path?)` — Server-Sent Events. Yield `{ event?, id?, retry?, data }` or a bare payload. Declared return types validate **each chunk’s `data`** (or the whole chunk); `strict` / `strip` / `relaxed` apply; failure aborts the stream after headers are sent.
 * `@MessagePattern(pattern)` / `@EventPattern(pattern)` — TCP microservice patterns.
 * `@Cors(config?)` / `@Security(config?)` — Per-route CORS / security.
@@ -217,6 +240,14 @@ await ms.shutdown();
 * `@Meta(...)` / `@SetMetadata(key, value)` — Arbitrary metadata for `Reflector`.
 * `@Injectable(options?)` / `@Inject(token?)` / `@Module(metadata)` / `@Global()` — DI.
 * Lifecycle interfaces: `OnModuleInit`, `OnApplicationBootstrap`, `OnModuleDestroy`, `BeforeApplicationShutdown`, `OnApplicationShutdown`.
+
+### Dependency injection notes
+
+* **Tokens are module-scoped.** A provider is reachable from another module only if the owning module exports it. Two modules claiming the same token is a bootstrap error, as is two module classes sharing a name (modules are identified by class name).
+* **Resolution is memoized.** Each `(token, module)` pair caches its provider, declaring module, dependency list, and resolved scope, and instances are keyed by `(token, module)` so same-named tokens in different modules cannot collide. Registering a provider invalidates the cache, so late registration still works.
+* **Scope is inherited.** A provider becomes request-scoped as soon as anything it depends on is.
+* **Circular dependencies** resolve through a lazy proxy and are logged at bootstrap as `A -> B -> A`. A request scope declared inside a cycle cannot be detected, which is why the cycle is reported.
+* **Lifecycle order.** `onModuleInit` / `onApplicationBootstrap` run dependency-first; `onModuleDestroy`, `beforeApplicationShutdown`, and `onApplicationShutdown` run in reverse, so a provider is torn down before the things it depends on.
 
 ### Parameter decorators
 

@@ -822,9 +822,9 @@ describe( 'RequestProcessor.executeRpc', () =>
             run : () => ({ ok : true })
         });
         registry.registerGuard( 'RpcGuard', {
-            use : ( req: unknown, body: unknown, id: unknown, token: unknown ) =>
+            use : ( req: unknown, body: unknown, id: unknown, ws: unknown, token: unknown ) =>
             {
-                seen.push( req, body, id, token );
+                seen.push( req, body, id, ws, token );
             }
         });
         const meta = createEndpoint({
@@ -840,7 +840,8 @@ describe( 'RequestProcessor.executeRpc', () =>
                     { source : 'Request' },
                     { source : 'Body' },
                     { source : 'Param', name : 'id' },
-                    { source : 'WebSocket' }
+                    { source : 'WebSocket' },
+                    { source : 'Unknown' as any }
                 ],
                 isAsync   : false
             }]
@@ -855,7 +856,10 @@ describe( 'RequestProcessor.executeRpc', () =>
         expect( seen[0] ).toMatchObject({ _json : { n : 1 }, url : 'rpc://localhost/rpc.run' });
         expect( seen[1] ).toEqual({ n : 1 });
         expect( seen[2] ).toBeUndefined();
-        expect( seen[3] ).toBe( 'fallback-token' );
+        // No socket exists on the RPC path, so @ConnectedSocket resolves to null rather
+        // than silently consuming the next static @Protect argument.
+        expect( seen[3]).toBeNull();
+        expect( seen[4]).toBe( 'fallback-token' );
     });
 
     it( 'should wrap the RPC handler with registered interceptors', async () =>

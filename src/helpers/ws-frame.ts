@@ -89,6 +89,138 @@ function readUint32BE( buf: SimpleMultibuffer, offset: number ): number
     );
 }
 
+const OPCODE_CONTINUATION = 0x0;
+const OPCODE_TEXT = 0x1;
+const OPCODE_BINARY = 0x2;
+const OPCODE_CLOSE = 0x8;
+const OPCODE_PING = 0x9;
+const OPCODE_PONG = 0xa;
+
+const KNOWN_OPCODES = new Set([ OPCODE_CONTINUATION, OPCODE_TEXT, OPCODE_BINARY, OPCODE_CLOSE, OPCODE_PING, OPCODE_PONG ]);
+
+/** RFC 6455 §5.5: control frame payloads may not exceed 125 bytes. */
+const MAX_CONTROL_PAYLOAD = 125;
+
+const UTF8_DECODER = new TextDecoder( 'utf-8', { fatal : true });
+
+/**
+ * Fragmentation state for one connection. A fragmented message spans frames that can arrive
+ * across separate reads, so the caller owns this and passes the same object each time.
+ */
+export interface FrameReadState {
+    fragments?    : Buffer[]
+    fragmentOp?   : number
+    fragmentSize? : number
+}
+
+type Emit = ( event: string, ...args: any[]) => void;
+
+/** RFC 6455 §7.4.1 plus the IANA-registered range; the rest are reserved or local-only. */
+function isValidCloseCode( code: number ): boolean
+{
+    if( code >= 3000 && code <= 4999 ){ return true }
+
+    if( code >= 1000 && code <= 1003 ){ return true }
+
+    return code >= 1007 && code <= 1014;
+}
+
+function decodeUtf8( payload: Buffer ): string | null
+{
+    try
+    {
+        return UTF8_DECODER.decode( payload );
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+function protocolError( emit: Emit, reason: string ): void
+{
+    emit( 'protocol_error', 1002, reason );
+}
+
+/** Emit a complete data message. Returns false when the frame was rejected. */
+function emitMessage( opcode: number, payload: Buffer, emit: Emit ): boolean
+{
+    if( opcode === OPCODE_BINARY )
+    {
+        emit( 'message', payload );
+
+        return true;
+    }
+
+    const text = decodeUtf8( payload );
+
+    if( text === null )
+    {
+        emit( 'protocol_error', 1007, 'Invalid UTF-8 in text frame' );
+
+        return false;
+    }
+
+    emit( 'message', text );
+
+    return true;
+}
+
+/** Returns false when the frame was rejected. */
+function emitControl( opcode: number, payload: Buffer, emit: Emit ): boolean
+{
+    if( opcode === OPCODE_PING )
+    {
+        emit( 'ping', payload );
+
+        return true;
+    }
+
+    if( opcode === OPCODE_PONG )
+    {
+        emit( 'pong', payload );
+
+        return true;
+    }
+
+    if( payload.length === 0 )
+    {
+        emit( 'closing', undefined, undefined );
+
+        return true;
+    }
+
+    // A close body carries a 2-byte code, so a single byte cannot be valid.
+    if( payload.length === 1 )
+    {
+        protocolError( emit, 'Close frame payload must be empty or at least 2 bytes' );
+
+        return false;
+    }
+
+    const code = payload.readUInt16BE( 0 );
+
+    if( !isValidCloseCode( code ))
+    {
+        protocolError( emit, `Invalid close code ${code}` );
+
+        return false;
+    }
+
+    const reason = payload.length > 2 ? decodeUtf8( payload.subarray( 2 )) : undefined;
+
+    if( reason === null )
+    {
+        emit( 'protocol_error', 1007, 'Invalid UTF-8 in close reason' );
+
+        return false;
+    }
+
+    emit( 'closing', code, reason );
+
+    return true;
+}
+
 export class WebsocketFrame 
 {
     static write( tx_buffer: SimpleMultibuffer, payload: string | Buffer, options: { opcode? : number, mask? : boolean } = {}): void 
@@ -124,26 +256,70 @@ export class WebsocketFrame
         tx_buffer.append( bufPayload );
     }
 
-    static read( rx_buffer: SimpleMultibuffer, emit: ( event: string, ...args: any[]) => void, options?: { maxPayload? : number }): void 
+    /**
+     * Parse inbound client frames. Every rejection stops parsing and reports
+     * `protocol_error` with the close code to send, since the connection is unusable
+     * once the stream is misframed.
+     */
+    static read(
+        rx_buffer: SimpleMultibuffer,
+        emit: Emit,
+        options?: { maxPayload? : number },
+        state: FrameReadState = {}
+    ): void 
     {
         while( rx_buffer.length >= 2 ) 
         {
-            const opcode = rx_buffer.get( 0 ) & 0x0f;
-            const head = rx_buffer.get( 1 );
+            const b0 = rx_buffer.get( 0 );
+            const b1 = rx_buffer.get( 1 );
+            const fin = ( b0 & 0x80 ) !== 0;
+            const opcode = b0 & 0x0f;
+            const lengthByte = b1 & 0x7f;
+            const isControl = ( opcode & 0x08 ) !== 0;
+
+            if(( b0 & 0x70 ) !== 0 )
+            {
+                return protocolError( emit, 'RSV bits must be zero' );
+            }
+
+            // RFC 6455 §5.1: every client-to-server frame must be masked.
+            if(( b1 & 0x80 ) === 0 )
+            {
+                return protocolError( emit, 'Client frames must be masked' );
+            }
+
+            if( !KNOWN_OPCODES.has( opcode ))
+            {
+                return protocolError( emit, `Unknown opcode 0x${opcode.toString( 16 )}` );
+            }
+
+            if( isControl )
+            {
+                if( !fin )
+                {
+                    return protocolError( emit, 'Control frames must not be fragmented' );
+                }
+
+                if( lengthByte > MAX_CONTROL_PAYLOAD )
+                {
+                    return protocolError( emit, 'Control frame payload exceeds 125 bytes' );
+                }
+            }
+
             let header_length = 0;
             let payload_length = 0;
 
-            if(( head & 0x7f ) < 126 ) 
+            if( lengthByte < 126 ) 
             {
-                payload_length = head & 0x7f;
-                header_length = 2 + ( head & 0x80 ? 4 : 0 );
+                payload_length = lengthByte;
+                header_length = 6;
             }
-            else if(( head & 0x7f ) === 126 && rx_buffer.length >= 4 ) 
+            else if( lengthByte === 126 && rx_buffer.length >= 4 ) 
             {
                 payload_length = ( rx_buffer.get( 2 ) << 8 ) + rx_buffer.get( 3 );
-                header_length = 4 + ( head & 0x80 ? 4 : 0 );
+                header_length = 8;
             }
-            else if(( head & 0x7f ) === 127 && rx_buffer.length >= 10 ) 
+            else if( lengthByte === 127 && rx_buffer.length >= 10 ) 
             {
                 // High 32 bits must be zero — lengths above 4 GiB are unsupported.
                 if( rx_buffer.get( 2 ) !== 0 || rx_buffer.get( 3 ) !== 0 || rx_buffer.get( 4 ) !== 0 || rx_buffer.get( 5 ) !== 0 )
@@ -154,56 +330,75 @@ export class WebsocketFrame
                 }
 
                 payload_length = readUint32BE( rx_buffer, 6 );
-                header_length = 10 + ( head & 0x80 ? 4 : 0 );
+                header_length = 14;
             }
 
-            if( header_length ) 
+            // Extended length bytes have not arrived yet.
+            if( !header_length ){ break }
+
+            // Fragments accumulate, so the limit applies to the assembled message.
+            const buffered = ( state.fragmentSize ?? 0 ) + payload_length;
+
+            if( options?.maxPayload !== undefined && buffered > options.maxPayload ) 
             {
-                if( options?.maxPayload !== undefined && payload_length > options.maxPayload ) 
-                {
-                    emit( 'limit_exceeded' );
+                emit( 'limit_exceeded' );
 
-                    return;
-                }
+                return;
             }
 
-            if( header_length && header_length + payload_length <= rx_buffer.length ) 
+            if( header_length + payload_length > rx_buffer.length ){ break }
+
+            const header = rx_buffer.spliceConcat( 0, header_length );
+            const payload = rx_buffer.spliceConcat( 0, payload_length );
+            maskPayload( header.subarray( header_length - 4 ), payload );
+
+            // Control frames may be interleaved into a fragmented message, so they never
+            // touch the fragmentation state.
+            if( isControl )
             {
-                const header = rx_buffer.spliceConcat( 0, header_length );
-                const payload = rx_buffer.spliceConcat( 0, payload_length );
+                if( !emitControl( opcode, payload, emit )){ return }
 
-                if( header[1] & 0x80 ) 
-                {
-                    maskPayload( header.slice( header_length - 4 ), payload );
-                }
-
-                switch ( opcode ) 
-                {
-                    case 0x01:
-                        emit( 'message', payload.toString( 'utf8' ));
-                        break;
-                    case 0x02:
-                        emit( 'message', payload );
-                        break;
-                    case 0x08:
-                        emit(
-                            'closing',
-                            payload.length >= 2 ? payload.readUInt16BE( 0 ) : undefined,
-                            payload.length > 2 ? payload.subarray( 2 ).toString( 'utf8' ) : undefined
-                        );
-                        break;
-                    case 0x09:
-                        emit( 'ping', payload );
-                        break;
-                    case 0x0a:
-                        emit( 'pong', payload );
-                        break;
-                }
+                continue;
             }
-            else 
+
+            if( opcode === OPCODE_CONTINUATION )
             {
-                break;
+                if( state.fragmentOp === undefined )
+                {
+                    return protocolError( emit, 'Continuation frame without an open message' );
+                }
+
+                state.fragments!.push( payload );
+                state.fragmentSize = buffered;
             }
+            else if( state.fragmentOp !== undefined )
+            {
+                return protocolError( emit, 'New data frame while a fragmented message is open' );
+            }
+            else if( !fin )
+            {
+                state.fragmentOp = opcode;
+                state.fragments = [payload];
+                state.fragmentSize = payload.length;
+
+                continue;
+            }
+            else
+            {
+                if( !emitMessage( opcode, payload, emit )){ return }
+
+                continue;
+            }
+
+            if( !fin ){ continue }
+
+            const assembled = Buffer.concat( state.fragments! );
+            const assembledOp = state.fragmentOp!;
+            state.fragments = undefined;
+            state.fragmentOp = undefined;
+            state.fragmentSize = 0;
+
+            if( !emitMessage( assembledOp, assembled, emit )){ return }
         }
     }
 }

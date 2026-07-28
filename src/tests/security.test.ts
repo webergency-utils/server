@@ -23,6 +23,7 @@ describe( 'Security Helper & Integration Tests', () =>
         {
             const merged = mergeSecurityConfigs([true, false]);
             expect( merged ).toEqual({
+                maxBodySize                  : 0,
                 frameguard                   : false,
                 noSniff                      : false,
                 hsts                         : false,
@@ -146,6 +147,40 @@ describe( 'Security Helper & Integration Tests', () =>
             // Assert
             expect( headers['X-Frame-Options']).toBeUndefined();
         });
+
+        it( 'should drop referrerPolicy and cross-domain policy values outside the allowlist', () =>
+        {
+            // Arrange / Act
+            const headers = generateSecurityHeaders({
+                referrerPolicy               : 'no-referrer; injected' as 'no-referrer',
+                permittedCrossDomainPolicies : 'anything-goes' as 'none'
+            });
+
+            // Assert
+            expect( headers['Referrer-Policy']).toBeUndefined();
+            expect( headers['X-Permitted-Cross-Domain-Policies']).toBeUndefined();
+        });
+
+        it( 'should emit Permissions-Policy from true, string, and object forms', () =>
+        {
+            // Arrange / Act
+            const asTrue = generateSecurityHeaders({ permissionsPolicy : true });
+            const asString = generateSecurityHeaders({ permissionsPolicy : 'fullscreen=(self)' });
+            const asObject = generateSecurityHeaders({
+                permissionsPolicy : {
+                    camera      : [],
+                    geolocation : ["'self'"],
+                    microphone  : '*'
+                }
+            });
+            const off = generateSecurityHeaders( true );
+
+            // Assert
+            expect( asTrue['Permissions-Policy']).toBe( 'camera=(), microphone=(), geolocation=()' );
+            expect( asString['Permissions-Policy']).toBe( 'fullscreen=(self)' );
+            expect( asObject['Permissions-Policy']).toBe( "camera=(), geolocation=('self'), microphone=(*)" );
+            expect( off['Permissions-Policy']).toBeUndefined();
+        });
     });
 
     describe( 'Server integration - Request Protections', () =>
@@ -246,7 +281,7 @@ describe( 'Security Helper & Integration Tests', () =>
         {
             const server = new Server({ port : 0 });
             const { NotFoundError } = await import( '../errors.js' );
-            ( server as any ).router.find = () =>
+            ( server as any ).router.lookup = () =>
             {
                 throw new NotFoundError( 'missing route internals' );
             };
@@ -319,6 +354,7 @@ describe( 'Security Helper & Integration Tests', () =>
 
             const res3 = await server.fetch( new Request( 'http://localhost/rate-test' ));
             expect( res3.status ).toBe( 429 );
+            expect( res3.headers.get( 'Retry-After' )).toBe( '1' );
         });
 
         it( 'should not let spoofed XFF bypass rate limits without trustProxy', async () =>

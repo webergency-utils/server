@@ -45,3 +45,36 @@ jobs:
           name: unit-node
           files: coverage/lcov.info
           fail_ci_if_error: true
+
+  bench:
+    name: Benchmarks (non-gating)
+    runs-on: ubuntu-latest
+    # Informational only: runner noise must never block a merge.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run benchmarks
+        continue-on-error: true
+        run: npm run bench 2>&1 | tee bench-results.txt
+
+      - name: Publish results to the job summary
+        if: always()
+        run: |
+          {
+            echo '## Benchmarks (non-gating)'
+            echo '```'
+            cat bench-results.txt 2>/dev/null || echo 'no results'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

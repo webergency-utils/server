@@ -1,6 +1,6 @@
 import { ServerError } from '../errors.js';
 
-export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'ALL' | 'RPC';
+export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'OPTIONS' | 'ALL' | 'RPC';
 
 export interface ServerWebSocket {
     send( data: string | ArrayBuffer | Buffer ): void
@@ -71,23 +71,25 @@ export interface EndpointMetadata {
 export type Validator = ( v: any, path: string, ctx: any ) => any;
 
 export interface AugmentedRequest extends Request {
-    params          : Record<string, string>
-    query           : Record<string, string>
-    globalCors?     : any
-    cors?           : any
-    globalSecurity? : any
-    security?       : any
-    meta            : Record<string, any>
+    params            : Record<string, string>
+    query             : Record<string, string>
+    globalCors?       : any
+    cors?             : any
+    globalSecurity?   : any
+    security?         : any
+    meta              : Record<string, any>
     /** Set when `security.timeout` is active; aborted when the request times out. */
-    abortSignal?    : AbortSignal
+    abortSignal?      : AbortSignal
     /** TCP peer address attached by the runtime adapter (if available). */
-    remoteAddress?  : string
+    remoteAddress?    : string
     /** Copied from ServerOptions.trustProxy for @Ip resolution. */
-    trustProxy?     : string[]
-    _json?             : any
-    _raw?              : ArrayBuffer
+    trustProxy?       : string[]
+    /** Accept-or-generate `X-Request-Id` for this request. */
+    requestId?        : string
+    _json?            : any
+    _raw?             : ArrayBuffer
     /** Set by getBody when Content-Type was missing and the body was sniffed. */
-    _bodyContentType?  : 'application/json' | 'application/x-www-form-urlencoded'
+    _bodyContentType? : 'application/json' | 'application/x-www-form-urlencoded'
 }
 
 export interface LogContext {
@@ -102,6 +104,7 @@ export interface LogContext {
     duration?     : number
     controller?   : string
     action?       : string
+    requestId?    : string
     error?        : Error
     [key: string] : any
 }
@@ -184,12 +187,12 @@ export type EndpointResponse = ResponseBag;
 
 export interface Middleware 
 {
-    use?( request: EndpointRequest, response: EndpointResponse ): Promise<void> | void;
-    useCallback?( request: EndpointRequest, response: EndpointResponse, next: (error?: ServerError) => Promise<void> | void ): Promise<void> | void;
+    use?( request: EndpointRequest, response: EndpointResponse ): Promise<void> | void
+    useCallback?( request: EndpointRequest, response: EndpointResponse, next: ( error?: ServerError ) => Promise<void> | void ): Promise<void> | void
 }
 
 export type MiddlewareClass = 
-    | (new (...args: any[]) => { use(request: EndpointRequest, response: EndpointResponse): Promise<void> | void; useCallback?: never })
-    | (new (...args: any[]) => { useCallback(request: EndpointRequest, response: EndpointResponse, next: (error?: ServerError) => Promise<void> | void): Promise<void> | void; use?: never });
+    | ( new ( ...args: any[]) => { use( request: EndpointRequest, response: EndpointResponse ): Promise<void> | void, useCallback? : never })
+    | ( new ( ...args: any[]) => { useCallback( request: EndpointRequest, response: EndpointResponse, next: ( error?: ServerError ) => Promise<void> | void ): Promise<void> | void, use? : never });
 
 

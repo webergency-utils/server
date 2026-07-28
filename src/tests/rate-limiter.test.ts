@@ -229,4 +229,130 @@ describe( 'RateLimiter', () =>
         expect( store.size ).toBe( 1 );
         expect( store.has( '/api:198.51.100.1' )).toBe( true );
     });
+
+    it( 'should cap the store at maxKeys even while every key is still active', () =>
+    {
+        // Arrange — a long window means nothing expires during the test
+        const limiter = new RateLimiter( 10 );
+        const store: Map<string, unknown> = ( limiter as any ).rateLimitStore;
+        const limitConfig = { max : 100, window : '1h' };
+
+        // Act
+        for( let i = 0; i < 200; i++ )
+        {
+            limiter.checkLimit( `203.0.113.${i}`, '/api', limitConfig );
+        }
+
+        // Assert — bounded, and the most recent keys survived
+        expect( store.size ).toBe( 10 );
+        expect( store.has( '/api:203.0.113.199' )).toBe( true );
+        expect( store.has( '/api:203.0.113.0' )).toBe( false );
+    });
+
+    it( 'should evict least-recently-used keys first', () =>
+    {
+        // Arrange
+        const limiter = new RateLimiter( 2 );
+        const store: Map<string, unknown> = ( limiter as any ).rateLimitStore;
+        const limitConfig = { max : 100, window : '1h' };
+
+        // Act — touch 'a' again so 'b' becomes the least recently used
+        limiter.checkLimit( 'a', '/api', limitConfig );
+        limiter.checkLimit( 'b', '/api', limitConfig );
+        limiter.checkLimit( 'a', '/api', limitConfig );
+        limiter.checkLimit( 'c', '/api', limitConfig );
+
+        // Assert
+        expect( store.size ).toBe( 2 );
+        expect( store.has( '/api:b' )).toBe( false );
+        expect( store.has( '/api:a' )).toBe( true );
+        expect( store.has( '/api:c' )).toBe( true );
+    });
+
+    it( 'should report a Retry-After hint in seconds when blocked', () =>
+    {
+        // Arrange
+        const limitConfig = { max : 1, window : '30s' };
+
+        // Act
+        const first = rateLimiter.consume( '127.0.0.1', '/api', limitConfig );
+        vi.advanceTimersByTime( 10000 );
+        const blocked = rateLimiter.consume( '127.0.0.1', '/api', limitConfig );
+
+        // Assert
+        expect( first ).toEqual({ allowed : true, retryAfter : 0 });
+        expect( blocked.allowed ).toBe( false );
+        expect( blocked.retryAfter ).toBe( 20 );
+    });
+
+    it( 'should never report a Retry-After below 1 second', () =>
+    {
+        // Arrange
+        const limitConfig = { max : 1, window : 100 };
+
+        // Act
+        rateLimiter.consume( '127.0.0.1', '/api', limitConfig );
+        vi.advanceTimersByTime( 99 );
+        const blocked = rateLimiter.consume( '127.0.0.1', '/api', limitConfig );
+
+        // Assert
+        expect( blocked.allowed ).toBe( false );
+        expect( blocked.retryAfter ).toBe( 1 );
+    });
+
+    it( 'should permit a 2x burst across the boundary with the fixed window', () =>
+    {
+        // Arrange
+        const limitConfig = { max : 2, window : '10s' };
+
+        // Act — spend the allowance at the end of one window, then again in the next
+        vi.advanceTimersByTime( 9000 );
+        const a = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+        const b = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+        vi.advanceTimersByTime( 10000 );
+        const c = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+        const d = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+
+        // Assert — 4 requests in ~1s of wall time is the documented fixed-window weakness
+        expect([ a, b, c, d ]).toEqual([ true, true, true, true ]);
+    });
+
+    it( 'should smooth the boundary burst with the sliding window', () =>
+    {
+        // Arrange
+        const limitConfig = { max : 2, window : '10s', strategy : 'sliding' as const };
+
+        // Act
+        const a = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+        const b = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+
+        // Immediately into the next window the previous count still weighs ~100%
+        vi.advanceTimersByTime( 10000 );
+        const c = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+
+        // Assert
+        expect([ a, b ]).toEqual([ true, true ]);
+        expect( c ).toBe( false );
+    });
+
+    it( 'should release the sliding allowance as the previous window ages out', () =>
+    {
+        // Arrange
+        const limitConfig = { max : 2, window : '10s', strategy : 'sliding' as const };
+
+        // Act
+        rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+        rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+
+        vi.advanceTimersByTime( 10000 );
+        const immediately = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+
+        // Most of the previous window has now scrolled out of view
+        vi.advanceTimersByTime( 9000 );
+        const later = rateLimiter.checkLimit( 'ip', '/api', limitConfig );
+
+        // Assert
+        expect( immediately ).toBe( false );
+        expect( later ).toBe( true );
+    });
 });

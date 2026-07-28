@@ -1,6 +1,25 @@
 import { store } from './metadata.js';
+import { getRegistry } from './registry.js';
 import { Scope } from '../decorators.js';
 import { Context } from './context.js';
+
+/**
+ * Everything about a token that does not depend on the rest of the graph: which provider
+ * serves it, which module declares it, its declared scope, and what it needs injected.
+ * Cached per `(token, consumer module)` so post-bootstrap resolution is map lookups.
+ */
+export interface Binding {
+    provider        : any
+    declaringModule : any
+    explicitScope   : Scope | undefined
+    deps            : string[]
+}
+
+/** Instances, bindings, and resolution guards are all keyed by token *and* module. */
+export function scopedKey( token: string, moduleInstance?: any ): string
+{
+    return `${token}::${moduleInstance ? moduleInstance.name : 'global'}`;
+}
 
 export class DIContainer 
 {
@@ -38,7 +57,9 @@ export class DIContainer
 
         for( const impM of moduleInstance.imports ) 
         {
-            if( this.isExportedFromModule( token, impM, visited )) 
+            // A copy, so marking modules visited while checking exports does not hide them
+            // from the provider walk below.
+            if( this.isExportedFromModule( token, impM, new Set( visited ))) 
             {
                 return impM.providers.get( token ) || impM.controllers.get( token ) || this.locateProviderInScope( token, impM, new Set( visited ));
             }
@@ -46,7 +67,7 @@ export class DIContainer
 
         for( const globalM of store.globalModules ) 
         {
-            if( globalM !== moduleInstance && this.isExportedFromModule( token, globalM, visited )) 
+            if( globalM !== moduleInstance && this.isExportedFromModule( token, globalM, new Set( visited ))) 
             {
                 return globalM.providers.get( token ) || globalM.controllers.get( token ) || this.locateProviderInScope( token, globalM, new Set( visited ));
             }
@@ -57,6 +78,10 @@ export class DIContainer
 
     public static isExportedFromModule( token: string, moduleInstance: any, visited = new Set<any>()): boolean 
     {
+        // Re-exports can form a cycle, so a module is only inspected once per walk.
+        if( visited.has( moduleInstance )) { return false }
+        visited.add( moduleInstance );
+
         if( moduleInstance.exports.has( token )) 
         {
             return true;
@@ -85,25 +110,7 @@ export class DIContainer
     {
         if( typeof provider === 'function' ) 
         {
-            const injections = provider.__injections__ || {};
-            const constructorDeps = injections.constructorDeps || [];
-            const args = constructorDeps.map(( depToken: string ) => 
-            {
-                if( depToken === 'any' ) { return undefined }
-
-                return this.resolve( depToken, contextModule );
-            });
-
-            const instance = new provider( ...args );
-
-            const propertyDeps = this.collectPropertyDeps( provider );
-
-            for( const [propName, depToken] of Object.entries( propertyDeps )) 
-            {
-                instance[propName] = this.resolve( depToken, contextModule );
-            }
-
-            return instance;
+            return this.construct( provider, contextModule );
         }
 
         if( provider && typeof provider === 'object' ) 
@@ -115,26 +122,7 @@ export class DIContainer
 
             if( 'useClass' in provider ) 
             {
-                const cls = provider.useClass;
-                const injections = cls.__injections__ || {};
-                const constructorDeps = injections.constructorDeps || [];
-                const args = constructorDeps.map(( depToken: string ) => 
-                {
-                    if( depToken === 'any' ) { return undefined }
-
-                    return this.resolve( depToken, contextModule );
-                });
-
-                const instance = new cls( ...args );
-
-                const propertyDeps = this.collectPropertyDeps( cls );
-
-                for( const [propName, depToken] of Object.entries( propertyDeps )) 
-                {
-                    instance[propName] = this.resolve( depToken, contextModule );
-                }
-
-                return instance;
+                return this.construct( provider.useClass, contextModule );
             }
 
             if( 'useFactory' in provider ) 
@@ -149,6 +137,27 @@ export class DIContainer
         }
 
         return provider;
+    }
+
+    private static construct( cls: any, contextModule: any ): any
+    {
+        const injections = cls.__injections__ || {};
+        const constructorDeps = injections.constructorDeps || [];
+        const args = constructorDeps.map(( depToken: string ) => 
+        {
+            if( depToken === 'any' ) { return undefined }
+
+            return this.resolve( depToken, contextModule );
+        });
+
+        const instance = new cls( ...args );
+
+        for( const [ propName, depToken ] of Object.entries( this.collectPropertyDeps( cls ))) 
+        {
+            instance[propName] = this.resolve( depToken, contextModule );
+        }
+
+        return instance;
     }
 
     public static syncLegacyCompatibility( token: string, instance: any ) 
@@ -167,91 +176,114 @@ export class DIContainer
         }
     }
 
+    /** The class behind a provider, if it has one. */
+    private static providerClassOf( provider: any ): any
+    {
+        if( typeof provider === 'function' ){ return provider }
+
+        if( provider && typeof provider === 'object' && 'useClass' in provider ){ return provider.useClass }
+
+        return null;
+    }
+
+    public static getBinding( token: string, contextModule?: any ): Binding | null
+    {
+        const registry = getRegistry();
+        const key = scopedKey( token, contextModule );
+        const cached = registry.bindings.get( key );
+
+        if( cached ){ return cached }
+
+        const provider = contextModule
+            ? this.locateProviderInScope( token, contextModule )
+            // A module-owned token must resolve through its module so `exports` is enforced;
+            // only root-level (module-less) registrations are reachable flat.
+            : ( registry.tokenToModuleMap.has( token ) ? null : registry.providers.get( token ));
+
+        if( !provider ){ return null }
+
+        const providerClass = this.providerClassOf( provider );
+        let explicitScope: Scope | undefined;
+        let deps: string[] = [];
+
+        if( typeof provider === 'function' )
+        {
+            explicitScope = provider.__scope__;
+        }
+        else if( provider && typeof provider === 'object' )
+        {
+            explicitScope = provider.scope !== undefined ? provider.scope : providerClass?.__scope__;
+        }
+
+        if( providerClass )
+        {
+            const injections = providerClass.__injections__ || {};
+            const propertyDeps = Object.values( this.collectPropertyDeps( providerClass )) as string[];
+            deps = [ ...( injections.constructorDeps || []), ...propertyDeps ];
+        }
+        else if( provider && typeof provider === 'object' && 'useFactory' in provider )
+        {
+            deps = provider.inject || [];
+        }
+
+        const declaringModule = providerClass && registry.classToModuleMap.has( providerClass )
+            ? registry.classToModuleMap.get( providerClass )
+            : contextModule;
+
+        const binding: Binding = { provider, declaringModule, explicitScope, deps };
+        registry.bindings.set( key, binding );
+
+        return binding;
+    }
+
     public static getResolvedScope( token: string, contextModule?: any, visited = new Set<string>()): Scope 
     {
-        const key = `${token}::${contextModule ? contextModule.name : 'global'}`;
+        const registry = getRegistry();
+        const key = scopedKey( token, contextModule );
+        const memoized = registry.scopes.get( key );
+
+        if( memoized !== undefined ){ return memoized }
 
         if( visited.has( key )) 
         {
-            return Scope.DEFAULT;
-        }
-        visited.add( key );
+            // Circular deps are supported through lazy proxies, so this is reported rather
+            // than thrown — but the scope of a cycle member cannot be decided here.
+            registry.recordDependencyCycle([ ...visited, key ]);
 
-        const provider = contextModule ? this.locateProviderInScope( token, contextModule ) : store.providers.get( token );
-
-        if( !provider ) 
-        {
             return Scope.DEFAULT;
         }
 
-        let explicitScope: Scope | undefined;
-        let providerClass: any;
+        const binding = this.getBinding( token, contextModule );
 
-        if( typeof provider === 'function' ) 
-        {
-            providerClass = provider;
-            explicitScope = provider.__scope__;
-        }
-        else if( provider && typeof provider === 'object' ) 
-        {
-            if( provider.scope !== undefined ) 
-            {
-                explicitScope = provider.scope;
-            }
-            providerClass = provider.useClass;
+        if( !binding ) { return Scope.DEFAULT }
 
-            if( providerClass && explicitScope === undefined ) 
-            {
-                explicitScope = providerClass.__scope__;
-            }
-        }
-
-        if( explicitScope === Scope.REQUEST ) 
+        if( binding.explicitScope === Scope.REQUEST ) 
         {
+            registry.scopes.set( key, Scope.REQUEST );
+
             return Scope.REQUEST;
         }
 
-        let deps: string[] = [];
+        const next = new Set( visited ).add( key );
+        const cyclesBefore = registry.dependencyCycles.size;
+        let scope = binding.explicitScope === Scope.TRANSIENT ? Scope.TRANSIENT : Scope.DEFAULT;
 
-        if( providerClass ) 
-        {
-            const injections = providerClass.__injections__ || {};
-            const constructorDeps = injections.constructorDeps || [];
-            const propertyDeps = Object.values( this.collectPropertyDeps( providerClass )) as string[];
-            deps = [...constructorDeps, ...propertyDeps];
-        }
-        else if( provider && typeof provider === 'object' ) 
-        {
-            if( 'useFactory' in provider ) 
-            {
-                deps = provider.inject || [];
-            }
-        }
-
-        let declaringModule = contextModule;
-
-        if( providerClass && store.classToModuleMap.has( providerClass )) 
-        {
-            declaringModule = store.classToModuleMap.get( providerClass );
-        }
-
-        for( const depToken of deps ) 
+        for( const depToken of binding.deps ) 
         {
             if( depToken === 'any' ) { continue }
-            const depScope = this.getResolvedScope( depToken, declaringModule, new Set( visited ));
 
-            if( depScope === Scope.REQUEST ) 
+            if( this.getResolvedScope( depToken, binding.declaringModule, next ) === Scope.REQUEST ) 
             {
-                return Scope.REQUEST;
+                // A provider is request-scoped as soon as anything it depends on is.
+                scope = Scope.REQUEST;
+                break;
             }
         }
 
-        if( explicitScope === Scope.TRANSIENT ) 
-        {
-            return Scope.TRANSIENT;
-        }
+        // A scope decided while a cycle was being broken is provisional, so it is not cached.
+        if( registry.dependencyCycles.size === cyclesBefore ){ registry.scopes.set( key, scope ) }
 
-        return Scope.DEFAULT;
+        return scope;
     }
 
     public static resolveAll() 
@@ -314,13 +346,57 @@ export class DIContainer
         }
     }
 
+    /**
+     * Stand-in returned while `token` is already being constructed, so two providers may
+     * depend on each other. Every trap re-resolves, by which time the real instance exists.
+     */
+    private static lazyProxy( token: string, contextModule?: any ): any
+    {
+        return new Proxy({}, {
+            get( _target, prop ) 
+            {
+                const instance = DIContainer.resolve( token, contextModule );
+
+                if( !instance ) { return undefined }
+                const value = Reflect.get( instance, prop, instance );
+
+                return typeof value === 'function' ? value.bind( instance ) : value;
+            },
+            set( _target, prop, value ) 
+            {
+                const instance = DIContainer.resolve( token, contextModule );
+
+                return Reflect.set( instance, prop, value, instance );
+            }
+        });
+    }
+
+    private static missingProvider( token: string, contextModule?: any ): Error
+    {
+        return new Error( `No provider registered for token: ${token}${contextModule ? ` in module ${contextModule.name}` : ''}` );
+    }
+
     public static resolve( token: string, contextModule?: any ): any 
     {
+        const registry = getRegistry();
         let currentContext = contextModule;
 
-        if( !currentContext && store.tokenToModuleMap.has( token )) 
+        if( !currentContext && registry.tokenToModuleMap.has( token )) 
         {
-            currentContext = store.tokenToModuleMap.get( token );
+            currentContext = registry.tokenToModuleMap.get( token );
+        }
+
+        // Cache first: singletons are the common case, and the scope walk below is the
+        // expensive part. Only DEFAULT-scoped instances are ever stored in these maps.
+        const instanceKey = scopedKey( token, currentContext );
+
+        if( currentContext )
+        {
+            if( currentContext.instances.has( token )){ return currentContext.instances.get( token ) }
+        }
+        else if( registry.instances.has( instanceKey ))
+        {
+            return registry.instances.get( instanceKey );
         }
 
         const scope = this.getResolvedScope( token, currentContext );
@@ -334,218 +410,88 @@ export class DIContainer
                 throw new Error( `Cannot resolve request-scoped provider ${token} outside of a request context` );
             }
 
-            const provider = currentContext ? this.locateProviderInScope( token, currentContext ) : store.providers.get( token );
+            const binding = this.getBinding( token, currentContext );
 
-            if( !provider ) 
-            {
-                throw new Error( `No provider registered for token: ${token}${currentContext ? ` in module ${currentContext.name}` : ''}` );
-            }
+            if( !binding ) { throw this.missingProvider( token, currentContext ) }
 
-            let declaringModule = currentContext;
-            const providerClass = typeof provider === 'function' ? provider : ( provider && typeof provider === 'object' && 'useClass' in provider ? provider.useClass : null );
-
-            if( providerClass && store.classToModuleMap.has( providerClass )) 
-            {
-                declaringModule = store.classToModuleMap.get( providerClass );
-            }
-
-            const cacheKey = `${token}::${declaringModule ? declaringModule.name : 'global'}`;
+            const cacheKey = scopedKey( token, binding.declaringModule );
 
             if( ctx.requestInstances.has( cacheKey )) 
             {
                 return ctx.requestInstances.get( cacheKey );
             }
 
-            if( store.resolving.has( token )) 
+            if( registry.resolving.has( cacheKey )) 
             {
-                return new Proxy({}, {
-                    get( _target, prop ) 
-                    {
-                        const instance = DIContainer.resolve( token, currentContext );
-
-                        if( !instance ) { return undefined }
-                        const value = Reflect.get( instance, prop, instance );
-
-                        return typeof value === 'function' ? value.bind( instance ) : value;
-                    },
-                    set( _target, prop, value ) 
-                    {
-                        const instance = DIContainer.resolve( token, currentContext );
-
-                        return Reflect.set( instance, prop, value, instance );
-                    }
-                });
+                return this.lazyProxy( token, currentContext );
             }
 
-            store.resolving.add( token );
+            registry.resolving.add( cacheKey );
             try 
             {
-                const instance = this.instantiateProvider( token, provider, declaringModule );
+                const instance = this.instantiateProvider( token, binding.provider, binding.declaringModule );
                 ctx.requestInstances.set( cacheKey, instance );
 
                 return instance;
             }
             finally 
             {
-                store.resolving.delete( token );
+                registry.resolving.delete( cacheKey );
             }
         }
+
+        const binding = this.getBinding( token, currentContext );
 
         if( scope === Scope.TRANSIENT ) 
         {
-            const provider = currentContext ? this.locateProviderInScope( token, currentContext ) : store.providers.get( token );
+            if( !binding ) { throw this.missingProvider( token, currentContext ) }
 
-            if( !provider ) 
+            const guardKey = scopedKey( token, binding.declaringModule );
+
+            if( registry.resolving.has( guardKey )) 
             {
-                throw new Error( `No provider registered for token: ${token}${currentContext ? ` in module ${currentContext.name}` : ''}` );
+                return this.lazyProxy( token, currentContext );
             }
 
-            let declaringModule = currentContext;
-            const providerClass = typeof provider === 'function' ? provider : ( provider && typeof provider === 'object' && 'useClass' in provider ? provider.useClass : null );
-
-            if( providerClass && store.classToModuleMap.has( providerClass )) 
-            {
-                declaringModule = store.classToModuleMap.get( providerClass );
-            }
-
-            if( store.resolving.has( token )) 
-            {
-                return new Proxy({}, {
-                    get( _target, prop ) 
-                    {
-                        const instance = DIContainer.resolve( token, currentContext );
-
-                        if( !instance ) { return undefined }
-                        const value = Reflect.get( instance, prop, instance );
-
-                        return typeof value === 'function' ? value.bind( instance ) : value;
-                    },
-                    set( _target, prop, value ) 
-                    {
-                        const instance = DIContainer.resolve( token, currentContext );
-
-                        return Reflect.set( instance, prop, value, instance );
-                    }
-                });
-            }
-
-            store.resolving.add( token );
+            registry.resolving.add( guardKey );
             try 
             {
-                const instance = this.instantiateProvider( token, provider, declaringModule );
-
-                return instance;
+                return this.instantiateProvider( token, binding.provider, binding.declaringModule );
             }
             finally 
             {
-                store.resolving.delete( token );
+                registry.resolving.delete( guardKey );
             }
         }
 
-        if( !currentContext ) 
+        if( !binding ) 
         {
-            if( store.instances.has( token )) 
-            {
-                return store.instances.get( token );
-            }
-
-            if( store.resolving.has( token )) 
-            {
-                return new Proxy({}, {
-                    get( _target, prop ) 
-                    {
-                        const instance = DIContainer.resolve( token );
-
-                        if( !instance ) { return undefined }
-                        const value = Reflect.get( instance, prop, instance );
-
-                        return typeof value === 'function' ? value.bind( instance ) : value;
-                    },
-                    set( _target, prop, value ) 
-                    {
-                        const instance = DIContainer.resolve( token );
-
-                        return Reflect.set( instance, prop, value, instance );
-                    }
-                });
-            }
-
-            store.resolving.add( token );
-            try 
-            {
-                const provider = store.providers.get( token );
-
-                if( !provider ) 
-                {
-                    throw new Error( `No provider registered for token: ${token}` );
-                }
-                const instance = this.instantiateProvider( token, provider, null );
-                store.instances.set( token, instance );
-                this.syncLegacyCompatibility( token, instance );
-
-                return instance;
-            }
-            finally 
-            {
-                store.resolving.delete( token );
-            }
+            throw this.missingProvider( token, currentContext );
         }
 
-        if( currentContext.instances.has( token )) 
+        // Guarded by declaring module, not by consumer, so a cycle reached from two different
+        // modules still resolves to the same in-progress entry.
+        const guardKey = scopedKey( token, binding.declaringModule );
+
+        if( registry.resolving.has( guardKey )) 
         {
-            return currentContext.instances.get( token );
+            return this.lazyProxy( token, currentContext );
         }
 
-        if( store.resolving.has( token )) 
-        {
-            return new Proxy({}, {
-                get( _target, prop ) 
-                {
-                    const instance = DIContainer.resolve( token, currentContext );
-
-                    if( !instance ) { return undefined }
-                    const value = Reflect.get( instance, prop, instance );
-
-                    return typeof value === 'function' ? value.bind( instance ) : value;
-                },
-                set( _target, prop, value ) 
-                {
-                    const instance = DIContainer.resolve( token, currentContext );
-
-                    return Reflect.set( instance, prop, value, instance );
-                }
-            });
-        }
-
-        const provider = this.locateProviderInScope( token, currentContext );
-
-        if( !provider ) 
-        {
-            throw new Error( `No provider registered for token: ${token} in module ${currentContext.name}` );
-        }
-
-        store.resolving.add( token );
+        registry.resolving.add( guardKey );
         try 
         {
-            let declaringModule = currentContext;
-            const providerClass = typeof provider === 'function' ? provider : ( provider && typeof provider === 'object' && 'useClass' in provider ? provider.useClass : null );
+            const instance = this.instantiateProvider( token, binding.provider, currentContext ? binding.declaringModule : null );
 
-            if( providerClass && store.classToModuleMap.has( providerClass )) 
-            {
-                declaringModule = store.classToModuleMap.get( providerClass );
-            }
-
-            const instance = this.instantiateProvider( token, provider, declaringModule );
-            currentContext.instances.set( token, instance );
-
-            store.instances.set( token, instance );
+            if( currentContext ){ currentContext.instances.set( token, instance ) }
+            registry.instances.set( instanceKey, instance );
             this.syncLegacyCompatibility( token, instance );
 
             return instance;
         }
         finally 
         {
-            store.resolving.delete( token );
+            registry.resolving.delete( guardKey );
         }
     }
 }

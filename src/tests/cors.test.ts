@@ -11,6 +11,7 @@ describe( 'CORS helpers', () =>
         expect( isAllowed( 'x', true )).toBe( true );
         expect( isAllowed( 'x', false )).toBe( false );
         expect( isAllowed( 'x', { nope : true })).toBe( false );
+        expect( isAllowed( 'x', undefined )).toBe( false );
 
         const req = new Request( 'http://localhost/', {
             headers : { Origin : 'https://app.example' }
@@ -22,6 +23,72 @@ describe( 'CORS helpers', () =>
 
         const starred = handleCors( req, { origin : '*' });
         expect( starred && !( starred instanceof Response ) ? starred['Vary'] : undefined ).toBeUndefined();
+    });
+
+    /** A genuine preflight needs both Origin and Access-Control-Request-Method. */
+    function preflight( origin: string, requestHeaders?: string ): Request
+    {
+        const headers: Record<string, string> = {
+            Origin                          : origin,
+            'Access-Control-Request-Method' : 'POST'
+        };
+
+        if( requestHeaders ) { headers['Access-Control-Request-Headers'] = requestHeaders }
+
+        return new Request( 'http://localhost/x', { method : 'OPTIONS', headers });
+    }
+
+    it( 'should answer 403 for a preflight from a disallowed origin', () =>
+    {
+        // Arrange / Act
+        const res = handleCors( preflight( 'https://evil.example' ), { origin : 'https://good.example' });
+
+        // Assert
+        expect( res ).toBeInstanceOf( Response );
+        expect(( res as Response ).status ).toBe( 403 );
+        expect(( res as Response ).headers.get( 'Vary' )).toBe( 'Origin' );
+    });
+
+    it( 'should still answer 204 for a preflight from an allowed origin', () =>
+    {
+        // Arrange / Act
+        const res = handleCors( preflight( 'https://good.example' ), { origin : 'https://good.example' });
+
+        // Assert
+        expect(( res as Response ).status ).toBe( 204 );
+    });
+
+    it( 'should not echo arbitrary requested headers when allowedHeaders is unset', () =>
+    {
+        // Arrange / Act
+        const res = handleCors( preflight( 'https://good.example', 'x-attacker-chosen' ), { origin : '*' });
+        const allow = ( res as Response ).headers.get( 'Access-Control-Allow-Headers' );
+
+        // Assert
+        expect(( res as Response ).status ).toBe( 204 );
+        expect( allow ).toBeNull();
+    });
+
+    it( 'should allow the default header set when allowedHeaders is unset', () =>
+    {
+        // Arrange / Act
+        const res = handleCors( preflight( 'https://good.example', 'content-type, authorization, x-nope' ), { origin : '*' });
+        const allow = ( res as Response ).headers.get( 'Access-Control-Allow-Headers' );
+
+        // Assert
+        expect( allow ).toBe( 'content-type, authorization' );
+    });
+
+    it( 'should honor an explicit allowedHeaders list over the default', () =>
+    {
+        // Arrange / Act
+        const res = handleCors( preflight( 'https://good.example', 'x-custom, content-type' ), {
+            origin         : '*',
+            allowedHeaders : ['X-Custom']
+        });
+
+        // Assert
+        expect(( res as Response ).headers.get( 'Access-Control-Allow-Headers' )).toBe( 'x-custom' );
     });
 });
 
@@ -214,8 +281,8 @@ describe( 'CORS Integration & Runtime Tests', () =>
         const preflight = new Request( 'http://localhost/additional-cors', {
             method  : 'OPTIONS',
             headers : {
-                'Origin'                         : 'https://any.com',
-                'Access-Control-Request-Method'  : 'GET'
+                'Origin'                        : 'https://any.com',
+                'Access-Control-Request-Method' : 'GET'
             }
         });
         const preflightRes = await server.fetch( preflight );
@@ -253,8 +320,8 @@ describe( 'CORS Integration & Runtime Tests', () =>
         const preflightMethodsFn = new Request( 'http://localhost/additional-cors-methods-fn', {
             method  : 'OPTIONS',
             headers : {
-                'Origin'                         : 'https://any.com',
-                'Access-Control-Request-Method'  : 'POST'
+                'Origin'                        : 'https://any.com',
+                'Access-Control-Request-Method' : 'POST'
             }
         });
         const resMethodsFn = await server.fetch( preflightMethodsFn );

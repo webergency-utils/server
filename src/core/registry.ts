@@ -1,11 +1,14 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { EndpointMetadata } from './types.js';
 import { Scope } from '../decorators.js';
-import { DIContainer } from './container.js';
+import { DIContainer, Binding } from './container.js';
+
+/** Hooks that tear down: dependents run before the providers they depend on. */
+const REVERSE_ORDER_HOOKS = new Set([ 'onModuleDestroy', 'beforeApplicationShutdown', 'onApplicationShutdown' ]);
 
 export class ApplicationRegistry
 {
-    endpoints          : EndpointMetadata[] = [];
+    endpoints            : EndpointMetadata[] = [];
     controllers        = new Map<string, any>();
     guards             = new Map<string, any>();
     interceptors       = new Map<string, any>();
@@ -22,9 +25,31 @@ export class ApplicationRegistry
     globalModules      = new Set<any>();
     defaultResponseMode? : 'strict' | 'relaxed' | 'strip';
     /** Controllers/providers seen during walk that lacked AOT Symbol meta. */
-    missingAotHosts    : string[] = [];
+    missingAotHosts      : string[] = [];
+    /** Provider lookups memoized per `(token, module)` so resolution is not a repeated walk. */
+    bindings           = new Map<string, Binding>();
+    /** Resolved scopes memoized per `(token, module)`. */
+    scopes             = new Map<string, Scope>();
+    /** Dependency cycles found while resolving scopes, reported as `A -> B -> A`. */
+    dependencyCycles   = new Set<string>();
     /** Paths registered (method+path) for duplicate detection. */
     private routeKeys  = new Set<string>();
+
+    /** Registration changes what a token resolves to, so the memoized views are dropped. */
+    private invalidateResolutionCache()
+    {
+        this.bindings.clear();
+        this.scopes.clear();
+    }
+
+    recordDependencyCycle( path: string[])
+    {
+        const tokens = path.map( key => key.split( '::' )[0]);
+        // Trim the ancestors that merely led to the cycle so the report is just the loop.
+        const start = tokens.indexOf( tokens[tokens.length - 1]);
+
+        this.dependencyCycles.add( tokens.slice( start ).join( ' -> ' ));
+    }
 
     registerEndpoint( metadata: EndpointMetadata )
     {
@@ -47,6 +72,7 @@ export class ApplicationRegistry
     registerProvider( token: string, provider: any )
     {
         this.providers.set( token, provider );
+        this.invalidateResolutionCache();
     }
 
     getProvider( token: string ): any
@@ -103,7 +129,19 @@ export class ApplicationRegistry
 
     mapTokenToModule( token: string, moduleInstance: any )
     {
+        const existing = this.tokenToModuleMap.get( token );
+
+        if( existing && existing !== moduleInstance )
+        {
+            throw new Error(
+                existing.name === moduleInstance.name
+                    ? `Two different modules are both named ${moduleInstance.name}, so token "${token}" is ambiguous. Modules are identified by class name — rename one of them.`
+                    : `Token "${token}" is registered by both ${existing.name} and ${moduleInstance.name}. Rename one of them, or move the provider into a shared module and export it.`
+            );
+        }
+
         this.tokenToModuleMap.set( token, moduleInstance );
+        this.invalidateResolutionCache();
     }
 
     getTokenModule( token: string ): any
@@ -222,6 +260,9 @@ export class ApplicationRegistry
         this.globalModules.clear();
         this.routeKeys.clear();
         this.missingAotHosts.length = 0;
+        this.bindings.clear();
+        this.scopes.clear();
+        this.dependencyCycles.clear();
         this.defaultResponseMode = undefined;
     }
 
@@ -292,9 +333,90 @@ export class ApplicationRegistry
         return Array.from( instances );
     }
 
+    /**
+     * Instances ordered so that a provider is visited after everything it depends on.
+     * Instances with no known token (e.g. objects registered directly) keep their
+     * discovery order at the end.
+     */
+    private topologicalInstances(): any[]
+    {
+        const byInstance = new Map<any, string>();
+
+        for( const [ token, instance ] of this.tokenInstances())
+        {
+            if( instance && typeof instance === 'object' && !byInstance.has( instance ))
+            {
+                byInstance.set( instance, token );
+            }
+        }
+
+        const instanceOf = new Map<string, any>();
+
+        for( const [ instance, token ] of byInstance ){ instanceOf.set( token, instance ) }
+
+        const ordered: any[] = [];
+        const done = new Set<any>();
+        const visiting = new Set<string>();
+
+        const visit = ( token: string ) =>
+        {
+            const instance = instanceOf.get( token );
+
+            if( !instance || done.has( instance ) || visiting.has( token )){ return }
+            visiting.add( token );
+
+            const cls = instance.constructor;
+            const injections = cls?.__injections__ || {};
+            const deps = [
+                ...( injections.constructorDeps || []),
+                ...Object.values( DIContainer.collectPropertyDeps( cls ) || {})
+            ] as string[];
+
+            for( const dep of deps )
+            {
+                if( dep !== 'any' ){ visit( dep ) }
+            }
+
+            visiting.delete( token );
+            done.add( instance );
+            ordered.push( instance );
+        };
+
+        for( const token of instanceOf.keys()){ visit( token ) }
+
+        for( const instance of this.getAllInstances())
+        {
+            if( !done.has( instance ))
+            {
+                done.add( instance );
+                ordered.push( instance );
+            }
+        }
+
+        return ordered;
+    }
+
+    /** Every `(token, instance)` pair known to the registry, module-scoped first. */
+    private *tokenInstances(): Generator<[ string, any ]>
+    {
+        for( const m of this.moduleInstances.values())
+        {
+            for( const entry of m.instances ){ yield entry as [ string, any ] }
+        }
+
+        for( const [ key, instance ] of this.instances ){ yield [ key.split( '::' )[0], instance ] }
+
+        for( const map of [ this.controllers, this.guards, this.interceptors ])
+        {
+            for( const entry of map ){ yield entry as [ string, any ] }
+        }
+    }
+
     async invokeHook( hookName: string, ...args: any[])
     {
-        const instances = this.getAllInstances();
+        const instances = this.topologicalInstances();
+
+        if( REVERSE_ORDER_HOOKS.has( hookName )){ instances.reverse() }
 
         for( const instance of instances )
         {

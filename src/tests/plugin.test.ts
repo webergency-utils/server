@@ -6,7 +6,7 @@ import compilerPlugin from '../compiler/transformer.js';
 
 describe( 'TypeScript Compiler Plugin Transformer', () =>
 {
-    function compileAndTransform( sourceCode: string ): string
+    function compileAndTransform( sourceCode: string, diagnostics?: ts.Diagnostic[]): string
     {
         const tempFile = path.resolve( './temp_test_controller.ts' );
         fs.writeFileSync( tempFile, sourceCode );
@@ -25,7 +25,10 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
 
             if( !sourceFile ) { throw new Error( 'Could not load source file' ) }
 
-            const result = ts.transform( sourceFile, [compilerPlugin( program )]);
+            const extras = diagnostics
+                ? { addDiagnostic : ( d: ts.Diagnostic ) => { diagnostics.push( d ) }}
+                : undefined;
+            const result = ts.transform( sourceFile, [compilerPlugin( program, undefined, extras )]);
             const printer = ts.createPrinter();
 
             return printer.printFile( result.transformed[0]);
@@ -35,6 +38,49 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
             if( fs.existsSync( tempFile ))
             {
                 fs.unlinkSync( tempFile );
+            }
+        }
+    }
+
+    /** Transform several files under one program, as a real build does. */
+    function compileFiles( files: Record<string, string> ): Record<string, string>
+    {
+        const written = Object.keys( files ).map( name => path.resolve( `./${name}` ));
+
+        for( const [ index, name ] of Object.keys( files ).entries())
+        {
+            fs.writeFileSync( written[index], files[name]);
+        }
+
+        try
+        {
+            const program = ts.createProgram( written, {
+                target                 : ts.ScriptTarget.ES2022,
+                module                 : ts.ModuleKind.NodeNext,
+                moduleResolution       : ts.ModuleResolutionKind.NodeNext,
+                skipLibCheck           : true,
+                experimentalDecorators : true
+            });
+            const plugin = compilerPlugin( program );
+            const printer = ts.createPrinter();
+            const output: Record<string, string> = {};
+
+            for( const [ index, name ] of Object.keys( files ).entries())
+            {
+                const sourceFile = program.getSourceFile( written[index]);
+
+                if( !sourceFile ) { throw new Error( `Could not load ${name}` ) }
+                const result = ts.transform( sourceFile, [plugin]);
+                output[name] = printer.printFile( result.transformed[0]);
+            }
+
+            return output;
+        }
+        finally
+        {
+            for( const file of written )
+            {
+                if( fs.existsSync( file )) { fs.unlinkSync( file ) }
             }
         }
     }
@@ -199,7 +245,7 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
       }
     `;
 
-        expect( () => compileAndTransform( code )).toThrow( /must not be called with empty parentheses/ );
+        expect(() => compileAndTransform( code )).toThrow( /must not be called with empty parentheses/ );
     });
 
     it( 'should resolve bare, typed, property, and non-literal @Inject tokens', () =>
@@ -368,5 +414,123 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( symbolAt ).toBeLessThan( compiled.indexOf( 'destructured' ));
         expect( symbolAt ).toBeLessThan( compiled.indexOf( 'afterCode' ));
         expect( compiled ).toContain( 'sse: true' );
+    });
+
+    it( 'should hash a shared type once per program and keep unrelated validators out of a file', () =>
+    {
+        const shared = `
+      export interface Shared { id: string; count: number }
+    `;
+        const first = `
+      import { Controller, Post, Body } from '../decorators.js';
+      import type { Shared } from './temp_shared_types.js';
+
+      interface OnlyHere { nickname: string }
+
+      @Controller('/first')
+      export class FirstController {
+        @Post('/shared')
+        shared(@Body() body: Shared) { return body }
+
+        @Post('/local')
+        local(@Body() body: OnlyHere) { return body }
+      }
+    `;
+        const second = `
+      import { Controller, Post, Body } from '../decorators.js';
+      import type { Shared } from './temp_shared_types.js';
+
+      @Controller('/second')
+      export class SecondController {
+        @Post('/shared')
+        shared(@Body() body: Shared) { return body }
+      }
+    `;
+
+        const output = compileFiles({
+            'temp_shared_types.ts'      : shared,
+            'temp_first_controller.ts'  : first,
+            'temp_second_controller.ts' : second
+        });
+
+        const declared = ( code: string ) => new Set(( code.match( /const (__val_[0-9a-f]+) =/g ) || []).map( m => m.slice( 6, -2 )));
+        const firstVals = declared( output['temp_first_controller.ts']);
+        const secondVals = declared( output['temp_second_controller.ts']);
+
+        // The shared type resolves to the same hash in both files...
+        expect([ ...secondVals ].some( hash => firstVals.has( hash ))).toBe( true );
+        // ...while the type only one controller uses stays out of the other file.
+        expect( output['temp_first_controller.ts']).toContain( 'nickname' );
+        expect( output['temp_second_controller.ts']).not.toContain( 'nickname' );
+        expect( secondVals.size ).toBeLessThan( firstVals.size );
+    });
+
+    it( 'should report an unresolved @Protect argument instead of dropping the guard', () =>
+    {
+        const code = `
+      import { Controller, Get, Protect } from '../decorators.js';
+
+      const NotAGuard = { use() {} };
+
+      @Controller('/typo')
+      export class TypoController {
+        @Get()
+        @Protect(NotAGuard)
+        hi() { return 1 }
+      }
+    `;
+
+        expect(() => compileAndTransform( code )).toThrow( /must reference a class declaration/ );
+    });
+
+    it( 'should report an unresolved @Use argument', () =>
+    {
+        const code = `
+      import { Controller, Get, Use } from '../decorators.js';
+
+      const notAMiddleware = () => {};
+
+      @Use(notAMiddleware)
+      @Controller('/typo-use')
+      export class TypoUseController {
+        @Get()
+        hi() { return 1 }
+      }
+    `;
+
+        expect(() => compileAndTransform( code )).toThrow( /"@Use" must reference a class declaration/ );
+    });
+
+    it( 'should hand problems to a host that accepts diagnostics rather than throwing', () =>
+    {
+        const code = `
+      import { Controller, Get, Head, Inject, Injectable } from '../decorators.js';
+
+      @Injectable()
+      class Dep {}
+
+      @Controller('/diag')
+      export class DiagController {
+        constructor(@Inject() private dep: Dep) {}
+
+        @Get()
+        hi() { return 1 }
+
+        @Head('/h')
+        head() { return 'not void' }
+      }
+    `;
+        const diagnostics: ts.Diagnostic[] = [];
+
+        const compiled = compileAndTransform( code, diagnostics );
+
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.controller")' );
+        expect( diagnostics ).toHaveLength( 2 );
+        expect( diagnostics.every( d => d.category === ts.DiagnosticCategory.Error )).toBe( true );
+        expect( diagnostics.every( d => d.source === 'webergency' )).toBe( true );
+        expect( diagnostics.map( d => d.code )).toEqual([ 90001, 90003 ]);
+        expect( diagnostics[0].file?.fileName ).toContain( 'temp_test_controller.ts' );
+        expect( ts.flattenDiagnosticMessageText( diagnostics[1].messageText, '\n' ))
+            .toMatch( /must return void or Promise<void>/ );
     });
 });

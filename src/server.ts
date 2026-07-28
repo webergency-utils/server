@@ -5,21 +5,24 @@ import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/regist
 import { bootstrapRegistry } from './core/bootstrap.js';
 import { EndpointMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
 import { CorsOptions, SecurityOptions } from './decorators.js';
-import { handleCors } from './helpers/cors.js';
+import { handleCors, isPreflight } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
 
 // Decoupled architectural imports
 import { RequestProcessor } from './core/request-processor.js';
+import { invokeGuards } from './core/guard-runner.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
 import { ServerAdapter } from './adapters/adapter.js';
-import type { TlsOptions } from './adapters/adapter.js';
-export type { TlsOptions };
+import type { TlsOptions, NodeHttpOptions } from './adapters/adapter.js';
+export type { TlsOptions, NodeHttpOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
 import { RequestReader, getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
 import { httpStatusFromError } from './errors.js';
 import { resolveClientIp } from './helpers/client-ip.js';
+import { resolveRequestId, REQUEST_ID_HEADER } from './helpers/request-id.js';
+
 
 export class ConsoleLogger implements Logger 
 {
@@ -50,26 +53,43 @@ export class NoOpLogger implements Logger
 }
 
 export interface ServerOptions {
-    port             : number
-    cors?            : CorsOptions
-    security?        : SecurityOptions | boolean
-    shutdownTimeout? : number
-    controllers?     : any[]
-    providers?       : any[]
-    interceptors?    : any[]
-    guards?          : any[]
-    logs?            : boolean
-    logger?          : Logger
-    module?          : any | any[]
-    responseMode?    : 'strict' | 'relaxed' | 'strip'
-    tls?             : TlsOptions
+    port              : number
+    cors?             : CorsOptions
+    security?         : SecurityOptions | boolean
+    shutdownTimeout?  : number
+    controllers?      : any[]
+    providers?        : any[]
+    interceptors?     : any[]
+    guards?           : any[]
+    logs?             : boolean
+    logger?           : Logger
+    module?           : any | any[]
+    responseMode?     : 'strict' | 'relaxed' | 'strip'
+    tls?              : TlsOptions
+    /**
+     * Node `http.Server` / `https.Server` timeouts. Ignored on native Bun/Deno listeners;
+     * honored when those runtimes fall back to Node-TLS compat. Defaults:
+     * `headersTimeout` 60s, `requestTimeout` 300s, `keepAliveTimeout` 5s.
+     */
+    headersTimeout?   : number
+    requestTimeout?   : number
+    keepAliveTimeout? : number
+    /**
+     * Optional liveness / readiness probes answered before routing.
+     * - `true` → `GET /health` (live) and `GET /ready` (ready)
+     * - `{ path?, readyPath? }` overrides those paths
+     *
+     * Liveness is 200 while the process can answer. Readiness is 200 only when the
+     * server is bootstrapped, listening (after `start()`), and not shutting down.
+     */
+    health?           : boolean | { path? : string, readyPath? : string }
     /**
      * When to trust X-Forwarded-For for @Ip and rate limiting.
      * - false / omit: never trust XFF (use TCP peer / 127.0.0.1)
      * - true: trust only loopback peers
      * - string[]: CIDR allowlist of immediate peers (e.g. `['10.0.0.0/8', '172.16.0.0/12']`)
      */
-    trustProxy?      : string[]
+    trustProxy?       : string[]
 }
 
 export type ServerEvents = {
@@ -86,6 +106,7 @@ export class Server extends EventEmitter
     private activeRequests = 0;
     private serverAdapter? : ServerAdapter;
     private _isShuttingDown = false;
+    private listening = false;
     private rateLimiter = new RateLimiter();
     private events         : { [K in keyof ServerEvents]?: Set<any> } = {};
     private bootstrapped = false;
@@ -134,7 +155,7 @@ export class Server extends EventEmitter
         super();
         this.options.logs = options.logs === true || ( options.logger !== undefined && options.logs !== false );
         this.logger = this.options.logs
-            ? ( options.logger || new ConsoleLogger() )
+            ? ( options.logger || new ConsoleLogger())
             : new NoOpLogger();
         this.setupSignals();
     }
@@ -177,6 +198,23 @@ export class Server extends EventEmitter
                         }
                     );
                 }
+            }
+
+            // Compiling here means overlapping patterns are reported at bootstrap rather
+            // than silently shadowing each other on the first request.
+            this.router.compile();
+
+            for( const warning of this.router.warnings )
+            {
+                this.logger.warn( warning, { type : 'registration' });
+            }
+
+            for( const cycle of this.registry.dependencyCycles )
+            {
+                this.logger.warn(
+                    `Circular dependency: ${cycle}. It resolves through a lazy proxy, but a request scope inside the cycle cannot be detected.`,
+                    { type : 'registration' }
+                );
             }
         });
 
@@ -239,6 +277,7 @@ export class Server extends EventEmitter
     {
         if( this._isShuttingDown ) { return }
         this._isShuttingDown = true;
+        this.listening = false;
 
         this.internalEmit( 'beforeShutdown' );
 
@@ -286,6 +325,10 @@ export class Server extends EventEmitter
         };
 
         await checkActive();
+
+        // Anything still open after the drain window (or still mid-flight on timeout) is cut.
+        this.serverAdapter?.closeAllConnections?.();
+
         await runWithRegistry( this.registry, async () =>
         {
             await this.registry.invokeHook( 'onApplicationShutdown', signal );
@@ -343,8 +386,14 @@ export class Server extends EventEmitter
         this.serverAdapter = this.selectAdapter( runtime );
         await runWithRegistry( this.registry, async () =>
         {
-            await this.serverAdapter!.listen( port, this.fetch, this.options.tls );
+            await this.serverAdapter!.listen( port, this.fetch, this.options.tls, {
+                headersTimeout   : this.options.headersTimeout,
+                requestTimeout   : this.options.requestTimeout,
+                keepAliveTimeout : this.options.keepAliveTimeout
+            });
         });
+
+        this.listening = true;
 
         const protocol = this.options.tls ? 'https' : 'http';
 
@@ -364,17 +413,132 @@ export class Server extends EventEmitter
         this.internalEmit( 'start', port );
     }
 
+    /** 204 with `Allow`, per RFC 9110 for an OPTIONS request with no user handler. */
+    private optionsResponse( path: string, precomputed?: string[]): Response 
+    {
+        const allowed = precomputed ?? this.router.allowedMethods( path );
+        const headers: Record<string, string> = {};
+
+        if( allowed.length > 0 ) { headers['Allow'] = allowed.join( ', ' ) }
+
+        return new Response( null, { status : 204, headers });
+    }
+
     public fetch = async ( request: Request ): Promise<Response> => 
     {
+        const probe = this.answerHealthProbe( request );
+
+        if( probe ) { return probe }
+
         this.ensureReady();
 
         return runWithRegistry( this.registry, () => this.handleFetch( request ));
     };
 
+    /**
+     * Liveness / readiness are answered before bootstrap and routing so a broken module
+     * graph cannot take the probes down. Returns null when health is disabled or the
+     * path is not a probe.
+     */
+    private answerHealthProbe( request: Request ): Response | null
+    {
+        if( !this.options.health || request.method !== 'GET' ) { return null }
+
+        const url = new URL( request.url );
+        const paths = typeof this.options.health === 'object'
+            ? {
+                live  : this.options.health.path ?? '/health',
+                ready : this.options.health.readyPath ?? '/ready'
+            }
+            : { live : '/health', ready : '/ready' };
+
+        const requestId = resolveRequestId( request );
+        const headers = {
+            'Content-Type'      : 'application/json',
+            [REQUEST_ID_HEADER] : requestId
+        };
+
+        if( url.pathname === paths.live )
+        {
+            return new Response( JSON.stringify({ status : 'ok' }), { status : 200, headers });
+        }
+
+        if( url.pathname === paths.ready )
+        {
+            try
+            {
+                this.ensureReady();
+            }
+            catch
+            {
+                return new Response(
+                    JSON.stringify({ status : 'not_ready' }),
+                    { status : 503, headers }
+                );
+            }
+
+            const ready = this.isReady();
+
+            return new Response(
+                JSON.stringify({ status : ready ? 'ready' : 'not_ready' }),
+                { status : ready ? 200 : 503, headers }
+            );
+        }
+
+        return null;
+    }
+
+    private isReady(): boolean
+    {
+        if( !this.bootstrapped || this._isShuttingDown ) { return false }
+
+        // In-process `fetch` without `start()` has no listener; bootstrapped is enough.
+        if( !this.serverAdapter ) { return true }
+
+        return this.listening;
+    }
+
     private handleFetch = async ( request: Request ): Promise<Response> => 
     {
         this.internalEmit( 'request', request );
+
+        const requestId = resolveRequestId( request );
     
+        // Some Response headers are immutable, so fall back to cloning the response.
+        // Always echo X-Request-Id last so correlation survives CORS/security merges.
+        const withHeaders = ( res: Response, headers: Record<string, string> ): Response => 
+        {
+            const all = { ...headers, [REQUEST_ID_HEADER] : requestId };
+
+            try 
+            {
+                for( const [ key, value ] of Object.entries( all )) 
+                {
+                    res.headers.set( key, value );
+                }
+
+                return res;
+            }
+            catch 
+            {
+                const merged = new Headers( res.headers );
+
+                for( const [ key, value ] of Object.entries( all )) 
+                {
+                    merged.set( key, value );
+                }
+
+                return new Response( res.body, {
+                    status     : res.status,
+                    statusText : res.statusText,
+                    headers    : merged
+                });
+            }
+        };
+
+        const withRequestId = ( res: Response ): Response =>
+            withHeaders( res, {});
+
         const applyCors = ( res: Response, config: any ): Response => 
         {
             if( !config ) { return res }
@@ -382,30 +546,7 @@ export class Server extends EventEmitter
 
             if( corsHeaders && !( corsHeaders instanceof Response )) 
             {
-                try 
-                {
-                    for( const [key, value] of Object.entries( corsHeaders )) 
-                    {
-                        res.headers.set( key, value );
-                    }
-
-                    return res;
-                }
-                catch ( e ) 
-                {
-                    const newHeaders = new Headers( res.headers );
-
-                    for( const [key, value] of Object.entries( corsHeaders )) 
-                    {
-                        newHeaders.set( key, value );
-                    }
-
-                    return new Response( res.body, {
-                        status     : res.status,
-                        statusText : res.statusText,
-                        headers    : newHeaders
-                    });
-                }
+                return withHeaders( res, corsHeaders );
             }
 
             return res;
@@ -414,31 +555,8 @@ export class Server extends EventEmitter
         const applySecurityHeaders = ( res: Response, config: any ): Response => 
         {
             if( config === undefined ) { return res }
-            const headers = generateSecurityHeaders( config );
-            try 
-            {
-                for( const [key, value] of Object.entries( headers )) 
-                {
-                    res.headers.set( key, value );
-                }
 
-                return res;
-            }
-            catch ( e ) 
-            {
-                const newHeaders = new Headers( res.headers );
-
-                for( const [key, value] of Object.entries( headers )) 
-                {
-                    newHeaders.set( key, value );
-                }
-
-                return new Response( res.body, {
-                    status     : res.status,
-                    statusText : res.statusText,
-                    headers    : newHeaders
-                });
-            }
+            return withHeaders( res, generateSecurityHeaders( config ));
         };
 
         if( this.isShuttingDown ) 
@@ -447,7 +565,7 @@ export class Server extends EventEmitter
             res = applyCors( res, this.options.cors );
             res = applySecurityHeaders( res, mergeSecurityConfigs([this.options.security]));
 
-            return res;
+            return withRequestId( res );
         }
 
         this.activeRequests++;
@@ -458,7 +576,9 @@ export class Server extends EventEmitter
         const method = isUpgrade ? 'WS' : request.method;
         const augmented = request as AugmentedRequest;
         augmented.trustProxy = this.options.trustProxy;
-        if( ( request as any ).remoteAddress !== undefined )
+        augmented.requestId = requestId;
+
+        if(( request as any ).remoteAddress !== undefined )
         {
             augmented.remoteAddress = ( request as any ).remoteAddress;
         }
@@ -469,109 +589,108 @@ export class Server extends EventEmitter
                 type : 'request_start',
                 method,
                 path,
-                url  : request.url
+                url  : request.url,
+                requestId
             });
         }
 
         let finalMatch: any = null;
         try 
         {
-            let match = this.router.find( method, path );
+            // One lookup yields the match, the Allow list for a wrong-verb request, and the
+            // cross-method route whose CORS/security config an OPTIONS answer should use.
+            const lookup = this.router.lookup( method, path );
+            const match = lookup.match;
 
-            if( !match && method === 'HEAD' ) 
-            {
-                match = this.router.find( 'GET', path );
-            }
-      
-            finalMatch = match;
-
-            if( !match && method === 'OPTIONS' ) 
-            {
-                finalMatch = this.router.find( 'GET', path ) || 
-                     this.router.find( 'POST', path ) || 
-                     this.router.find( 'PUT', path ) || 
-                     this.router.find( 'DELETE', path );
-            }
+            finalMatch = match || ( method === 'OPTIONS' ? lookup.fallback : null );
 
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
             const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
             const securityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
 
-            if( method === 'OPTIONS' && corsConfig ) 
+            const logOptions = ( status: number, note?: string ) =>
             {
-                const corsRes = handleCors( request, corsConfig );
+                if( !this.options.logs ) { return }
+                const duration = Date.now() - startTime;
+                this.logger.info( `<-- ${method} ${path} - ${status}${note ? ' ' + note : ''} (${duration}ms)`, {
+                    type : 'request_end',
+                    method,
+                    path,
+                    status,
+                    duration,
+                    requestId
+                });
+            };
+
+            // A genuine CORS preflight is answered here, before guards run. Browsers omit
+            // credentials on preflight, so dispatching it into a @Protect'ed route would
+            // reject it and break CORS for every protected endpoint.
+            if( isPreflight( request )) 
+            {
+                const corsRes = corsConfig ? handleCors( request, corsConfig ) : null;
 
                 if( corsRes instanceof Response ) 
                 {
-                    if( this.options.logs ) 
-                    {
-                        const duration = Date.now() - startTime;
-                        this.logger.info( `<-- ${method} ${path} - 204 CORS Preflight (${duration}ms)`, {
-                            type   : 'request_end',
-                            method,
-                            path,
-                            status : 204,
-                            duration
-                        });
-                    }
+                    logOptions( 204, 'CORS Preflight' );
 
                     return applySecurityHeaders( corsRes, securityConfig );
                 }
-            }
 
-            // OPTIONS rematch of GET/POST/… is only for CORS config lookup — never run that handler.
-            if( method === 'OPTIONS' && !match ) 
-            {
                 if( !finalMatch ) 
                 {
-                    if( this.options.logs ) 
-                    {
-                        const duration = Date.now() - startTime;
-                        this.logger.info( `<-- ${method} ${path} - 404 Not Found (${duration}ms)`, {
-                            type   : 'request_end',
-                            method,
-                            path,
-                            status : 404,
-                            duration
-                        });
-                    }
+                    logOptions( 404, 'Not Found' );
 
                     return applySecurityHeaders( new Response( 'Not Found', { status : 404 }), securityConfig );
                 }
 
-                if( this.options.logs ) 
+                logOptions( 204 );
+
+                return applySecurityHeaders( this.optionsResponse( path, lookup.allowed ), securityConfig );
+            }
+
+            // Non-preflight OPTIONS falls through to an @Options / @All handler when one
+            // matched; otherwise the framework answers with Allow.
+            if( method === 'OPTIONS' && !match ) 
+            {
+                if( !finalMatch ) 
                 {
-                    const duration = Date.now() - startTime;
-                    this.logger.info( `<-- ${method} ${path} - 204 (${duration}ms)`, {
-                        type   : 'request_end',
-                        method,
-                        path,
-                        status : 204,
-                        duration
-                    });
+                    logOptions( 404, 'Not Found' );
+
+                    return applySecurityHeaders( new Response( 'Not Found', { status : 404 }), securityConfig );
                 }
 
-                return applySecurityHeaders( new Response( null, { status : 204 }), securityConfig );
+                logOptions( 204 );
+
+                return applyCors( applySecurityHeaders( this.optionsResponse( path, lookup.allowed ), securityConfig ), corsConfig );
             }
 
             if( !finalMatch ) 
             {
+                // The path exists under other verbs, so this is 405 + Allow, not 404. An
+                // upgrade request is exempt: WS is a transport, not an advertised method.
+                const wrongMethod = !isUpgrade && lookup.allowed.length > 0;
+                const status = wrongMethod ? 405 : 404;
+
                 if( this.options.logs ) 
                 {
                     const duration = Date.now() - startTime;
-                    this.logger.info( `<-- ${method} ${path} - 404 Not Found (${duration}ms)`, {
-                        type   : 'request_end',
+                    this.logger.info( `<-- ${method} ${path} - ${status} ${wrongMethod ? 'Method Not Allowed' : 'Not Found'} (${duration}ms)`, {
+                        type : 'request_end',
                         method,
                         path,
-                        status : 404,
-                        duration
+                        status,
+                        duration,
+                        requestId
                     });
                 }
-                let res = new Response( 'Not Found', { status : 404 });
+                let res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
+                    status,
+                    headers : wrongMethod ? { Allow : lookup.allowed.join( ', ' ) } : undefined
+                });
                 res = applyCors( res, this.options.cors );
                 res = applySecurityHeaders( res, mergeSecurityConfigs([this.options.security]));
 
-                return res;
+                return withRequestId( res );
             }
 
             if( isUpgrade ) 
@@ -589,63 +708,34 @@ export class Server extends EventEmitter
                 req.query = QueryParser.parse( url.search.startsWith( '?' ) ? url.search.slice( 1 ) : url.search );
                 const ctx = { success : true, errors : [], mode : 'strict' };
 
-                for( const g of finalMatch.metadata.guards ) 
-                {
-                    const guardModule = g.type === 'class' ? registry.getTokenModule( g.name ) : controllerModule;
-                    const guardInstance = g.type === 'class' ? registry.getGuard( g.name, guardModule ) : controller;
-                    const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
-          
-                    const guardArgs: any[] = [];
-                    let resolverIdx = 0;
-
-                    for( const p of g.params ) 
-                    {
-                        if( p.source === 'WebSocket' ) 
-                        {
-                            guardArgs.push( null );
-                        }
-                        else if( p.source === 'Request' && !p.name && !p.validator ) 
-                        {
-                            const { RequestProcessor } = await import( './core/request-processor.js' );
-                            guardArgs.push( await RequestProcessor.resolveParam( p, req, ctx, undefined, guardModule ));
-                        }
-                        else if([
-                            'Param', 'Body', 'RawBody', 'Header', 'Headers', 'Cookies', 'Cookie',
-                            'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
-                        ].includes( p.source )) 
-                        {
-                            const { RequestProcessor } = await import( './core/request-processor.js' );
-                            guardArgs.push( await RequestProcessor.resolveParam( p, req, ctx, undefined, guardModule ));
-                        }
-                        else 
-                        {
-                            guardArgs.push( g.resolvers[resolverIdx++]);
-                        }
-                    }
-                    const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
-                    await guardMethod.apply( guardInstance, finalArgs );
-                }
+                // The socket does not exist until after the upgrade, so @ConnectedSocket is null.
+                await invokeGuards( finalMatch.metadata, req, {
+                    ctx,
+                    controller,
+                    controllerModule,
+                    websocket : null
+                });
 
                 if( !ctx.success ) 
                 {
-                    return new Response( JSON.stringify({
+                    return withRequestId( new Response( JSON.stringify({
                         success : false,
                         message : 'request validation failed',
                         errors  : ctx.errors
                     }), {
                         status  : 400,
                         headers : { 'Content-Type' : 'application/json' }
-                    });
+                    }));
                 }
 
                 if( this.serverAdapter && typeof this.serverAdapter.upgrade === 'function' ) 
                 {
                     const res = await this.serverAdapter.upgrade( request, finalMatch.metadata, finalMatch.params );
 
-                    return res;
+                    return withRequestId( res );
                 }
 
-                return new Response( 'WebSockets not supported by adapter', { status : 501 });
+                return withRequestId( new Response( 'WebSockets not supported by adapter', { status : 501 }));
             }
 
             const req = request as AugmentedRequest;
@@ -680,11 +770,14 @@ export class Server extends EventEmitter
             if( securityConfig?.rateLimit ) 
             {
                 const ip = resolveClientIp( req, this.options.trustProxy );
-                const allowed = this.rateLimiter.checkLimit( ip, path, securityConfig.rateLimit );
+                const limit = this.rateLimiter.consume( ip, path, securityConfig.rateLimit );
 
-                if( !allowed ) 
+                if( !limit.allowed ) 
                 {
-                    throw Object.assign( new Error( 'Too Many Requests' ), { status : 429 });
+                    throw Object.assign( new Error( 'Too Many Requests' ), {
+                        status  : 429,
+                        headers : { 'Retry-After' : String( limit.retryAfter ) }
+                    });
                 }
             }
 
@@ -735,6 +828,17 @@ export class Server extends EventEmitter
 
             response = applyCors( response, corsConfig );
             response = applySecurityHeaders( response, securityConfig );
+
+            // RFC 9110: an OPTIONS response should advertise Allow.
+            if( method === 'OPTIONS' && !response.headers.has( 'Allow' )) 
+            {
+                const allowed = this.router.allowedMethods( path );
+
+                if( allowed.length > 0 ) 
+                {
+                    response = withHeaders( response, { Allow : allowed.join( ', ' ) });
+                }
+            }
       
             if( this.options.logs ) 
             {
@@ -744,7 +848,8 @@ export class Server extends EventEmitter
                     method,
                     path,
                     status : response.status,
-                    duration
+                    duration,
+                    requestId
                 });
             }
 
@@ -757,7 +862,7 @@ export class Server extends EventEmitter
                 });
             }
 
-            return response;
+            return withRequestId( response );
         }
         catch ( err: any ) 
         {
@@ -768,7 +873,8 @@ export class Server extends EventEmitter
             {
                 this.logger.error( `Server Error: ${err.message}`, {
                     type  : 'error',
-                    error : err
+                    error : err,
+                    requestId
                 });
             }
 
@@ -780,7 +886,8 @@ export class Server extends EventEmitter
                     method,
                     path,
                     status : statusCode,
-                    duration
+                    duration,
+                    requestId
                 });
             }
       
@@ -788,9 +895,20 @@ export class Server extends EventEmitter
             const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
             const errSecurityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
       
+            const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };
+
+            // Errors may carry protocol headers of their own, e.g. Retry-After on a 429.
+            if( err.headers && typeof err.headers === 'object' ) 
+            {
+                for( const [ key, value ] of Object.entries( err.headers as Record<string, unknown> )) 
+                {
+                    if( typeof value === 'string' ) { errHeaders[key] = value }
+                }
+            }
+
             let res = new Response( JSON.stringify( err.data || { success : false, error : err.message }), {
                 status  : statusCode,
-                headers : { 'Content-Type' : 'application/json' }
+                headers : errHeaders
             });
             res = applyCors( res, corsConfig );
             res = applySecurityHeaders( res, errSecurityConfig );
@@ -804,7 +922,7 @@ export class Server extends EventEmitter
                 });
             }
 
-            return res;
+            return withRequestId( res );
         }
         finally 
         {

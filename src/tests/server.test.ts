@@ -4,16 +4,47 @@ import { Scope, Meta, SetMetadata } from '../decorators.js';
 import { Reflector } from '../core/reflector.js';
 import { seedInstanceController, runWithRegistry, ApplicationRegistry, defineController, setModuleMeta } from '../testing.js';
 
-function setupServer( port: number, setup: ( registry: ApplicationRegistry ) => void, options: Record<string, any> = {} ): Server
+function setupServer( port: number, setup: ( registry: ApplicationRegistry ) => void, options: Record<string, any> = {}): Server
 {
     const server = new Server({ port, ...options });
     runWithRegistry( server.registry, () => setup( server.registry ));
+
     return server;
 }
 
+/** Minimal endpoint metadata for controller 'C'; spread it to override any field. */
+function endpoint( methodName: string, httpMethod: string, path: string ): any
+{
+    return {
+        controller   : 'C',
+        methodName,
+        httpMethod,
+        path,
+        params       : [],
+        guards       : [],
+        interceptors : [],
+        meta         : {}
+    };
+}
+
+function preflightRequest( url: string, requestMethod = 'GET' ): Request
+{
+    return new Request( url, {
+        method  : 'OPTIONS',
+        headers : { Origin : 'https://a.com', 'Access-Control-Request-Method' : requestMethod }
+    });
+}
+
+let legacyModuleCount = 0;
+
+/**
+ * Modules are identified by class name, so each generated module needs its own — two
+ * same-named module classes are a registration conflict the registry rejects.
+ */
 function legacyModule( meta: Record<string, any> )
 {
     class LegacyModule {}
+    Object.defineProperty( LegacyModule, 'name', { value : `LegacyModule${++legacyModuleCount}` });
     setModuleMeta( LegacyModule, meta );
 
     return LegacyModule;
@@ -25,8 +56,8 @@ import { createServer } from 'http';
 
 /** Mocked http/https + fake Bun/Deno globals only make sense on Node. */
 const isNodeRuntime =
-    typeof ( globalThis as { Bun?: unknown }).Bun === 'undefined'
-    && typeof ( globalThis as { Deno?: unknown }).Deno === 'undefined';
+    typeof ( globalThis as { Bun? : unknown }).Bun === 'undefined'
+    && typeof ( globalThis as { Deno? : unknown }).Deno === 'undefined';
 
 vi.mock( 'http', () => ({
     createServer : vi.fn()
@@ -79,6 +110,123 @@ describe( 'Server & Metadata', () =>
             });
             expect( Context.get()).toBeUndefined();
         });
+
+        it( 'should expose requestId from the request when the context omits it', async () =>
+        {
+            const req = { url : 'http://test.com', requestId : 'from-req' } as any;
+            const meta = { path : '/' } as any;
+
+            await Context.run({ request : req, metadata : meta }, async () =>
+            {
+                expect( Context.requestId ).toBe( 'from-req' );
+                expect( Context.get()?.requestId ).toBe( 'from-req' );
+            });
+        });
+    });
+
+    describe( 'Observability', () =>
+    {
+        it( 'should echo an inbound X-Request-Id on the response and in logs', async () =>
+        {
+            // Arrange
+            const logs: any[] = [];
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { home : () => 'ok' });
+                registry.registerEndpoint( endpoint( 'home', 'GET', '/' ));
+            }, {
+                logs   : true,
+                logger : {
+                    info  : ( _m: any, ctx: any ) => logs.push( ctx ),
+                    warn  : () => {},
+                    error : () => {}
+                }
+            });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/', {
+                headers : { 'x-request-id' : 'trace-abc' }
+            }));
+
+            // Assert
+            expect( res.headers.get( 'x-request-id' )).toBe( 'trace-abc' );
+            expect( logs.find( l => l?.type === 'request_start' )?.requestId ).toBe( 'trace-abc' );
+            expect( logs.find( l => l?.type === 'request_end' )?.requestId ).toBe( 'trace-abc' );
+        });
+
+        it( 'should generate an X-Request-Id when none is provided', async () =>
+        {
+            // Arrange
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { home : () => 'ok' });
+                registry.registerEndpoint( endpoint( 'home', 'GET', '/' ));
+            });
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/' ));
+
+            // Assert
+            expect( res.headers.get( 'x-request-id' )).toMatch(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+            );
+        });
+
+        it( 'should answer liveness and readiness probes before routing', async () =>
+        {
+            // Arrange
+            let routed = 0;
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { health : () => 
+                {
+                    routed++;
+
+                    return 'nope'; 
+                } });
+                registry.registerEndpoint( endpoint( 'health', 'GET', '/health' ));
+            }, { health : true });
+
+            // Act
+            const live = await server.fetch( new Request( 'http://localhost/health' ));
+            const ready = await server.fetch( new Request( 'http://localhost/ready' ));
+
+            // Assert — probes win over the colliding controller route
+            expect( live.status ).toBe( 200 );
+            expect( await live.json()).toEqual({ status : 'ok' });
+            expect( ready.status ).toBe( 200 );
+            expect( await ready.json()).toEqual({ status : 'ready' });
+            expect( routed ).toBe( 0 );
+            expect( live.headers.get( 'x-request-id' )).toBeTruthy();
+        });
+
+        it( 'should return 503 on readiness while shutting down', async () =>
+        {
+            // Arrange
+            const server = setupServer( 3000, () => {}, { health : true, shutdownTimeout : 10 });
+            await server.fetch( new Request( 'http://localhost/ready' )); // bootstrap
+            server.isShuttingDown = true;
+
+            // Act
+            const ready = await server.fetch( new Request( 'http://localhost/ready' ));
+
+            // Assert
+            expect( ready.status ).toBe( 503 );
+            expect( await ready.json()).toEqual({ status : 'not_ready' });
+        });
+
+        it( 'should honor custom health paths', async () =>
+        {
+            // Arrange
+            const server = setupServer( 3000, () => {}, {
+                health : { path : '/livez', readyPath : '/readyz' }
+            });
+
+            // Act / Assert
+            expect(( await server.fetch( new Request( 'http://localhost/livez' ))).status ).toBe( 200 );
+            expect(( await server.fetch( new Request( 'http://localhost/readyz' ))).status ).toBe( 200 );
+            expect(( await server.fetch( new Request( 'http://localhost/health' ))).status ).toBe( 404 );
+        });
     });
 
     describe( 'Runtime Routing', () => 
@@ -91,14 +239,14 @@ describe( 'Server & Metadata', () =>
             };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'Ctrl', ctrl );
-            registry.registerEndpoint({
-                controller : 'Ctrl', methodName : 'home', httpMethod : 'GET', path : '/', params : [], guards : [], interceptors : [], meta : {}
-            });
-            registry.registerEndpoint({
-                controller   : 'Ctrl', methodName   : 'user', httpMethod   : 'GET', path         : '/users/:id', 
-                params       : [{ source : 'Param', name : 'id' }], guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'Ctrl', ctrl );
+                registry.registerEndpoint({
+                    controller : 'Ctrl', methodName : 'home', httpMethod : 'GET', path : '/', params : [], guards : [], interceptors : [], meta : {}
+                });
+                registry.registerEndpoint({
+                    controller   : 'Ctrl', methodName   : 'user', httpMethod   : 'GET', path         : '/users/:id', 
+                    params       : [{ source : 'Param', name : 'id' }], guards       : [], interceptors : [], meta         : {}
+                });
             });
             
             const res1 = await server.fetch( new Request( 'http://localhost/' ));
@@ -113,15 +261,206 @@ describe( 'Server & Metadata', () =>
             let posts = 0;
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'C', { post : () => { posts++; return 'ok' } });
-            registry.registerEndpoint({
-                controller : 'C', methodName : 'post', httpMethod : 'POST', path : '/data', params : [], guards : [], interceptors : [], meta : {}
-            });
+                registry.registerController( 'C', { post : () => 
+                {
+                    posts++;
+
+                    return 'ok'; 
+                } });
+                registry.registerEndpoint({
+                    controller : 'C', methodName : 'post', httpMethod : 'POST', path : '/data', params : [], guards : [], interceptors : [], meta : {}
+                });
             });
 
             const res = await server.fetch( new Request( 'http://localhost/data', { method : 'OPTIONS' }));
             expect( res.status ).toBe( 204 );
             expect( posts ).toBe( 0 );
+        });
+
+        it( 'should find route CORS config on OPTIONS for PATCH-only and HEAD-only routes', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { patch : () => 'p', head : () => 'h' });
+                registry.registerEndpoint( endpoint( 'patch', 'PATCH', '/only-patch' ));
+                registry.registerEndpoint( endpoint( 'head', 'HEAD', '/only-head' ));
+            });
+
+            const patchRes = await server.fetch( new Request( 'http://localhost/only-patch', { method : 'OPTIONS' }));
+            const headRes = await server.fetch( new Request( 'http://localhost/only-head', { method : 'OPTIONS' }));
+
+            expect( patchRes.status ).toBe( 204 );
+            expect( headRes.status ).toBe( 204 );
+        });
+
+        it( 'should dispatch non-preflight OPTIONS to an @Options handler even when CORS is configured', async () =>
+        {
+            let handled = 0;
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { opts : () => ( handled++, 'from-handler' ) });
+                registry.registerEndpoint( endpoint( 'opts', 'OPTIONS', '/thing' ));
+            }, { cors : { origin : '*' } });
+
+            const res = await server.fetch( new Request( 'http://localhost/thing', { method : 'OPTIONS' }));
+
+            expect( handled ).toBe( 1 );
+            expect( await res.text()).toBe( 'from-handler' );
+            expect( res.headers.get( 'Access-Control-Allow-Origin' )).toBe( '*' );
+        });
+
+        it( 'should never dispatch a genuine CORS preflight to an @Options handler', async () =>
+        {
+            let handled = 0;
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { opts : () => ( handled++, 'from-handler' ) });
+                registry.registerEndpoint( endpoint( 'opts', 'OPTIONS', '/thing' ));
+            }, { cors : { origin : '*' } });
+
+            const res = await server.fetch( preflightRequest( 'http://localhost/thing' ));
+
+            expect( handled ).toBe( 0 );
+            expect( res.status ).toBe( 204 );
+        });
+
+        it( 'should not run guards for a genuine preflight on a protected OPTIONS route', async () =>
+        {
+            let guarded = 0;
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerGuard( 'DenyGuard', { use : () => { guarded++; throw Object.assign( new Error( 'nope' ), { status : 401 }) } });
+                registry.registerController( 'C', { opts : () => 'from-handler' });
+                registry.registerEndpoint({
+                    ...endpoint( 'opts', 'OPTIONS', '/guarded' ),
+                    guards : [{ name : 'DenyGuard', type : 'class', resolvers : [], params : [] }]
+                });
+            }, { cors : { origin : '*' } });
+
+            const preflight = await server.fetch( preflightRequest( 'http://localhost/guarded' ));
+
+            expect( guarded ).toBe( 0 );
+            expect( preflight.status ).toBe( 204 );
+
+            // A plain OPTIONS request is dispatched, so the guard does run and rejects.
+            const plain = await server.fetch( new Request( 'http://localhost/guarded', { method : 'OPTIONS' }));
+
+            expect( guarded ).toBe( 1 );
+            expect( plain.status ).toBe( 401 );
+        });
+
+        it( 'should advertise Allow on the framework OPTIONS response', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { get : () => 'g', patch : () => 'p' });
+                registry.registerEndpoint( endpoint( 'get', 'GET', '/res' ));
+                registry.registerEndpoint( endpoint( 'patch', 'PATCH', '/res' ));
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/res', { method : 'OPTIONS' }));
+            const allow = ( res.headers.get( 'Allow' ) || '' ).split( ', ' );
+
+            expect( res.status ).toBe( 204 );
+            expect( allow ).toEqual( expect.arrayContaining([ 'GET', 'HEAD', 'PATCH', 'OPTIONS' ]));
+        });
+
+        it( 'should auto-add Allow when an @Options handler did not set one', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { opts : () => 'ok', get : () => 'g' });
+                registry.registerEndpoint( endpoint( 'opts', 'OPTIONS', '/mixed' ));
+                registry.registerEndpoint( endpoint( 'get', 'GET', '/mixed' ));
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/mixed', { method : 'OPTIONS' }));
+
+            expect( await res.text()).toBe( 'ok' );
+            expect(( res.headers.get( 'Allow' ) || '' ).split( ', ' )).toEqual( expect.arrayContaining([ 'GET', 'OPTIONS' ]));
+        });
+
+        it( 'should return 405 with Allow when the path exists under another verb', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { create : () => 'ok' });
+                registry.registerEndpoint( endpoint( 'create', 'POST', '/orders' ));
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/orders' ));
+
+            expect( res.status ).toBe( 405 );
+            expect(( res.headers.get( 'Allow' ) || '' ).split( ', ' )).toEqual( expect.arrayContaining([ 'POST', 'OPTIONS' ]));
+        });
+
+        it( 'should keep 404 for a path no route matches', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { create : () => 'ok' });
+                registry.registerEndpoint( endpoint( 'create', 'POST', '/orders' ));
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/nothing' ));
+
+            expect( res.status ).toBe( 404 );
+            expect( res.headers.get( 'Allow' )).toBeNull();
+        });
+
+        it( 'should prefer a static route over a parametric one', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { byId : ( id: string ) => id, me : () => 'me' });
+                registry.registerEndpoint({
+                    ...endpoint( 'byId', 'GET', '/users/:id' ),
+                    params : [{ source : 'Param', name : 'id' }]
+                });
+                registry.registerEndpoint( endpoint( 'me', 'GET', '/users/me' ));
+            });
+
+            const me = await server.fetch( new Request( 'http://localhost/users/me' ));
+            const other = await server.fetch( new Request( 'http://localhost/users/7' ));
+
+            expect( await me.text()).toBe( 'me' );
+            expect( await other.text()).toBe( '7' );
+        });
+
+        it( 'should answer a preflight with the target route CORS config, not the global one', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { create : () => 'ok' });
+                registry.registerEndpoint({
+                    ...endpoint( 'create', 'POST', '/route-cors' ),
+                    cors : { origin : 'https://a.com', maxAge : 99 }
+                });
+            }, { cors : { origin : 'https://global.com' } });
+
+            const res = await server.fetch( preflightRequest( 'http://localhost/route-cors', 'POST' ));
+
+            expect( res.status ).toBe( 204 );
+            expect( res.headers.get( 'Access-Control-Allow-Origin' )).toBe( 'https://a.com' );
+            expect( res.headers.get( 'Access-Control-Max-Age' )).toBe( '99' );
+        });
+
+        it( 'should return 400 for malformed percent-encoding in a path param', async () =>
+        {
+            let handled = 0;
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', { user : ( id: string ) => ( handled++, id ) });
+                registry.registerEndpoint({
+                    ...endpoint( 'user', 'GET', '/users/:id' ),
+                    params : [{ source : 'Param', name : 'id' }]
+                });
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/users/%ZZ' ));
+
+            expect( res.status ).toBe( 400 );
+            expect( handled ).toBe( 0 );
         });
     });
 
@@ -135,25 +474,25 @@ describe( 'Server & Metadata', () =>
             };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'ParamCtrl', ctrl );
-            registry.registerEndpoint({
-                controller : 'ParamCtrl',
-                methodName : 'test',
-                httpMethod : 'GET',
-                path       : '/params',
-                params     : [
-                    { source : 'Query', name : 'q' },
-                    { source : 'Header', name : 'x-f' },
-                    { source : 'Hostname' },
-                    { source : 'Url' },
-                    { source : 'Path' },
-                    { source : 'Ip' },
-                    { source : 'Response' },
-                    { source : 'Context' },
-                    { source : 'Headers' }
-                ],
-                guards : [], interceptors : [], meta : {}
-            });
+                registry.registerController( 'ParamCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller : 'ParamCtrl',
+                    methodName : 'test',
+                    httpMethod : 'GET',
+                    path       : '/params',
+                    params     : [
+                        { source : 'Query', name : 'q' },
+                        { source : 'Header', name : 'x-f' },
+                        { source : 'Hostname' },
+                        { source : 'Url' },
+                        { source : 'Path' },
+                        { source : 'Ip' },
+                        { source : 'Response' },
+                        { source : 'Context' },
+                        { source : 'Headers' }
+                    ],
+                    guards : [], interceptors : [], meta : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://example.com/params?q=1', {
                 headers : { 'x-f' : 'v', 'x-forwarded-for' : '1.2.3.4', 'x-test' : 'val' }
@@ -173,7 +512,7 @@ describe( 'Server & Metadata', () =>
         it( 'should apply @Response headers and status onto the outbound response', async () =>
         {
             const ctrl = {
-                get : ( res: { headers: Headers; status: number }) =>
+                get : ( res: { headers : Headers, status : number }) =>
                 {
                     res.headers.set( 'x-from-handler', '1' );
                     res.status = 201;
@@ -183,17 +522,17 @@ describe( 'Server & Metadata', () =>
             };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'ResCtrl', ctrl );
-            registry.registerEndpoint({
-                controller   : 'ResCtrl',
-                methodName   : 'get',
-                httpMethod   : 'GET',
-                path         : '/res',
-                params       : [{ source : 'Response' }],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
+                registry.registerController( 'ResCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'ResCtrl',
+                    methodName   : 'get',
+                    httpMethod   : 'GET',
+                    path         : '/res',
+                    params       : [{ source : 'Response' }],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://localhost/res' ));
             expect( res.status ).toBe( 201 );
@@ -214,20 +553,21 @@ describe( 'Server & Metadata', () =>
             {
                 registry.registerController( 'SseValCtrl', ctrl );
                 registry.registerEndpoint({
-                    controller         : 'SseValCtrl',
-                    methodName         : 'stream',
-                    httpMethod         : 'GET',
-                    path               : '/sse-val',
-                    params             : [],
-                    guards             : [],
-                    interceptors       : [],
-                    meta               : { sse : true },
-                    returnTypeMode     : 'strip',
+                    controller          : 'SseValCtrl',
+                    methodName          : 'stream',
+                    httpMethod          : 'GET',
+                    path                : '/sse-val',
+                    params              : [],
+                    guards              : [],
+                    interceptors        : [],
+                    meta                : { sse : true },
+                    returnTypeMode      : 'strip',
                     returnTypeValidator : ( v: any, _path: string, ctx: any ) =>
                     {
                         if( ctx.mode === 'strip' && v && typeof v === 'object' )
                         {
                             const out : Record<string, any> = {};
+
                             if( 'val' in v ){ out.val = v.val }
 
                             return out;
@@ -251,17 +591,17 @@ describe( 'Server & Metadata', () =>
             };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'IpCtrl', ctrl );
-            registry.registerEndpoint({
-                controller   : 'IpCtrl',
-                methodName   : 'get',
-                httpMethod   : 'GET',
-                path         : '/ip',
-                params       : [{ source : 'Ip' }],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
+                registry.registerController( 'IpCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'IpCtrl',
+                    methodName   : 'get',
+                    httpMethod   : 'GET',
+                    path         : '/ip',
+                    params       : [{ source : 'Ip' }],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
             }, {trustProxy : [ '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' ]});
 
             const req = new Request( 'http://example.com/ip', {
@@ -279,11 +619,11 @@ describe( 'Server & Metadata', () =>
             const ctrl = { echo : ( body: any ) => body };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'EchoCtrl', ctrl );
-            registry.registerEndpoint({
-                controller   : 'EchoCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/echo',
-                params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'EchoCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'EchoCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/echo',
+                    params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
+                });
             });
             
             const res = await server.fetch( new Request( 'http://localhost/echo', {
@@ -307,19 +647,19 @@ describe( 'Server & Metadata', () =>
             };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerGuard( 'ComplexGuard', guard );
-            registry.registerController( 'C', { test : () => 'ok' });
-            registry.registerEndpoint({
-                controller : 'C', methodName : 'test', httpMethod : 'POST', path       : '/complex-g', params     : [],
-                guards     : [{ 
-                    name      : 'ComplexGuard', type      : 'class', resolvers : [], 
-                    params    : [
-                        { source : 'Request' },
-                        { source : 'Body' }
-                    ] 
-                }],
-                interceptors : [], meta : {}
-            });
+                registry.registerGuard( 'ComplexGuard', guard );
+                registry.registerController( 'C', { test : () => 'ok' });
+                registry.registerEndpoint({
+                    controller : 'C', methodName : 'test', httpMethod : 'POST', path       : '/complex-g', params     : [],
+                    guards     : [{ 
+                        name      : 'ComplexGuard', type      : 'class', resolvers : [], 
+                        params    : [
+                            { source : 'Request' },
+                            { source : 'Body' }
+                        ] 
+                    }],
+                    interceptors : [], meta : {}
+                });
             });
             
             const req = new Request( 'http://localhost/complex-g', {
@@ -340,13 +680,13 @@ describe( 'Server & Metadata', () =>
             })};
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerGuard( 'G', guard );
-            registry.registerController( 'C', { ok : () => 'ok' });
-            registry.registerEndpoint({
-                controller   : 'C', methodName   : 'ok', httpMethod   : 'GET', path         : '/g', params       : [],
-                guards       : [{ name : 'G', type : 'class', resolvers : ['deny'], params : [{ source : 'Unknown' as any }] }],
-                interceptors : [], meta         : {}
-            });
+                registry.registerGuard( 'G', guard );
+                registry.registerController( 'C', { ok : () => 'ok' });
+                registry.registerEndpoint({
+                    controller   : 'C', methodName   : 'ok', httpMethod   : 'GET', path         : '/g', params       : [],
+                    guards       : [{ name : 'G', type : 'class', resolvers : ['deny'], params : [{ source : 'Unknown' as any }] }],
+                    interceptors : [], meta         : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://localhost/g' ));
             expect( res.status ).toBe( 403 );
@@ -372,13 +712,13 @@ describe( 'Server & Metadata', () =>
             }};
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerInterceptor( 'I1', i1 );
-            registry.registerInterceptor( 'I2', i2 );
-            registry.registerController( 'C', { ok : () => 'ok' });
-            registry.registerEndpoint({
-                controller   : 'C', methodName   : 'ok', httpMethod   : 'GET', path         : '/i', params       : [],
-                guards       : [], interceptors : ['I1', 'I2'], meta         : {}
-            });
+                registry.registerInterceptor( 'I1', i1 );
+                registry.registerInterceptor( 'I2', i2 );
+                registry.registerController( 'C', { ok : () => 'ok' });
+                registry.registerEndpoint({
+                    controller   : 'C', methodName   : 'ok', httpMethod   : 'GET', path         : '/i', params       : [],
+                    guards       : [], interceptors : ['I1', 'I2'], meta         : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://localhost/i' ));
             expect( res.headers.get( 'x-1' )).toBe( '1' );
@@ -484,17 +824,17 @@ describe( 'Server & Metadata', () =>
 
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'FromBodyCtrl', formCtrl );
-            registry.registerEndpoint({
-                controller : 'FromBodyCtrl', methodName : 'form', httpMethod : 'POST', path : '/from-form',
-                params     : [{ source : 'Body', validator : bodyValidator }],
-                guards     : [], interceptors : [], meta : {}
-            });
-            registry.registerEndpoint({
-                controller : 'FromBodyCtrl', methodName : 'json', httpMethod : 'POST', path : '/from-json',
-                params     : [{ source : 'Body', validator : jsonValidator }],
-                guards     : [], interceptors : [], meta : {}
-            });
+                registry.registerController( 'FromBodyCtrl', formCtrl );
+                registry.registerEndpoint({
+                    controller   : 'FromBodyCtrl', methodName   : 'form', httpMethod   : 'POST', path         : '/from-form',
+                    params       : [{ source : 'Body', validator : bodyValidator }],
+                    guards       : [], interceptors : [], meta         : {}
+                });
+                registry.registerEndpoint({
+                    controller   : 'FromBodyCtrl', methodName   : 'json', httpMethod   : 'POST', path         : '/from-json',
+                    params       : [{ source : 'Body', validator : jsonValidator }],
+                    guards       : [], interceptors : [], meta         : {}
+                });
             });
 
             const formRes = await server.fetch( new Request( 'http://localhost/from-form', {
@@ -506,8 +846,8 @@ describe( 'Server & Metadata', () =>
             expect( await formRes.json()).toEqual({ age : 25, active : true });
 
             const jsonRes = await server.fetch( new Request( 'http://localhost/from-json', {
-                method  : 'POST',
-                body    : JSON.stringify({
+                method : 'POST',
+                body   : JSON.stringify({
                     age  : 25,
                     when : '2024-01-01T00:00:00.000Z',
                     big  : '9007199254740991'
@@ -534,11 +874,11 @@ describe( 'Server & Metadata', () =>
             const ctrl = { echo : vi.fn(( body: any ) => ({ received : body })) };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'EmptyBodyCtrl', ctrl );
-            registry.registerEndpoint({
-                controller   : 'EmptyBodyCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/empty-body',
-                params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'EmptyBodyCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'EmptyBodyCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/empty-body',
+                    params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
+                });
             });
             
             const res = await server.fetch( new Request( 'http://localhost/empty-body', { method : 'POST' }));
@@ -567,14 +907,14 @@ describe( 'Server & Metadata', () =>
 
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'OptBodyCtrl', {
-                test : ( body: any ) => ({ received : body })
-            });
-            registry.registerEndpoint({
-                controller   : 'OptBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/opt-body',
-                params       : [{ source : 'Body', validator : optionalBodyValidator, mode : 'strict' }],
-                guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'OptBodyCtrl', {
+                    test : ( body: any ) => ({ received : body })
+                });
+                registry.registerEndpoint({
+                    controller   : 'OptBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/opt-body',
+                    params       : [{ source : 'Body', validator : optionalBodyValidator, mode : 'strict' }],
+                    guards       : [], interceptors : [], meta         : {}
+                });
             });
 
             const res = await server.fetch( new Request( 'http://localhost/opt-body', { method : 'POST' }));
@@ -598,14 +938,14 @@ describe( 'Server & Metadata', () =>
 
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'ReqBodyCtrl', {
-                test : ( body: any ) => body
-            });
-            registry.registerEndpoint({
-                controller   : 'ReqBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/req-body',
-                params       : [{ source : 'Body', validator : requiredBodyValidator, mode : 'strict' }],
-                guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'ReqBodyCtrl', {
+                    test : ( body: any ) => body
+                });
+                registry.registerEndpoint({
+                    controller   : 'ReqBodyCtrl', methodName   : 'test', httpMethod   : 'POST', path         : '/req-body',
+                    params       : [{ source : 'Body', validator : requiredBodyValidator, mode : 'strict' }],
+                    guards       : [], interceptors : [], meta         : {}
+                });
             });
 
             const res = await server.fetch( new Request( 'http://localhost/req-body', { method : 'POST' }));
@@ -620,11 +960,11 @@ describe( 'Server & Metadata', () =>
             const ctrl = { boom : () => { throw new Error( 'Boom' ) } };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'C', ctrl );
-            registry.registerEndpoint({
-                controller   : 'C', methodName   : 'boom', httpMethod   : 'GET', path         : '/boom', params       : [],
-                guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'C', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'C', methodName   : 'boom', httpMethod   : 'GET', path         : '/boom', params       : [],
+                    guards       : [], interceptors : [], meta         : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://localhost/boom' ));
             expect( res.status ).toBe( 500 );
@@ -637,11 +977,11 @@ describe( 'Server & Metadata', () =>
             const ctrl = { fail : () => { throw { code : 418, data : { tea : 'pot' } } } };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'C', ctrl );
-            registry.registerEndpoint({
-                controller   : 'C', methodName   : 'fail', httpMethod   : 'GET', path         : '/fail', params       : [],
-                guards       : [], interceptors : [], meta         : {}
-            });
+                registry.registerController( 'C', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'C', methodName   : 'fail', httpMethod   : 'GET', path         : '/fail', params       : [],
+                    guards       : [], interceptors : [], meta         : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://localhost/fail' ));
             expect( res.status ).toBe( 418 );
@@ -651,7 +991,7 @@ describe( 'Server & Metadata', () =>
         it( 'should handle router errors', async () => 
         {
             const server = new Server({ port : 3000 });
-            vi.spyOn(( server as any ).router, 'find' ).mockImplementation(() => { throw new Error( 'Router Fail' ) });
+            vi.spyOn(( server as any ).router, 'lookup' ).mockImplementation(() => { throw new Error( 'Router Fail' ) });
             const res = await server.fetch( new Request( 'http://localhost/any' ));
             expect( res.status ).toBe( 500 );
             expect( await res.json()).toEqual({ success : false, error : 'Router Fail' });
@@ -662,15 +1002,15 @@ describe( 'Server & Metadata', () =>
             const ctrl = { test : ( a: number, b: number ) => ({ a, b }) };
             const server = setupServer( 3000, ( registry ) =>
             {
-            registry.registerController( 'ValCtrl', ctrl );
-            registry.registerEndpoint({
-                controller : 'ValCtrl', methodName : 'test', httpMethod : 'GET', path       : '/val-fail',
-                params     : [
-                    { source : 'Query', name : 'a', validator : validators.number },
-                    { source : 'Query', name : 'b', validator : validators.number }
-                ],
-                guards : [], interceptors : [], meta : {}
-            });
+                registry.registerController( 'ValCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller : 'ValCtrl', methodName : 'test', httpMethod : 'GET', path       : '/val-fail',
+                    params     : [
+                        { source : 'Query', name : 'a', validator : validators.number },
+                        { source : 'Query', name : 'b', validator : validators.number }
+                    ],
+                    guards : [], interceptors : [], meta : {}
+                });
             });
             const res = await server.fetch( new Request( 'http://localhost/val-fail?a=x&b=y' ));
             expect( res.status ).toBe( 400 );
@@ -920,8 +1260,8 @@ describe( 'Server & Metadata', () =>
         it( 'should forward ConsoleLogger.error and debug to console', () =>
         {
             // Arrange
-            const err = vi.spyOn( console, 'error' ).mockImplementation( () => {});
-            const dbg = vi.spyOn( console, 'debug' ).mockImplementation( () => {});
+            const err = vi.spyOn( console, 'error' ).mockImplementation(() => {});
+            const dbg = vi.spyOn( console, 'debug' ).mockImplementation(() => {});
             const logger = new ConsoleLogger();
 
             // Act
@@ -1160,8 +1500,8 @@ describe( 'Server & Metadata', () =>
             const preflight = await server.fetch( new Request( 'http://localhost/cors-log', {
                 method  : 'OPTIONS',
                 headers : {
-                    Origin                         : 'http://example.com',
-                    'Access-Control-Request-Method': 'GET'
+                    Origin                          : 'http://example.com',
+                    'Access-Control-Request-Method' : 'GET'
                 }
             }));
             const missing = await server.fetch( new Request( 'http://localhost/no-such-route' ));
@@ -1185,7 +1525,7 @@ describe( 'Server & Metadata', () =>
             const guardArgs : any[] = [];
             const guard =
             {
-                use : vi.fn(( ...args : any[] ) => { guardArgs.push( ...args ) })
+                use : vi.fn(( ...args : any[]) => { guardArgs.push( ...args ) })
             };
             const upgradeRes = new Response( null, { status : 200 });
             const upgrade = vi.fn().mockResolvedValue( upgradeRes );
@@ -1276,18 +1616,18 @@ describe( 'Server & Metadata', () =>
                 });
                 registry.registerController( 'WsCtrl', { ws : () => {} });
                 registry.registerEndpoint({
-                    controller   : 'WsCtrl',
-                    methodName   : 'ws',
-                    httpMethod   : 'WS',
-                    path         : '/ws-bad',
-                    params       : [],
-                    guards       : [{
-                        type      : 'class',
-                        name      : 'BadQueryGuard',
-                        params    : [{
+                    controller : 'WsCtrl',
+                    methodName : 'ws',
+                    httpMethod : 'WS',
+                    path       : '/ws-bad',
+                    params     : [],
+                    guards     : [{
+                        type   : 'class',
+                        name   : 'BadQueryGuard',
+                        params : [{
                             source    : 'Query',
                             name      : 'token',
-                            validator : ( _v: unknown, _p: string, ctx: { success: boolean, errors: unknown[] }) =>
+                            validator : ( _v: unknown, _p: string, ctx: { success : boolean, errors : unknown[] }) =>
                             {
                                 ctx.success = false;
                                 ctx.errors.push({ message : 'bad token' });
@@ -1907,7 +2247,7 @@ describe( 'Server & Metadata', () =>
                 }
             }
 
-            defineController( HookController, [] );
+            defineController( HookController, []);
             setModuleMeta( HookModule, {
                 providers   : [HookService],
                 controllers : [HookController]
@@ -2140,17 +2480,17 @@ describe( 'Server & Metadata', () =>
             {
                 registry.registerController( 'PeerTestController', PeerTestController );
                 registry.registerEndpoint({
-                controller : 'PeerTestController',
-                methodName : 'handle',
-                httpMethod : 'GET',
-                path       : '/peer-test',
-                params     : [
-                    { source : 'Peer' }
-                ],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
+                    controller : 'PeerTestController',
+                    methodName : 'handle',
+                    httpMethod : 'GET',
+                    path       : '/peer-test',
+                    params     : [
+                        { source : 'Peer' }
+                    ],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
             });
 
             const req = new Request( 'http://localhost/peer-test' ) as any;
@@ -2197,17 +2537,17 @@ describe( 'Server & Metadata', () =>
             {
                 registry.registerController( 'PeerTestController2', PeerTestController2 );
                 registry.registerEndpoint({
-                controller : 'PeerTestController2',
-                methodName : 'handle',
-                httpMethod : 'GET',
-                path       : '/peer-test-missing',
-                params     : [
-                    { source : 'Peer' }
-                ],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
+                    controller : 'PeerTestController2',
+                    methodName : 'handle',
+                    httpMethod : 'GET',
+                    path       : '/peer-test-missing',
+                    params     : [
+                        { source : 'Peer' }
+                    ],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
             });
 
             const req = new Request( 'http://localhost/peer-test-missing' );
@@ -2234,19 +2574,19 @@ describe( 'Server & Metadata', () =>
             {
                 registry.registerController( 'CookieTestController', CookieTestController );
                 registry.registerEndpoint({
-                controller : 'CookieTestController',
-                methodName : 'handle',
-                httpMethod : 'GET',
-                path       : '/cookie-test',
-                params     : [
-                    { source : 'Cookies' },
-                    { source : 'Cookie', name : 'sessionId' },
-                    { source : 'Cookie', name : 'age', validator : validators.number }
-                ],
-                guards       : [],
-                interceptors : [],
-                meta         : {}
-            });
+                    controller : 'CookieTestController',
+                    methodName : 'handle',
+                    httpMethod : 'GET',
+                    path       : '/cookie-test',
+                    params     : [
+                        { source : 'Cookies' },
+                        { source : 'Cookie', name : 'sessionId' },
+                        { source : 'Cookie', name : 'age', validator : validators.number }
+                    ],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
             });
 
             // Send multiple sessionId cookies to test RFC 6265 first-match wins, and an age cookie to test coercion
@@ -2339,7 +2679,7 @@ describe( 'Server & Metadata', () =>
 
             ( globalThis as any ).Deno = { serve : serveMock };
 
-            await adapter.listen( 3002, async () => new Response() );
+            await adapter.listen( 3002, async () => new Response());
             expect( serveMock ).toHaveBeenCalled();
 
             await adapter.close();

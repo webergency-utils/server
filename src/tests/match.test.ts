@@ -7,6 +7,7 @@ import {
     PathError,
     TokenData
 } from '../helpers/match.js';
+import { BadRequestError } from '../errors.js';
 
 describe( 'path match helpers', () =>
 {
@@ -72,6 +73,49 @@ describe( 'path match helpers', () =>
 
             // Assert
             expect( result && result.params.val ).toBe( 'a%20b' );
+        });
+
+        it( 'should raise a 400 BadRequestError on malformed percent-encoding', () =>
+        {
+            // Arrange
+            const match = pathMatcher( '/q/:val' );
+
+            // Act / Assert
+            expect(() => match( '/q/%ZZ' )).toThrow( BadRequestError );
+            expect(() => match( '/q/%ZZ' )).toThrow( /path parameter "val"/ );
+        });
+
+        it( 'should expose status 400 rather than leaking URIError', () =>
+        {
+            // Arrange
+            const match = pathMatcher( '/q/:val' );
+
+            // Act
+            let caught: any;
+
+            try
+            {
+                match( '/q/%E0%A4%A' );
+            }
+            catch( e )
+            {
+                caught = e;
+            }
+
+            // Assert
+            expect( caught ).toBeInstanceOf( BadRequestError );
+            expect( caught ).not.toBeInstanceOf( URIError );
+            expect( caught.status ).toBe( 400 );
+        });
+
+        it( 'should raise a 400 for malformed encoding inside a wildcard segment', () =>
+        {
+            // Arrange
+            const match = pathMatcher( '/files/*path' );
+
+            // Act / Assert
+            expect( match( '/files/a/b' )).toBeTruthy();
+            expect(() => match( '/files/ok/%ZZ' )).toThrow( BadRequestError );
         });
     });
 

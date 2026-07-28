@@ -486,6 +486,25 @@ describe( 'Actual AOT Integration Test', () =>
                 expect( await res.text()).toBe( '' );
             });
 
+            it( 'should compile @Options and dispatch non-preflight OPTIONS to it', async () => 
+            {
+                const res = await server.fetch( new Request( 'http://localhost/type-safety/options-explicit', {
+                    method : 'OPTIONS'
+                }));
+                expect( res.status ).toBe( 200 );
+                expect( await res.json()).toEqual({ message : 'hello from options' });
+            });
+
+            it( 'should not dispatch a genuine preflight to the compiled @Options route', async () => 
+            {
+                const res = await server.fetch( new Request( 'http://localhost/type-safety/options-explicit', {
+                    method  : 'OPTIONS',
+                    headers : { 'Origin' : 'https://a.com', 'Access-Control-Request-Method' : 'GET' }
+                }));
+                expect( res.status ).toBe( 204 );
+                expect( await res.text()).toBe( '' );
+            });
+
             it( 'should fallback to GET route for HEAD request and strip response body', async () => 
             {
                 const res = await server.fetch( new Request( 'http://localhost/type-safety/get-fallback', {

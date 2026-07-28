@@ -96,6 +96,8 @@ export function Put( path: string = '' ): MethodDecorator { return () => {} }
 export function Delete( path: string = '' ): MethodDecorator { return () => {} }
 export function Patch( path: string = '' ): MethodDecorator { return () => {} }
 export function Head( path: string = '' ): MethodDecorator { return () => {} }
+/** Handles non-preflight OPTIONS only; genuine CORS preflight is always answered by the framework. */
+export function Options( path: string = '' ): MethodDecorator { return () => {} }
 export function All( path: string = '' ): MethodDecorator { return () => {} }
 export function Ws( path: string = '', options?: WsOptions ): MethodDecorator { return () => {} }
 export function Sse( path: string = '' ): MethodDecorator { return () => {} }
@@ -243,11 +245,25 @@ export interface CorsOptions {
 
 export function Cors( config?: CorsOptions | string ): any { return () => {} }
 
+export type ReferrerPolicyValue =
+    | 'no-referrer'
+    | 'no-referrer-when-downgrade'
+    | 'origin'
+    | 'origin-when-cross-origin'
+    | 'same-origin'
+    | 'strict-origin'
+    | 'strict-origin-when-cross-origin'
+    | 'unsafe-url';
+
 export interface SecurityOptions {
     /** Request Protection */
     maxBodySize?         : string | number
     timeout?             : number
-    rateLimit?           : { max : number, window? : string | number }
+    /**
+     * Per-process, keyed by `path:ip`. `fixed` (default) can permit up to 2x `max` across a
+     * window boundary; `sliding` weights the previous window to smooth that out.
+     */
+    rateLimit?           : { max : number, window? : string | number, strategy? : 'fixed' | 'sliding' }
     allowedContentTypes? : string[]
 
     /** Response Headers */
@@ -255,13 +271,19 @@ export interface SecurityOptions {
     noSniff?                      : boolean
     hsts?                         : boolean | { maxAge? : number, includeSubDomains? : boolean, preload? : boolean }
     downloadOptions?              : boolean
-    permittedCrossDomainPolicies? : boolean | 'none' | 'master-only' | 'by-content-type' | 'all'
-    referrerPolicy?               : boolean | string
+    permittedCrossDomainPolicies? : boolean | 'none' | 'master-only' | 'by-content-type' | 'by-ftp-filename' | 'all'
+    /** Invalid tokens are dropped rather than emitted as a malformed header. */
+    referrerPolicy?               : boolean | ReferrerPolicyValue
     xssFilter?                    : boolean
     csp?                          : boolean | string | Record<string, string[]>
     coep?                         : boolean | 'require-corp' | 'credentialless' | 'unsafe-none'
     coop?                         : boolean | 'same-origin' | 'same-origin-allow-popups' | 'unsafe-none'
     corp?                         : boolean | 'same-origin' | 'same-site' | 'cross-origin'
+    /**
+     * `true` denies camera, microphone, and geolocation. An object maps a feature to its
+     * allowlist, e.g. `{ camera: [], geolocation: ["'self'"] }`.
+     */
+    permissionsPolicy?            : boolean | string | Record<string, string | string[]>
 }
 
 export function Security( config?: SecurityOptions | boolean ): any { return () => {} }

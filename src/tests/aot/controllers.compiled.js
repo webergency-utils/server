@@ -540,7 +540,7 @@ const __val_ccb10958b6aa7739 = (v, path, ctx) => {
 };
 const __val_74234e98afe7498f = validators.null;
 const __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [__val_74234e98afe7498f, __val_473287f8298dba71], "Type<string|null>");
-const __val_8dc0b81821ea670e = (v, path, ctx) => {
+const __val_13a05136ba37eb80 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["one", "two"]), "{ one: string | null; two: string | null; }");
     if (obj === false)
         return v;
@@ -552,7 +552,7 @@ const __val_8dc0b81821ea670e = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["one", "two"]));
     return data;
 };
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public } from '../../index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
 export class GlobalErrorSanitizer {
     static __injections__ = {
@@ -639,6 +639,9 @@ let TypeSafetyController = class TypeSafetyController {
     headExplicit() {
         // void return
     }
+    optionsExplicit() {
+        return { message: 'hello from options' };
+    }
     getFallback() {
         return { message: 'hello from get fallback' };
     }
@@ -723,6 +726,9 @@ __decorate([
 __decorate([
     Head('/head-explicit')
 ], TypeSafetyController.prototype, "headExplicit", null);
+__decorate([
+    Options('/options-explicit')
+], TypeSafetyController.prototype, "optionsExplicit", null);
 __decorate([
     Get('/get-fallback')
 ], TypeSafetyController.prototype, "getFallback", null);
@@ -1995,6 +2001,18 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
         },
         {
             controller: "TypeSafetyController",
+            methodName: "optionsExplicit",
+            httpMethod: "OPTIONS",
+            path: "/type-safety/options-explicit",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_b237870e8da1ad64
+        },
+        {
+            controller: "TypeSafetyController",
             methodName: "getFallback",
             httpMethod: "GET",
             path: "/type-safety/get-fallback",
@@ -2868,7 +2886,7 @@ MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_8dc0b81821ea670e
+            returnTypeValidator: __val_13a05136ba37eb80
         },
         {
             controller: "MiddlewareTestController",
@@ -2885,7 +2903,7 @@ MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["SimpleTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_8dc0b81821ea670e
+            returnTypeValidator: __val_13a05136ba37eb80
         }
     ]
 };
@@ -2910,7 +2928,7 @@ MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["CallbackTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_8dc0b81821ea670e
+            returnTypeValidator: __val_13a05136ba37eb80
         },
         {
             controller: "MiddlewareUnmiddlewareController",
@@ -2927,7 +2945,7 @@ MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_8dc0b81821ea670e
+            returnTypeValidator: __val_13a05136ba37eb80
         }
     ]
 };

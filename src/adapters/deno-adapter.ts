@@ -1,30 +1,33 @@
-import { ServerAdapter, TlsOptions } from './adapter.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
 import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, tlsMaterialToString, attachClientCert } from '../helpers/peer-cert.js';
+import { NodeTlsCompat } from './node-tls-compat.js';
+import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
+import { upgradeQuery } from './ws-upgrade.js';
 
 export class DenoAdapter implements ServerAdapter
 {
-    private server? : any;
+    private server?          : any;
     private abortController? : AbortController;
-    private isNodeCompat = false;
-    private nodeAdapterInstance? : any;
+    private readonly nodeTls = new NodeTlsCompat();
 
-    async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void>
+    async listen(
+        port: number,
+        handler: ( request: Request ) => Promise<Response>,
+        tls?: TlsOptions,
+        http?: NodeHttpOptions
+    ): Promise<void>
     {
         // Native Deno.serve supports cert/key TLS, but not requestCert/SNI/@Peer.
         // mTLS and SNI callbacks use Node's https adapter under Deno.
         if( needsNodeTlsCompat( tls ))
         {
-            this.isNodeCompat = true;
-            const { NodeAdapter } = await import( './node-adapter.js' );
-            this.nodeAdapterInstance = new NodeAdapter();
-            await this.nodeAdapterInstance.listen( port, handler, tls );
-            this.server = this.nodeAdapterInstance.nodeServer;
+            await this.nodeTls.listen( port, handler, tls, http );
+            this.server = this.nodeTls.server;
 
             return;
         }
 
-        this.isNodeCompat = false;
         this.abortController = new AbortController();
         const options: any = {
             port,
@@ -64,15 +67,14 @@ export class DenoAdapter implements ServerAdapter
 
     async upgrade( request: Request, metadata: any, params: any ): Promise<Response>
     {
-        if( this.isNodeCompat && this.nodeAdapterInstance )
+        if( this.nodeTls.active )
         {
-            return this.nodeAdapterInstance.upgrade( request, metadata, params );
+            return this.nodeTls.upgrade( request, metadata, params );
         }
 
         // Import before upgrade so we can attach `open` without missing a sync readyState change.
         const { RequestProcessor } = await import( '../core/request-processor.js' );
-        const url = new URL( request.url );
-        const query = Object.fromEntries( url.searchParams.entries());
+        const query = upgradeQuery( request );
         const { socket, response } = ( globalThis as any ).Deno.upgradeWebSocket( request );
         const connection = new DenoServerWebSocket( socket, request.headers, params, query, metadata.meta?.wsOptions );
 
@@ -96,9 +98,9 @@ export class DenoAdapter implements ServerAdapter
 
     async close(): Promise<void>
     {
-        if( this.isNodeCompat && this.nodeAdapterInstance )
+        if( this.nodeTls.active )
         {
-            await this.nodeAdapterInstance.close();
+            await this.nodeTls.close();
 
             return;
         }
@@ -117,31 +119,42 @@ export class DenoAdapter implements ServerAdapter
             await this.server.finished;
         }
     }
+
+    closeAllConnections(): void
+    {
+        if( this.nodeTls.active )
+        {
+            this.nodeTls.closeAllConnections();
+        }
+    }
 }
 
 class DenoServerWebSocket
 {
     private emitter            : any;
-    private pingIntervalTimer? : any;
-    private pingTimeoutTimer?  : any;
-    private lastPongReceived = true;
-    private isOpen = false;
-    private pending: any[] = [];
+    private readonly heartbeat : WsHeartbeat;
+    private isOpen             = false;
+    private pending            : any[] = [];
 
     constructor(
         private socket: any,
         public headers: Headers,
         public params: Record<string, string>,
         public query: Record<string, string>,
-        private wsOptions?: { pingInterval? : number, pingTimeout? : number, maxPayload? : number }
+        private wsOptions?: WsHeartbeatOptions & { maxPayload? : number }
     )
     {
         this.emitter = new EventEmitter();
+        this.heartbeat = new WsHeartbeat({
+            // Deno's WebSocket has no ping(); reporting that keeps the socket alive.
+            ping  : () => typeof this.socket.ping === 'function' ? void this.socket.ping() : false,
+            close : ( code, reason ) => this.close( code, reason )
+        }, this.wsOptions );
 
         if( this.socket.readyState === 1 )
         {
             this.isOpen = true;
-            this.startHeartbeat();
+            this.heartbeat.start();
         }
         else
         {
@@ -149,7 +162,7 @@ class DenoServerWebSocket
             {
                 this.isOpen = true;
                 this.flushPending();
-                this.startHeartbeat();
+                this.heartbeat.start();
             }, { once : true });
         }
 
@@ -172,25 +185,16 @@ class DenoServerWebSocket
         });
         this.socket.addEventListener( 'close', ( e: any ) =>
         {
-            this.clearTimers();
+            this.heartbeat.stop();
             this.emitter.emit( 'close', e.code, e.reason );
         });
         this.socket.addEventListener( 'error', ( e: any ) =>
         {
-            this.clearTimers();
+            this.heartbeat.stop();
             this.emitter.emit( 'error', e.error );
         });
 
-        this.socket.addEventListener( 'pong', () =>
-        {
-            this.lastPongReceived = true;
-
-            if( this.pingTimeoutTimer )
-            {
-                clearTimeout( this.pingTimeoutTimer );
-                this.pingTimeoutTimer = undefined;
-            }
-        });
+        this.socket.addEventListener( 'pong', () => this.heartbeat.pong());
     }
 
     private flushPending()
@@ -200,69 +204,6 @@ class DenoServerWebSocket
             this.socket.send( data );
         }
         this.pending = [];
-    }
-
-    private startHeartbeat()
-    {
-        if( !this.wsOptions?.pingInterval ){ return }
-
-        this.pingIntervalTimer = setInterval(() =>
-        {
-            if( !this.lastPongReceived )
-            {
-                if( !this.wsOptions?.pingTimeout )
-                {
-                    this.close( 1002, 'Ping Timeout' );
-
-                    return;
-                }
-            }
-
-            this.lastPongReceived = false;
-            try
-            {
-                if( typeof this.socket.ping === 'function' )
-                {
-                    this.socket.ping();
-                }
-                else
-                {
-                    this.lastPongReceived = true;
-                }
-            }
-            catch( e )
-            {
-                this.close( 1002, 'Ping failed' );
-
-                return;
-            }
-
-            if( this.wsOptions?.pingTimeout )
-            {
-                this.pingTimeoutTimer = setTimeout(() =>
-                {
-                    if( !this.lastPongReceived )
-                    {
-                        this.close( 1002, 'Ping Timeout' );
-                    }
-                }, this.wsOptions.pingTimeout );
-            }
-        }, this.wsOptions.pingInterval );
-    }
-
-    private clearTimers()
-    {
-        if( this.pingIntervalTimer )
-        {
-            clearInterval( this.pingIntervalTimer );
-            this.pingIntervalTimer = undefined;
-        }
-
-        if( this.pingTimeoutTimer )
-        {
-            clearTimeout( this.pingTimeoutTimer );
-            this.pingTimeoutTimer = undefined;
-        }
     }
 
     send( data: any )
@@ -279,7 +220,7 @@ class DenoServerWebSocket
 
     close( code?: number, reason?: string )
     {
-        this.clearTimers();
+        this.heartbeat.stop();
         this.pending = [];
         this.socket.close( code, reason );
     }

@@ -1,29 +1,32 @@
-import { ServerAdapter, TlsOptions } from './adapter.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
 import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, attachBunClientCert } from '../helpers/peer-cert.js';
+import { NodeTlsCompat } from './node-tls-compat.js';
+import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
+import { upgradeQuery } from './ws-upgrade.js';
 
 export class BunAdapter implements ServerAdapter
 {
     private server? : any;
-    private isNodeCompat = false;
-    private nodeAdapterInstance? : any;
+    private readonly nodeTls = new NodeTlsCompat();
 
-    async listen( port: number, handler: ( request: Request ) => Promise<Response>, tls?: TlsOptions ): Promise<void>
+    async listen(
+        port: number,
+        handler: ( request: Request ) => Promise<Response>,
+        tls?: TlsOptions,
+        http?: NodeHttpOptions
+    ): Promise<void>
     {
         // Bun.serve TLS works for cert/key, but peer certificates for @Peer are unreliable.
         // mTLS (requestCert) and SNI callbacks use Node's https adapter under Bun.
         if( needsNodeTlsCompat( tls ))
         {
-            this.isNodeCompat = true;
-            const { NodeAdapter } = await import( './node-adapter.js' );
-            this.nodeAdapterInstance = new NodeAdapter();
-            await this.nodeAdapterInstance.listen( port, handler, tls );
-            this.server = this.nodeAdapterInstance.nodeServer;
+            await this.nodeTls.listen( port, handler, tls, http );
+            this.server = this.nodeTls.server;
 
             return;
         }
 
-        this.isNodeCompat = false;
         const { getRegistry } = await import( '../core/registry.js' );
         const hasWs = getRegistry().getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
 
@@ -34,12 +37,12 @@ export class BunAdapter implements ServerAdapter
         if( tls )
         {
             serveOptions.tls = {
-                key         : tls.key as any,
-                cert        : tls.cert as any,
-                ca          : tls.ca as any,
-                ciphers     : tls.ciphers,
-                minVersion  : tls.minVersion,
-                maxVersion  : tls.maxVersion
+                key        : tls.key as any,
+                cert       : tls.cert as any,
+                ca         : tls.ca as any,
+                ciphers    : tls.ciphers,
+                minVersion : tls.minVersion,
+                maxVersion : tls.maxVersion
             };
         }
 
@@ -119,16 +122,15 @@ export class BunAdapter implements ServerAdapter
         this.server = ( globalThis as any ).Bun.serve( serveOptions );
     }
 
-    upgrade( request: Request, metadata: any, params: any ): Response
+    upgrade( request: Request, metadata: any, params: any ): Response | Promise<Response>
     {
-        if( this.isNodeCompat && this.nodeAdapterInstance )
+        if( this.nodeTls.active )
         {
-            return this.nodeAdapterInstance.upgrade( request, metadata, params );
+            return this.nodeTls.upgrade( request, metadata, params );
         }
 
         const bunServer = ( request as any ).bunServer;
-        const url = new URL( request.url );
-        const query = Object.fromEntries( url.searchParams.entries());
+        const query = upgradeQuery( request );
         const emitter = new EventEmitter();
 
         const success = bunServer.upgrade( request, {
@@ -152,9 +154,9 @@ export class BunAdapter implements ServerAdapter
 
     async close(): Promise<void>
     {
-        if( this.isNodeCompat && this.nodeAdapterInstance )
+        if( this.nodeTls.active )
         {
-            await this.nodeAdapterInstance.close();
+            await this.nodeTls.close();
 
             return;
         }
@@ -164,91 +166,36 @@ export class BunAdapter implements ServerAdapter
             this.server.stop();
         }
     }
+
+    closeAllConnections(): void
+    {
+        if( this.nodeTls.active )
+        {
+            this.nodeTls.closeAllConnections();
+        }
+    }
 }
 
 class BunServerWebSocket
 {
-    private pingIntervalTimer? : any;
-    private pingTimeoutTimer?  : any;
-    private lastPongReceived = true;
+    private readonly heartbeat : WsHeartbeat;
 
     constructor(
         private ws: any,
         public headers: Headers,
         public params: Record<string, string>,
         public query: Record<string, string>,
-        private wsOptions?: { pingInterval? : number, pingTimeout? : number, maxPayload? : number }
+        wsOptions?: WsHeartbeatOptions & { maxPayload? : number }
     )
     {
-        if( this.wsOptions?.pingInterval )
-        {
-            this.pingIntervalTimer = setInterval(() =>
-            {
-                if( !this.lastPongReceived )
-                {
-                    if( !this.wsOptions?.pingTimeout )
-                    {
-                        this.close( 1002, 'Ping Timeout' );
+        this.heartbeat = new WsHeartbeat({
+            ping  : () => { this.ws.ping() },
+            close : ( code, reason ) => this.close( code, reason )
+        }, wsOptions );
+        this.heartbeat.start();
 
-                        return;
-                    }
-                }
-
-                this.lastPongReceived = false;
-                try
-                {
-                    this.ws.ping();
-                }
-                catch( e )
-                {
-                    this.close( 1002, 'Ping failed' );
-
-                    return;
-                }
-
-                if( this.wsOptions?.pingTimeout )
-                {
-                    this.pingTimeoutTimer = setTimeout(() =>
-                    {
-                        if( !this.lastPongReceived )
-                        {
-                            this.close( 1002, 'Ping Timeout' );
-                        }
-                    }, this.wsOptions.pingTimeout );
-                }
-            }, this.wsOptions.pingInterval );
-        }
-
-        this.ws.data.emitter.on( 'pong', () =>
-        {
-            this.lastPongReceived = true;
-
-            if( this.pingTimeoutTimer )
-            {
-                clearTimeout( this.pingTimeoutTimer );
-                this.pingTimeoutTimer = undefined;
-            }
-        });
-
-        this.ws.data.emitter.on( 'close', () =>
-        {
-            this.clearTimers();
-        });
-    }
-
-    private clearTimers()
-    {
-        if( this.pingIntervalTimer )
-        {
-            clearInterval( this.pingIntervalTimer );
-            this.pingIntervalTimer = undefined;
-        }
-
-        if( this.pingTimeoutTimer )
-        {
-            clearTimeout( this.pingTimeoutTimer );
-            this.pingTimeoutTimer = undefined;
-        }
+        this.ws.data.emitter.on( 'pong', () => this.heartbeat.pong());
+        this.ws.data.emitter.on( 'close', () => this.heartbeat.stop());
     }
 
     send( data: any )
@@ -258,7 +205,7 @@ class BunServerWebSocket
 
     close( code?: number, reason?: string )
     {
-        this.clearTimers();
+        this.heartbeat.stop();
         this.ws.close( code, reason );
     }
 

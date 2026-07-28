@@ -12,7 +12,7 @@ export function matchWildcard( value: string, pattern: string ): boolean
 
 export function isAllowed( value: string, rule: any ): boolean 
 {
-    if( rule === undefined || rule === null ) { return true } // Relaxed default
+    if( rule === undefined || rule === null ) { return false } // Deny-by-default
 
     if( typeof rule === 'function' ) 
     {
@@ -41,11 +41,28 @@ export interface CorsHeaders {
     [key: string] : string
 }
 
+/**
+ * Used when `allowedHeaders` is unset. Requested headers are matched against this instead of
+ * being echoed back, so an attacker cannot get an arbitrary header allowlisted by asking for
+ * it. Set `allowedHeaders` to replace this list.
+ */
+export const DEFAULT_ALLOWED_HEADERS = ['Accept', 'Accept-Language', 'Content-Language', 'Content-Type', 'Authorization'];
+
+/**
+ * A browser CORS preflight, as opposed to a plain OPTIONS request. Both headers are
+ * mandatory on a preflight, so requiring them keeps ordinary OPTIONS requests routable.
+ */
+export function isPreflight( request: Request ): boolean
+{
+    return request.method === 'OPTIONS'
+        && request.headers.get( 'origin' ) !== null
+        && request.headers.get( 'access-control-request-method' ) !== null;
+}
+
 export function handleCors( request: Request, config: CorsOptions | undefined ): Response | CorsHeaders | null 
 {
     if( !config ) { return null }
 
-    const method = request.method;
     const originHeader = request.headers.get( 'origin' );
   
     // Resolve allowed origin
@@ -102,9 +119,17 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
         }
     }
 
-    // Preflight Request Check
-    if( method === 'OPTIONS' ) 
+    // Only a genuine preflight short-circuits with a response; a plain OPTIONS request
+    // stays routable and just receives the headers below.
+    if( isPreflight( request )) 
     {
+        // Without an allowed origin the browser would reject the response anyway; answering
+        // 403 makes the rejection explicit rather than looking like a successful preflight.
+        if( !allowedOrigin ) 
+        {
+            return new Response( 'CORS origin not allowed', { status : 403, headers : { Vary : 'Origin' } });
+        }
+
         const reqMethod = request.headers.get( 'access-control-request-method' );
 
         if( reqMethod ) 
@@ -129,7 +154,7 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
         if( reqHeadersStr ) 
         {
             const reqHeaders = reqHeadersStr.split( ',' ).map( h => h.trim());
-            const allowedHeadersConfig = config.allowedHeaders;
+            const allowedHeadersConfig = config.allowedHeaders ?? DEFAULT_ALLOWED_HEADERS;
             const allowedHeaders = reqHeaders.filter( h => isAllowed( h, allowedHeadersConfig ));
 
             if( allowedHeaders.length > 0 ) 

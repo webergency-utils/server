@@ -1278,6 +1278,32 @@
         }
       }
     },
+    "/type-safety/options-explicit": {
+      "options": {
+        "summary": "TypeSafetyController.optionsExplicit",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/type-safety/get-fallback": {
       "get": {
         "summary": "TypeSafetyController.getFallback",

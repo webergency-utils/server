@@ -4,8 +4,8 @@ import { AugmentedRequest, EndpointMetadata } from './types.js';
 export interface RequestContext {
     request           : AugmentedRequest
     metadata          : EndpointMetadata
+    requestId?        : string
     requestInstances? : Map<string, any>
-    // We can add more here later, like target class/method
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -18,6 +18,11 @@ export class Context
    */
     static run<T>( ctx: RequestContext, fn: () => T ): T 
     {
+        if( ctx.requestId === undefined && ctx.request.requestId !== undefined )
+        {
+            ctx.requestId = ctx.request.requestId;
+        }
+
         return storage.run( ctx, fn );
     }
 
@@ -44,5 +49,13 @@ export class Context
     static get metadata(): EndpointMetadata | undefined 
     {
         return storage.getStore()?.metadata;
+    }
+
+    /** Accept-or-generate `X-Request-Id` for the active request, if any. */
+    static get requestId(): string | undefined
+    {
+        const store = storage.getStore();
+
+        return store?.requestId ?? store?.request.requestId;
     }
 }

@@ -5,6 +5,7 @@ import { EndpointMetadata, ParamMetadata, AugmentedRequest, ResponseBag } from '
 import { SecurityOptions } from '../decorators.js';
 import { httpStatusFromError } from '../errors.js';
 import { resolveClientIp } from '../helpers/client-ip.js';
+import { invokeGuards } from './guard-runner.js';
 
 function parseCookies( cookieHeader: string | null ): Record<string, string> 
 {
@@ -42,7 +43,7 @@ export class RequestProcessor
     }
 
     /** Validate one SSE yield: prefer `chunk.data` when present, else the whole chunk. */
-    private static validateSseChunk( chunk: any, validator: (( v: any, path: string, ctx: any ) => any) | undefined, mode: string ): any
+    private static validateSseChunk( chunk: any, validator: (( v: any, path: string, ctx: any ) => any ) | undefined, mode: string ): any
     {
         if( !validator ){ return chunk }
 
@@ -169,7 +170,12 @@ export class RequestProcessor
         securityConfig?: SecurityOptions
     ): Promise<Response> 
     {
-        return Context.run({ request : req, metadata, requestInstances : new Map<string, any>() }, async () => 
+        return Context.run({
+            request          : req,
+            metadata,
+            requestId        : req.requestId,
+            requestInstances : new Map<string, any>()
+        }, async () => 
         {
             const controllerModule = MetadataStore.getTokenModule( metadata.controller );
             const controller = MetadataStore.getController( metadata.controller, controllerModule );
@@ -296,6 +302,7 @@ export class RequestProcessor
                         this.throwIfAborted( req );
 
                         const middlewareInstance = MetadataStore.getInjectable( mName, controllerModule );
+
                         if( !middlewareInstance ) 
                         {
                             throw new Error( `Middleware ${mName} not registered` );
@@ -323,6 +330,7 @@ export class RequestProcessor
                                         }
                                     };
                                     const res = middlewareInstance.useCallback( req, middlewareResponse, next );
+
                                     if( res instanceof Promise ) 
                                     {
                                         res.catch( reject );
@@ -338,41 +346,14 @@ export class RequestProcessor
                 }
 
                 // 1. Run Guards FIRST (Security gate)
-                for( const g of metadata.guards ) 
-                {
-                    this.throwIfAborted( req );
-
-                    const guardModule = g.type === 'class' ? MetadataStore.getTokenModule( g.name ) : controllerModule;
-                    const guardInstance = g.type === 'class' ? MetadataStore.getGuard( g.name, guardModule ) : controller;
-                    const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
-          
-                    // Resolve Guard Parameters
-                    const guardArgs: any[] = [];
-                    let resolverIdx = 0;
-
-                    for( const p of g.params ) 
-                    {
-                        if( p.source === 'Request' && !p.name && !p.validator ) 
-                        {
-                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule ));
-                        }
-                        else if([
-                            'Param', 'Body', 'RawBody', 'Header', 'Headers', 'Cookies', 'Cookie',
-                            'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer', 'Response'
-                        ].includes( p.source )) 
-                        {
-                            guardArgs.push( await this.resolveParam( p, req, ctx, securityConfig, guardModule, undefined, middlewareResponse ));
-                        }
-                        else 
-                        {
-                            guardArgs.push( g.resolvers[resolverIdx++]);
-                        }
-                    }
-
-                    const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
-          
-                    await guardMethod.apply( guardInstance, finalArgs );
-                }
+                await invokeGuards( metadata, req, {
+                    ctx,
+                    controller,
+                    controllerModule,
+                    securityConfig,
+                    response   : middlewareResponse,
+                    beforeEach : () => this.throwIfAborted( req )
+                });
 
                 this.throwIfAborted( req );
 
@@ -422,7 +403,12 @@ export class RequestProcessor
         req: AugmentedRequest
     ): Promise<void> 
     {
-        return Context.run({ request : req, metadata, requestInstances : new Map<string, any>() }, async () => 
+        return Context.run({
+            request          : req,
+            metadata,
+            requestId        : req.requestId,
+            requestInstances : new Map<string, any>()
+        }, async () => 
         {
             const controllerModule = MetadataStore.getTokenModule( metadata.controller );
             const controller = MetadataStore.getController( metadata.controller, controllerModule );
@@ -479,7 +465,12 @@ export class RequestProcessor
       meta    : {}
     };
 
-        return Context.run({ request : req, metadata, requestInstances : new Map<string, any>() }, async () => 
+        return Context.run({
+            request          : req,
+            metadata,
+            requestId        : req.requestId,
+            requestInstances : new Map<string, any>()
+        }, async () => 
         {
             const controllerModule = MetadataStore.getTokenModule( metadata.controller );
             const controller = MetadataStore.getController( metadata.controller, controllerModule );
@@ -489,37 +480,7 @@ export class RequestProcessor
             const ctx = { success : true, errors : [], mode : 'strict' };
 
             // 1. Run Guards
-            for( const g of metadata.guards ) 
-            {
-                const guardModule = g.type === 'class' ? MetadataStore.getTokenModule( g.name ) : controllerModule;
-                const guardInstance = g.type === 'class' ? MetadataStore.getGuard( g.name, guardModule ) : controller;
-                const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
-        
-                const guardArgs: any[] = [];
-                let resolverIdx = 0;
-
-                for( const p of g.params ) 
-                {
-                    if( p.source === 'Request' && !p.name && !p.validator ) 
-                    {
-                        guardArgs.push( await this.resolveParam( p, req, ctx, undefined, guardModule ));
-                    }
-                    else if([
-                        'Param', 'Body', 'RawBody', 'Header', 'Headers', 'Cookies', 'Cookie',
-                        'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
-                    ].includes( p.source )) 
-                    {
-                        guardArgs.push( await this.resolveParam( p, req, ctx, undefined, guardModule ));
-                    }
-                    else 
-                    {
-                        guardArgs.push( g.resolvers[resolverIdx++]);
-                    }
-                }
-
-                const finalArgs = guardArgs.length > 0 ? guardArgs : g.resolvers;
-                await guardMethod.apply( guardInstance, finalArgs );
-            }
+            await invokeGuards( metadata, req, { ctx, controller, controllerModule });
 
             // 2. Resolve parameters (Validation)
             const args: any[] = [];

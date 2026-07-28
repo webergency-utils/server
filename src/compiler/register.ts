@@ -13,16 +13,52 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import compilerPlugin from './transformer.js';
 
-const programCache = new Map<string, ts.Program>();
+interface CachedProgram {
+    program     : ts.Program
+    sourceMtime : number
+    configMtime : number
+}
 
-function getProgramFor( fileName: string ): ts.Program
+const programCache = new Map<string, CachedProgram>();
+
+function mtimeOf( file: string ): number
+{
+    try
+    {
+        return fs.statSync( file ).mtimeMs;
+    }
+    catch
+    {
+        return 0;
+    }
+}
+
+/**
+ * A `ts.Program` snapshots file contents at creation, so a long-lived process would keep
+ * type-checking against the source as it was on first load. Rebuild whenever the requested
+ * file or its tsconfig has a different mtime than when the cached program was built.
+ */
+function isStale( cached: CachedProgram, fileName: string, configPath?: string ): boolean
+{
+    if( mtimeOf( fileName ) !== cached.sourceMtime ) { return true }
+
+    return configPath !== undefined && mtimeOf( configPath ) !== cached.configMtime;
+}
+
+export function getProgramFor( fileName: string ): ts.Program
 {
     const configPath = ts.findConfigFile( path.dirname( fileName ), ts.sys.fileExists, 'tsconfig.json' );
     const cacheKey = configPath || path.dirname( fileName );
+    const cached = programCache.get( cacheKey );
 
-    if( programCache.has( cacheKey ))
+    if( cached )
     {
-        return programCache.get( cacheKey )!;
+        if( !isStale( cached, fileName, configPath ))
+        {
+            return cached.program;
+        }
+
+        programCache.delete( cacheKey );
     }
 
     let options: ts.CompilerOptions =
@@ -48,7 +84,11 @@ function getProgramFor( fileName: string ): ts.Program
     }
 
     const program = ts.createProgram({ rootNames, options });
-    programCache.set( cacheKey, program );
+    programCache.set( cacheKey, {
+        program,
+        sourceMtime : mtimeOf( fileName ),
+        configMtime : configPath ? mtimeOf( configPath ) : 0
+    });
 
     return program;
 }

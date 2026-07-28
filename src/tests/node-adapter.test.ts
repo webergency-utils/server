@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import { NodeAdapter } from '../adapters/node-adapter.js';
 import { ApplicationRegistry, runWithRegistry } from '../core/registry.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { SimpleMultibuffer, WebsocketFrame } from '../helpers/ws-frame.js';
 
 const { mockCreateSecureContext, mockHttpsCreateServer } = vi.hoisted(() =>
-({
-    mockCreateSecureContext : vi.fn(() => ({ mock : true })),
-    mockHttpsCreateServer   : vi.fn()
-}));
+    ({
+        mockCreateSecureContext : vi.fn(() => ({ mock : true })),
+        mockHttpsCreateServer   : vi.fn()
+    }));
 
 vi.mock( 'node:tls', async( importOriginal ) =>
 {
@@ -17,7 +18,7 @@ vi.mock( 'node:tls', async( importOriginal ) =>
 
     return {
         ...actual,
-        createSecureContext : ( ...args : any[] ) => mockCreateSecureContext( ...args )
+        createSecureContext : ( ...args : any[]) => mockCreateSecureContext( ...args )
     };
 });
 
@@ -27,13 +28,17 @@ vi.mock( 'https', async( importOriginal ) =>
 
     return {
         ...actual,
-        createServer : ( ...args : any[] ) => mockHttpsCreateServer( ...args )
+        createServer : ( ...args : any[]) => mockHttpsCreateServer( ...args )
     };
 });
 
+const isNodeRuntime =
+    typeof ( globalThis as { Bun? : unknown }).Bun === 'undefined'
+    && typeof ( globalThis as { Deno? : unknown }).Deno === 'undefined';
+
 function createMockSocket()
 {
-    const listeners = new Map<string, ( ...args : any[] ) => void>();
+    const listeners = new Map<string, ( ...args : any[]) => void>();
 
     return {
         write              : vi.fn(),
@@ -42,21 +47,22 @@ function createMockSocket()
         end                : vi.fn(),
         destroy            : vi.fn(),
         removeAllListeners : vi.fn(),
-        on                 : vi.fn(( event : string, cb : ( ...args : any[] ) => void ) =>
+        on                 : vi.fn(( event : string, cb : ( ...args : any[]) => void ) =>
         {
             listeners.set( event, cb );
         }),
-        emit( event : string, ...args : any[] )
+        emit( event : string, ...args : any[])
         {
             listeners.get( event )?.( ...args );
         }
     };
 }
 
+/** Client-to-server frames must be masked, so simulated client traffic sets the mask bit. */
 function wsFrame( opcode : number, payload : Buffer | string = Buffer.alloc( 0 ))
 {
     const buf = new SimpleMultibuffer();
-    WebsocketFrame.write( buf, payload, { opcode });
+    WebsocketFrame.write( buf, payload, { opcode, mask : true });
 
     return buf.spliceConcat( 0, buf.length );
 }
@@ -144,7 +150,7 @@ describe( 'NodeAdapter', () =>
 
             const cb = () => {};
             captured.on( 'close', cb );
-            expect( () => captured.off( 'close', cb )).not.toThrow();
+            expect(() => captured.off( 'close', cb )).not.toThrow();
             captured.close( 1000 );
         });
 
@@ -209,9 +215,9 @@ describe( 'NodeAdapter', () =>
             // Act — fire ping, then pong before pingTimeout elapses
             vi.advanceTimersByTime( 100 );
             expect( socket.end ).not.toHaveBeenCalled();
-            expect(( conn as any ).pingTimeoutTimer ).toBeDefined();
+            expect( conn.heartbeat.timeoutTimer ).toBeDefined();
             conn.emitter.emit( 'pong', Buffer.alloc( 0 ));
-            expect(( conn as any ).pingTimeoutTimer ).toBeUndefined();
+            expect( conn.heartbeat.timeoutTimer ).toBeUndefined();
             vi.advanceTimersByTime( 50 );
 
             // Assert — timeout was cleared; connection stays open
@@ -289,7 +295,7 @@ describe( 'NodeAdapter', () =>
             const socket = createMockSocket();
             socket.write.mockImplementation(( chunk : string | Buffer ) =>
             {
-                if( typeof chunk === 'string' && String( chunk ).includes( 'Switching Protocols' ) )
+                if( typeof chunk === 'string' && String( chunk ).includes( 'Switching Protocols' ))
                 {
                     return true;
                 }
@@ -436,12 +442,12 @@ describe( 'NodeAdapter', () =>
             await runWithRegistry( registry, async () =>
             {
                 await adapter.listen( 8443, async () => new Response( 'ok' ), {
-                    key         : 'server-key',
-                    cert        : 'server-cert',
+                    key        : 'server-key',
+                    cert       : 'server-cert',
                     sniCallback,
-                    ciphers     : 'ECDHE',
-                    minVersion  : 'TLSv1.2',
-                    maxVersion  : 'TLSv1.3'
+                    ciphers    : 'ECDHE',
+                    minVersion : 'TLSv1.2',
+                    maxVersion : 'TLSv1.3'
                 });
             });
 
@@ -501,5 +507,149 @@ describe( 'NodeAdapter', () =>
         expect( seen ).toMatch( /127\.0\.0\.1|::1|::ffff:127\.0\.0\.1/ );
 
         await adapter.close();
+    });
+
+    // Bun's node:http shim does not surface an asterisk-form request target as `req.url`.
+    it.skipIf( !isNodeRuntime )( 'should answer asterisk-form OPTIONS * with Allow and without routing', async () =>
+    {
+        // Arrange
+        const adapter = new NodeAdapter();
+        const registry = new ApplicationRegistry();
+        let routed = 0;
+
+        registry.registerEndpoint({
+            controller   : 'C',
+            methodName   : 'get',
+            httpMethod   : 'GET',
+            path         : '/x',
+            params       : [],
+            guards       : [],
+            interceptors : [],
+            meta         : {}
+        } as any );
+
+        await runWithRegistry( registry, async () =>
+        {
+            await adapter.listen( 0, async () =>
+            {
+                routed++;
+
+                return new Response( 'ok' );
+            });
+        });
+
+        const port = ( adapter as any ).nodeServer.address().port;
+
+        // Act
+        const raw = await new Promise<string>(( resolve, reject ) =>
+        {
+            let data = '';
+            const socket = net.connect( port, '127.0.0.1', () =>
+            {
+                socket.write( 'OPTIONS * HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n' );
+            });
+
+            socket.setTimeout( 3000, () =>
+            {
+                socket.destroy();
+                reject( new Error( `timed out waiting for a response, got: ${JSON.stringify( data )}` ));
+            });
+            socket.on( 'data', ( chunk : Buffer ) =>
+            {
+                data += chunk.toString();
+
+                if( data.includes( '\r\n\r\n' ))
+                {
+                    socket.destroy();
+                    resolve( data );
+                }
+            });
+            socket.on( 'error', reject );
+        });
+
+        // Assert
+        expect( raw ).toContain( '204' );
+        expect( raw ).toMatch( /Allow: [^\r\n]*GET/ );
+        expect( raw ).toMatch( /Allow: [^\r\n]*OPTIONS/ );
+        expect( routed ).toBe( 0 );
+
+        await adapter.close();
+    });
+
+    describe( 'HTTP timeouts', () =>
+    {
+        it( 'should apply the documented defaults when no timeouts are passed', async () =>
+        {
+            // Arrange
+            const adapter = new NodeAdapter();
+            const registry = new ApplicationRegistry();
+
+            // Act
+            await runWithRegistry( registry, async () =>
+            {
+                await adapter.listen( 0, async () => new Response( 'ok' ));
+            });
+
+            const server = ( adapter as any ).nodeServer;
+
+            // Assert
+            expect( server.headersTimeout ).toBe( 60_000 );
+            expect( server.requestTimeout ).toBe( 300_000 );
+            expect( server.keepAliveTimeout ).toBe( 5_000 );
+
+            await adapter.close();
+        });
+
+        it( 'should honor explicit timeout overrides', async () =>
+        {
+            // Arrange
+            const adapter = new NodeAdapter();
+            const registry = new ApplicationRegistry();
+
+            // Act
+            await runWithRegistry( registry, async () =>
+            {
+                await adapter.listen( 0, async () => new Response( 'ok' ), undefined, {
+                    headersTimeout   : 12_000,
+                    requestTimeout   : 34_000,
+                    keepAliveTimeout : 1_500
+                });
+            });
+
+            const server = ( adapter as any ).nodeServer;
+
+            // Assert
+            expect( server.headersTimeout ).toBe( 12_000 );
+            expect( server.requestTimeout ).toBe( 34_000 );
+            expect( server.keepAliveTimeout ).toBe( 1_500 );
+
+            await adapter.close();
+        });
+    });
+
+    describe( 'shutdown drain', () =>
+    {
+        it( 'should close idle keep-alives on close and all sockets on closeAllConnections', async () =>
+        {
+            // Arrange
+            const adapter = new NodeAdapter();
+            const registry = new ApplicationRegistry();
+            await runWithRegistry( registry, async () =>
+            {
+                await adapter.listen( 0, async () => new Response( 'ok' ));
+            });
+
+            const server = ( adapter as any ).nodeServer;
+            const closeIdle = vi.spyOn( server, 'closeIdleConnections' );
+            const closeAll = vi.spyOn( server, 'closeAllConnections' );
+
+            // Act
+            await adapter.close();
+            adapter.closeAllConnections();
+
+            // Assert
+            expect( closeIdle ).toHaveBeenCalled();
+            expect( closeAll ).toHaveBeenCalledTimes( 1 );
+        });
     });
 });
