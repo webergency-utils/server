@@ -15,7 +15,7 @@ const __val_04c78f82f98a8cf4 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["name", "age"]), "User");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["age", false, __val_12886f9d00055adf]
@@ -30,7 +30,7 @@ const __val_c67915707769fcf5 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: User; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_04c78f82f98a8cf4]
@@ -43,7 +43,7 @@ const __val_2258654cc0f69d37 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["type", "val"]), "{ type: \"simple\"; val: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["type", false, __val_6d1570e5b8d6d45a],
         ["val", false, __val_473287f8298dba71]
@@ -57,7 +57,7 @@ const __val_b421a9236dfde58e = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["id", "tags"]), "{ id: number; tags: string[]; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["tags", false, __val_e5da2f9fabafe20e]
@@ -69,7 +69,7 @@ const __val_5c5ed695091ba342 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["type", "data"]), "{ type: \"complex\"; data: { id: number; tags: string[]; }; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["type", false, __val_68056e96638382b6],
         ["data", false, __val_b421a9236dfde58e]
@@ -77,15 +77,18 @@ const __val_5c5ed695091ba342 = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["type", "data"]));
     return data;
 };
-const __val_a41824426b6b1ede = (v, path, ctx) => validators.union(v, path, ctx, [__val_2258654cc0f69d37, __val_5c5ed695091ba342], "Type<MyUnion>");
-const __val_d74cefa44e345d17 = (v, path, ctx) => {
+const __val_0b60aa399d818c05 = (byTag => (v, path, ctx) => validators.taggedUnion(v, path, ctx, "type", byTag, "Type<MyUnion>"))(new Map([
+    ["simple", __val_2258654cc0f69d37],
+    ["complex", __val_5c5ed695091ba342]
+]));
+const __val_a068761681a0a813 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: MyUnion; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_a41824426b6b1ede]
+        ["data", false, __val_0b60aa399d818c05]
     ]);
     validators.stripExtras(data, ctx, new Set(["success", "data"]));
     return data;
@@ -94,7 +97,7 @@ const __val_55e3fcb8d722f805 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["reason"]), "{ reason: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["reason", false, __val_473287f8298dba71]
     ]);
@@ -108,7 +111,7 @@ const __val_2d6ea820a293bacf = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "s"]), "{ success: boolean; s: Status; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["s", false, __val_857204a536cb022c]
@@ -122,7 +125,7 @@ const __val_a042f9877fc2376a = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: MixedArray; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_8c1c1b2d325f9de6]
@@ -130,13 +133,12 @@ const __val_a042f9877fc2376a = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["success", "data"]));
     return data;
 };
-const __val_eb045d78d2731073 = validators.undefined;
-const __val_ca383f8818520f0b = (v, path, ctx) => validators.union(v, path, ctx, [__val_eb045d78d2731073, __val_04c78f82f98a8cf4], "Type<User|undefined>");
-const __val_68aecd6fa646cade = (v, path, ctx) => {
+const __val_ca383f8818520f0b = (v, path, ctx) => validators.optional(v, path, ctx, __val_04c78f82f98a8cf4);
+const __val_fdba127064c2547c = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["id", "user", "tags"]), "Nested");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["id", false, __val_12886f9d00055adf],
         ["user", true, __val_ca383f8818520f0b],
@@ -145,14 +147,14 @@ const __val_68aecd6fa646cade = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["id", "user", "tags"]));
     return data;
 };
-const __val_f0ac6e3a29009cf1 = (v, path, ctx) => {
+const __val_d0b53ff733685c2c = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: Nested; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_68aecd6fa646cade]
+        ["data", false, __val_fdba127064c2547c]
     ]);
     validators.stripExtras(data, ctx, new Set(["success", "data"]));
     return data;
@@ -161,7 +163,7 @@ const __val_f28f8acf7e68cbfd = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["a", "b"]), "Intersection");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["a", false, __val_473287f8298dba71],
         ["b", false, __val_12886f9d00055adf]
@@ -173,7 +175,7 @@ const __val_0d157d33684c0018 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: Intersection; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["data", false, __val_f28f8acf7e68cbfd]
@@ -186,7 +188,7 @@ const __val_0084393b0d7248e4 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "status"]), "{ success: boolean; status: \"active\" | \"inactive\"; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["status", false, __val_85a41b63d9a32b8b]
@@ -198,7 +200,7 @@ const __val_d9bb28ea073c815e = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "tags"]), "{ success: boolean; tags: string[]; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["tags", false, __val_e5da2f9fabafe20e]
@@ -209,11 +211,11 @@ const __val_d9bb28ea073c815e = (v, path, ctx) => {
 const __val_99c40ab405926cb5 = validators.date;
 const __val_eefd1c8d7e793bf3 = validators.regexp;
 const __val_75d012fe28656e0a = validators.bigint;
-const __val_dfd1002a464a1dbf = (v, path, ctx) => {
+const __val_0dcd607745c5cb3e = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "age", "active", "date", "pattern", "big"]), "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["age", false, __val_12886f9d00055adf],
@@ -229,7 +231,7 @@ const __val_91d782a2d0de1354 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["name", "active"]), "{ name: string; active: boolean; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["name", false, __val_473287f8298dba71],
         ["active", false, __val_ced862ef1505bc73]
@@ -237,11 +239,11 @@ const __val_91d782a2d0de1354 = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["name", "active"]));
     return data;
 };
-const __val_d979aa00a685cb05 = (v, path, ctx) => {
+const __val_4ac5d9e4f4205e53 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "user"]), "{ success: boolean; user: { name: string; active: boolean; }; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["user", false, __val_91d782a2d0de1354]
@@ -262,7 +264,7 @@ const __val_87e266a791052d41 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "val", "type"]), "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["val", false, __val_affb28566d707e35],
@@ -276,7 +278,7 @@ const __val_6b50e5736cb6bb55 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "id"]), "{ success: boolean; id: `id-${number}`; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
         ["id", false, __val_9a141e74a6c02429]
@@ -284,7 +286,7 @@ const __val_6b50e5736cb6bb55 = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["success", "id"]));
     return data;
 };
-const __val_c615b105fba1f965 = (v, path, ctx) => {
+const __val_e5fc42b4aba2c6d1 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
@@ -295,7 +297,7 @@ const __val_c615b105fba1f965 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_ed601a97123e74a5 = (v, path, ctx) => {
+const __val_a1975336d1e3a054 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
@@ -306,20 +308,20 @@ const __val_ed601a97123e74a5 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_80803d497f4cbcc3 = (v, path, ctx) => {
+const __val_68075fba117f092a = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "pass", "age"]), "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
-        ["pass", false, __val_c615b105fba1f965],
-        ["age", false, __val_ed601a97123e74a5]
+        ["pass", false, __val_e5fc42b4aba2c6d1],
+        ["age", false, __val_a1975336d1e3a054]
     ]);
     validators.stripExtras(data, ctx, new Set(["success", "pass", "age"]));
     return data;
 };
-const __val_61eb849c9ae845b0 = (v, path, ctx) => {
+const __val_bb2935cf2223ae40 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
@@ -330,25 +332,25 @@ const __val_61eb849c9ae845b0 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_bf0f00a269610757 = (v, path, ctx) => {
+const __val_796c4eac83a7a861 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["val"]), "CustomUser");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
-        ["val", false, __val_61eb849c9ae845b0]
+        ["val", false, __val_bb2935cf2223ae40]
     ]);
     validators.stripExtras(data, ctx, new Set(["val"]));
     return data;
 };
-const __val_70c31e2e47f17c8e = (v, path, ctx) => {
+const __val_4a8765d306ac1e9b = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: CustomUser; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_bf0f00a269610757]
+        ["data", false, __val_796c4eac83a7a861]
     ]);
     validators.stripExtras(data, ctx, new Set(["success", "data"]));
     return data;
@@ -357,14 +359,14 @@ const __val_b237870e8da1ad64 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["message"]), "{ message: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["message", false, __val_473287f8298dba71]
     ]);
     validators.stripExtras(data, ctx, new Set(["message"]));
     return data;
 };
-const __val_0cedac632a9d5281 = (v, path, ctx) => {
+const __val_36b3db4fc7b251a9 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
@@ -375,7 +377,7 @@ const __val_0cedac632a9d5281 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_cfef021b8ec13350 = (v, path, ctx) => {
+const __val_397edf756fbe38e0 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
@@ -386,7 +388,7 @@ const __val_cfef021b8ec13350 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_51b5abe7e1ba2c24 = (v, path, ctx) => {
+const __val_a564a7ce790d29ed = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
@@ -397,20 +399,20 @@ const __val_51b5abe7e1ba2c24 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_a421e7e861811a22 = (v, path, ctx) => {
+const __val_fb804057ab9cb051 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["min", "max", "mult"]), "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
-        ["min", false, __val_0cedac632a9d5281],
-        ["max", false, __val_cfef021b8ec13350],
-        ["mult", false, __val_51b5abe7e1ba2c24]
+        ["min", false, __val_36b3db4fc7b251a9],
+        ["max", false, __val_397edf756fbe38e0],
+        ["mult", false, __val_a564a7ce790d29ed]
     ]);
     validators.stripExtras(data, ctx, new Set(["min", "max", "mult"]));
     return data;
 };
-const __val_354ede58aec83f6c = (v, path, ctx) => {
+const __val_871344223c5ce37c = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
@@ -421,7 +423,7 @@ const __val_354ede58aec83f6c = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_646f574aa5d2b8f1 = (v, path, ctx) => {
+const __val_a9030587ebb4386c = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
@@ -432,7 +434,7 @@ const __val_646f574aa5d2b8f1 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_4c9f67db765233c6 = (v, path, ctx) => {
+const __val_a3b8237cd422e3c4 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
@@ -443,20 +445,20 @@ const __val_4c9f67db765233c6 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_3142ae88ce6e4c32 = (v, path, ctx) => {
+const __val_a744c47def1902a9 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["email", "uuid", "date"]), "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
-        ["email", false, __val_354ede58aec83f6c],
-        ["uuid", false, __val_646f574aa5d2b8f1],
+        ["email", false, __val_871344223c5ce37c],
+        ["uuid", false, __val_a9030587ebb4386c],
         ["date", false, __val_473287f8298dba71]
     ]);
     validators.stripExtras(data, ctx, new Set(["email", "uuid", "date"]));
     return data;
 };
-const __val_669d5b02a3e3ee23 = (v, path, ctx) => {
+const __val_78d9364193f14947 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = __val_e5da2f9fabafe20e(v, path, ctx);
@@ -469,7 +471,7 @@ const __val_669d5b02a3e3ee23 = (v, path, ctx) => {
     return v;
 };
 const __val_3bf071592f56335a = (v, path, ctx) => validators.array(v, path, ctx, __val_12886f9d00055adf);
-const __val_68211ffefc1b2e01 = (v, path, ctx) => {
+const __val_e932e0ca2e5a5a04 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = __val_3bf071592f56335a(v, path, ctx);
@@ -480,11 +482,11 @@ const __val_68211ffefc1b2e01 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_d6749fa8772de8dd = (v, path, ctx) => {
+const __val_263dff44d887120e = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["msg", "dbUrl", "logged"]), "{ msg: string; dbUrl: string; logged: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["msg", false, __val_473287f8298dba71],
         ["dbUrl", false, __val_473287f8298dba71],
@@ -497,7 +499,7 @@ const __val_ab68d46bd18d4a0a = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["dbUrl"]), "{ dbUrl: string; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["dbUrl", false, __val_473287f8298dba71]
     ]);
@@ -508,7 +510,7 @@ const __val_e955dd67e417e2f5 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["success"]), "{ success: boolean; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["success", false, __val_ced862ef1505bc73]
     ]);
@@ -519,18 +521,18 @@ const __val_07a8cc3cc8aea7a1 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["val"]), "{ val: number; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["val", false, __val_12886f9d00055adf]
     ]);
     validators.stripExtras(data, ctx, new Set(["val"]));
     return data;
 };
-const __val_ccb10958b6aa7739 = (v, path, ctx) => {
+const __val_0b6ca95199f89861 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["a", "b"]), "SumPayload");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["a", false, __val_12886f9d00055adf],
         ["b", false, __val_12886f9d00055adf]
@@ -538,13 +540,12 @@ const __val_ccb10958b6aa7739 = (v, path, ctx) => {
     validators.stripExtras(data, ctx, new Set(["a", "b"]));
     return data;
 };
-const __val_74234e98afe7498f = validators.null;
-const __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.union(v, path, ctx, [__val_74234e98afe7498f, __val_473287f8298dba71], "Type<string|null>");
-const __val_13a05136ba37eb80 = (v, path, ctx) => {
+const __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.nullable(v, path, ctx, __val_473287f8298dba71);
+const __val_d78a5e9e3b797aa6 = (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, new Set(["one", "two"]), "{ one: string | null; two: string | null; }");
     if (obj === false)
         return v;
-    const data = validators.objectShell(obj, ctx);
+    const data = validators.objectShell(obj, ctx, true);
     validators.props(obj, data, path, ctx, [
         ["one", false, __val_6bd4d7da4d0dd205],
         ["two", false, __val_6bd4d7da4d0dd205]
@@ -1750,14 +1751,14 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
-                    validator: __val_a41824426b6b1ede,
+                    validator: __val_0b60aa399d818c05,
                     mode: "strip"
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_d74cefa44e345d17
+            returnTypeValidator: __val_a068761681a0a813
         },
         {
             controller: "TypeSafetyController",
@@ -1801,14 +1802,14 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
-                    validator: __val_68aecd6fa646cade,
+                    validator: __val_fdba127064c2547c,
                     mode: "strip"
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_f0ac6e3a29009cf1
+            returnTypeValidator: __val_d0b53ff733685c2c
         },
         {
             controller: "TypeSafetyController",
@@ -1896,7 +1897,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_dfd1002a464a1dbf
+            returnTypeValidator: __val_0dcd607745c5cb3e
         },
         {
             controller: "TypeSafetyController",
@@ -1913,7 +1914,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_d979aa00a685cb05
+            returnTypeValidator: __val_4ac5d9e4f4205e53
         },
         {
             controller: "TypeSafetyController",
@@ -1957,19 +1958,19 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "pass",
-                    validator: __val_c615b105fba1f965,
+                    validator: __val_e5fc42b4aba2c6d1,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "age",
-                    validator: __val_ed601a97123e74a5,
+                    validator: __val_a1975336d1e3a054,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_80803d497f4cbcc3
+            returnTypeValidator: __val_68075fba117f092a
         },
         {
             controller: "TypeSafetyController",
@@ -1979,14 +1980,14 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
-                    validator: __val_bf0f00a269610757,
+                    validator: __val_796c4eac83a7a861,
                     mode: "strip"
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_70c31e2e47f17c8e
+            returnTypeValidator: __val_4a8765d306ac1e9b
         },
         {
             controller: "TypeSafetyController",
@@ -2051,24 +2052,24 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "min",
-                    validator: __val_0cedac632a9d5281,
+                    validator: __val_36b3db4fc7b251a9,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "max",
-                    validator: __val_cfef021b8ec13350,
+                    validator: __val_397edf756fbe38e0,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "mult",
-                    validator: __val_51b5abe7e1ba2c24,
+                    validator: __val_a564a7ce790d29ed,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_a421e7e861811a22
+            returnTypeValidator: __val_fb804057ab9cb051
         },
         {
             controller: "TagParityController",
@@ -2078,24 +2079,24 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "email",
-                    validator: __val_354ede58aec83f6c,
+                    validator: __val_871344223c5ce37c,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "uuid",
-                    validator: __val_646f574aa5d2b8f1,
+                    validator: __val_a9030587ebb4386c,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "date",
-                    validator: __val_4c9f67db765233c6,
+                    validator: __val_a3b8237cd422e3c4,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_3142ae88ce6e4c32
+            returnTypeValidator: __val_a744c47def1902a9
         },
         {
             controller: "TagParityController",
@@ -2105,14 +2106,14 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
-                    validator: __val_669d5b02a3e3ee23,
+                    validator: __val_78d9364193f14947,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_669d5b02a3e3ee23
+            returnTypeValidator: __val_78d9364193f14947
         },
         {
             controller: "TagParityController",
@@ -2122,14 +2123,14 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
-                    validator: __val_68211ffefc1b2e01,
+                    validator: __val_e932e0ca2e5a5a04,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_68211ffefc1b2e01
+            returnTypeValidator: __val_e932e0ca2e5a5a04
         }
     ]
 };
@@ -2233,7 +2234,7 @@ DiTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_d6749fa8772de8dd
+            returnTypeValidator: __val_263dff44d887120e
         },
         {
             controller: "DiTestController",
@@ -2455,7 +2456,7 @@ MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
-                    validator: __val_ccb10958b6aa7739,
+                    validator: __val_0b6ca95199f89861,
                     mode: undefined
                 }],
             guards: [],
@@ -2886,7 +2887,7 @@ MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_13a05136ba37eb80
+            returnTypeValidator: __val_d78a5e9e3b797aa6
         },
         {
             controller: "MiddlewareTestController",
@@ -2903,7 +2904,7 @@ MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["SimpleTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_13a05136ba37eb80
+            returnTypeValidator: __val_d78a5e9e3b797aa6
         }
     ]
 };
@@ -2928,7 +2929,7 @@ MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["CallbackTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_13a05136ba37eb80
+            returnTypeValidator: __val_d78a5e9e3b797aa6
         },
         {
             controller: "MiddlewareUnmiddlewareController",
@@ -2945,7 +2946,7 @@ MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_13a05136ba37eb80
+            returnTypeValidator: __val_d78a5e9e3b797aa6
         }
     ]
 };

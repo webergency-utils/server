@@ -306,12 +306,21 @@ export class MetadataCollector
 
         if( ident ) 
         {
-            const symbol = this.checker.getSymbolAtLocation( ident );
+            let symbol = this.checker.getSymbolAtLocation( ident );
+
+            // Imported bindings are aliases whose first declaration is the ImportSpecifier,
+            // not the class. Follow them so `@Protect(ImportedGuard)` resolves like a
+            // same-file class reference.
+            if( symbol && ( symbol.flags & ts.SymbolFlags.Alias ))
+            {
+                symbol = this.checker.getAliasedSymbol( symbol );
+            }
+
             const decl = symbol?.declarations?.[0];
 
             if( decl && ts.isClassDeclaration( decl )) 
             {
-                const name = ident.text;
+                const name = decl.name?.text ?? ident.text;
 
                 if( !map.has( name )) 
                 {

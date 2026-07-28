@@ -483,6 +483,34 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect(() => compileAndTransform( code )).toThrow( /must reference a class declaration/ );
     });
 
+    it( 'should resolve an imported guard class through its import alias', () =>
+    {
+        const output = compileFiles({
+            'temp_imported_guard.ts' : `
+        import { Injectable } from '../decorators.js';
+
+        @Injectable()
+        export class IAMGuard {
+          use() { return true }
+        }
+      `,
+            'temp_imported_guard_controller.ts' : `
+        import { Controller, Get, Protect } from '../decorators.js';
+        import { IAMGuard } from './temp_imported_guard.js';
+
+        @Controller('/secured')
+        export class SecuredController {
+          @Get()
+          @Protect(IAMGuard)
+          hi() { return 1 }
+        }
+      `
+        });
+
+        expect( output['temp_imported_guard_controller.ts']).toMatch( /guards\s*:\s*\[[\s\S]*IAMGuard/ );
+        expect( output['temp_imported_guard_controller.ts']).not.toContain( 'could not be resolved' );
+    });
+
     it( 'should report an unresolved @Use argument', () =>
     {
         const code = `
