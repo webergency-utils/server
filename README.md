@@ -59,7 +59,7 @@ npm install -D typescript
 
 ### AOT compile (required)
 
-Decorators are compile-time markers. The transformer writes `Symbol.for(...)` metadata and inlined validators onto each class in the emitted JS — there is no sidecar manifest and no process-global metadata store.
+Decorators are compile-time markers. The transformer writes `Symbol.for(...)` metadata and inlined validators onto each class in the emitted JS — there is no sidecar manifest and no process-global metadata store. Validators come from `import * as __tcRuntime from '@webergency-utils/typechecker/runtime'`.
 
 Compile with the package CLI (drop-in `tsc` wrapper):
 

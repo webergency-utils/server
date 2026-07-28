@@ -66,7 +66,9 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         const compiled = compileAndTransform( code );
 
         expect( compiled ).toContain( 'Symbol.for("webergency.server.controller")' );
-        expect( compiled ).toContain( 'import "@webergency-utils/typechecker/runtime"' );
+        expect( compiled ).toContain( 'import * as __tcRuntime from "@webergency-utils/typechecker/runtime"' );
+        expect( compiled ).toContain( 'const validators = __tcRuntime.validators' );
+        expect( compiled ).not.toContain( '__WEBERGENCY_TYPECHECKER_VALIDATORS__' );
         expect( compiled ).toContain( 'const __val_' );
         expect( compiled ).toContain( 'httpMethod: "GET"' );
         expect( compiled ).toContain( 'path: "/users/:id"' );

@@ -7,8 +7,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-import "@webergency-utils/typechecker/runtime";
-const validators = globalThis.__WEBERGENCY_TYPECHECKER_VALIDATORS__;
+import * as __tcRuntime from "@webergency-utils/typechecker/runtime";
+const validators = __tcRuntime.validators;
 const __val_473287f8298dba71 = validators.string;
 const __val_12886f9d00055adf = validators.number;
 const __val_04c78f82f98a8cf4 = (v, path, ctx) => {

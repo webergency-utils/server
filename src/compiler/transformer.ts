@@ -35,7 +35,6 @@ export interface ProjectRegistry {
     interceptors      : Map<string, { path : string }>
     endpoints         : any[]
     validators        : Map<string, ts.Expression>
-    requiredUtils     : Set<string>
     externalManifests : Set<string>
 }
 
@@ -49,7 +48,6 @@ export function createRegistry(): ProjectRegistry
         interceptors      : new Map(),
         endpoints         : [],
         validators        : new Map(),
-        requiredUtils     : new Set(),
         externalManifests : new Set()
     };
 }
@@ -630,7 +628,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
                         {
                             if( !registry.validators.has( hash )) 
                             {
-                                buildValidator( type, checker, registry.validators, registry.requiredUtils );
+                                buildValidator( type, checker, registry.validators );
                             }
                             vHash = hash;
                         }
@@ -1388,7 +1386,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry )
 
                                                 if( !registry.validators.has( hash ))
                                                 {
-                                                    buildValidator( typeForValidator, checker, registry.validators, registry.requiredUtils );
+                                                    buildValidator( typeForValidator, checker, registry.validators );
                                                 }
                                                 returnTypeValidatorHash = hash;
                                             }
@@ -1560,46 +1558,14 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
     const manifestDir = path.dirname( manifestPath );
     const finalControllerMap = controllerMap.size > 0 ? controllerMap : new Map( Array.from( registry.controllers.entries()).map(([k, v]) => [k, v.path]));
 
-    const customImports = new Map<string, Set<string>>();
-    const cleanedUtils = new Set<string>();
-  
-    for( const util of registry.requiredUtils ) 
-    {
-        if( util.startsWith( 'custom:' )) 
-        {
-            const parts = util.split( ':' );
-            const fnName = parts[1];
-            const filePath = parts.slice( 2 ).join( ':' );
-
-            if( !customImports.has( filePath )) 
-            {
-                customImports.set( filePath, new Set());
-            }
-            customImports.get( filePath )!.add( fnName );
-        }
-        else 
-        {
-            cleanedUtils.add( util );
-        }
-    }
-
     let imports = 'import { MetadataStore } from \'@webergency-utils/server\';\n';
 
-    if( cleanedUtils.size > 0 ) 
+    // Custom constraint/transform helpers must already be imported by the emitting file;
+    // validator expressions reference them by bare identifier.
+    if( registry.validators.size > 0 )
     {
-        imports += 'import { validators } from \'@webergency-utils/typechecker\';\n';
-    }
-
-    for( const [fullPath, fnNames] of customImports.entries()) 
-    {
-        let rel = path.relative( manifestDir, fullPath ).replace( /\.ts$/, '.js' );
-
-        if( !rel.startsWith( '.' ) && !rel.startsWith( '/' )) 
-        {
-            rel = './' + rel;
-        }
-        const names = Array.from( fnNames ).join( ', ' );
-        imports += `import { ${names} } from '${rel}';\n`;
+        imports += 'import * as __tcRuntime from \'@webergency-utils/typechecker/runtime\';\n';
+        imports += 'const validators = __tcRuntime.validators;\n';
     }
 
     let logic = '\n// --- SINGLETONS ---\n';
@@ -1889,20 +1855,28 @@ export default function compilerPlugin( program: ts.Program )
                     ts.factory.createPropertyAssignment( 'token', ts.factory.createStringLiteral( token ))
                 ], true );
 
-            // Import typechecker runtime side-effects if we have validators
+            // Import typechecker runtime if we have validators
             if( registry.validators.size > 0 )
             {
-                prepends.push(
-                    ts.factory.createImportDeclaration(
-                        undefined,
-                        undefined,
-                        ts.factory.createStringLiteral( '@webergency-utils/typechecker/runtime' ),
-                        undefined
-                    )
-                );
+                if( !hasNamespaceImport( transformedSourceFile.statements, '__tcRuntime', '@webergency-utils/typechecker/runtime' ) &&
+                    !hasNamespaceImport( prepends, '__tcRuntime', '@webergency-utils/typechecker/runtime' ))
+                {
+                    prepends.push(
+                        ts.factory.createImportDeclaration(
+                            undefined,
+                            ts.factory.createImportClause(
+                                false,
+                                undefined,
+                                ts.factory.createNamespaceImport( ts.factory.createIdentifier( '__tcRuntime' ))
+                            ),
+                            ts.factory.createStringLiteral( '@webergency-utils/typechecker/runtime' ),
+                            undefined
+                        )
+                    );
+                }
 
                 if( !hasVariableDeclaration( transformedSourceFile.statements, 'validators' ) &&
-            !hasVariableDeclaration( prepends, 'validators' ))
+                    !hasVariableDeclaration( prepends, 'validators' ))
                 {
                     prepends.push(
                         ts.factory.createVariableStatement(
@@ -1913,8 +1887,8 @@ export default function compilerPlugin( program: ts.Program )
                                     undefined,
                                     undefined,
                                     ts.factory.createPropertyAccessExpression(
-                                        ts.factory.createIdentifier( 'globalThis' ),
-                                        '__WEBERGENCY_TYPECHECKER_VALIDATORS__'
+                                        ts.factory.createIdentifier( '__tcRuntime' ),
+                                        'validators'
                                     )
                                 )
                             ], ts.NodeFlags.Const )
@@ -2119,6 +2093,28 @@ function hasVariableDeclaration( statements: readonly ts.Statement[], name: stri
                     return true;
                 }
             }
+        }
+    }
+
+    return false;
+}
+
+
+function hasNamespaceImport( statements: readonly ts.Statement[], name: string, moduleName: string ): boolean
+{
+    for( const statement of statements )
+    {
+        if( !ts.isImportDeclaration( statement )){ continue }
+
+        if( !ts.isStringLiteral( statement.moduleSpecifier )){ continue }
+
+        if( statement.moduleSpecifier.text !== moduleName ){ continue }
+
+        const bindings = statement.importClause?.namedBindings;
+
+        if( bindings && ts.isNamespaceImport( bindings ) && bindings.name.text === name )
+        {
+            return true;
         }
     }
 
