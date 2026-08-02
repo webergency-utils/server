@@ -9,6 +9,7 @@ import { httpStatusFromError } from '../errors.js';
 import { resolveClientIp } from '../helpers/client-ip.js';
 import { invokeGuards } from './guard-runner.js';
 import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
+import { isBinaryOrStreamBody, toStreamOrBinaryBody } from '../helpers/response-body.js';
 
 function resolveModuleFileOptions( moduleInstance: any ): FileOptions | undefined
 {
@@ -20,22 +21,6 @@ function resolveModuleFileOptions( moduleInstance: any ): FileOptions | undefine
         || ctor?.__moduleMetadata__;
 
     return meta?.files;
-}
-
-/** Bodies that must not go through JSON.stringify. */
-function isBinaryOrStreamBody( value: unknown ): boolean
-{
-    if( value == null ){ return false }
-
-    if( typeof Blob !== 'undefined' && value instanceof Blob ){ return true }
-
-    if( value instanceof ArrayBuffer ){ return true }
-
-    if( ArrayBuffer.isView( value )){ return true }
-
-    if( typeof ReadableStream !== 'undefined' && value instanceof ReadableStream ){ return true }
-
-    return false;
 }
 
 function parseErrorCode( err: ParseError ): string
@@ -411,6 +396,15 @@ export class RequestProcessor
 
                 if( result instanceof Response ) { return result }
 
+                // Binary / Web ReadableStream / Node Readable|ReadStream → pipe to the UA
+                // (before JSON serializers / validators, which cannot consume streams).
+                const streamOrBinary = toStreamOrBinaryBody( result );
+
+                if( streamOrBinary !== undefined && !metadata.meta?.sse )
+                {
+                    return new Response( streamOrBinary );
+                }
+
                 if( metadata.meta?.sse ) 
                 {
                     const headers = new Headers({
@@ -512,7 +506,7 @@ export class RequestProcessor
 
                 if( isBinaryOrStreamBody( validatedResult ))
                 {
-                    return new Response( validatedResult as BodyInit );
+                    return new Response( toStreamOrBinaryBody( validatedResult )! );
                 }
 
                 if( typeof validatedResult === 'object' && validatedResult !== null )

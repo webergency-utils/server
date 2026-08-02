@@ -76,9 +76,18 @@ export class NodeAdapter implements ServerAdapter
 
             if( response.body ) 
             {
-                const { Readable } = await import( 'stream' );
-                // @ts-expect-error: Readable.fromWeb expects different stream type
-                Readable.fromWeb( response.body ).pipe( res );
+                const { Readable } = await import( 'node:stream' );
+                // Pipe Fetch body → Node response with backpressure (no full buffering).
+                const nodeBody = Readable.fromWeb( response.body as any );
+                nodeBody.on( 'error', ( err: Error ) =>
+                {
+                    if( !res.destroyed ){ res.destroy( err ) }
+                });
+                res.on( 'close', () =>
+                {
+                    if( !nodeBody.destroyed ){ nodeBody.destroy() }
+                });
+                nodeBody.pipe( res );
             }
             else { res.end() }
         };

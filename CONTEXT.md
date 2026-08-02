@@ -56,8 +56,8 @@ Hierarchical upload config (ServerOptions.files → Module.files → controller 
 _Avoid_: sending multipart without `@File` limits in production (defaults still apply)
 
 **ServerResponse**:
-Mutable status/headers bag shared by middleware and `@Response`; merged onto the Fetch `Response` at the end of the pipeline. Chainable: `status(code, statusText?)`, `header`, `headers`, `cookie`, `stream(body)`, `redirect(code, url)`, `forward({ method, path, query?, body? })`. Returning a `ServerResponse` from a handler finalizes that facade as the HTTP response (no JSON serialization), unless `forward` is pending — then the framework re-dispatches internally (no `Location`). Empty/`null`/`undefined` cookie values clear. Not a Fetch `Response`.
-_Avoid_: Response (the Fetch API object), ResponseBag (deprecated alias), setHeader/setCookie
+Mutable status/headers bag shared by middleware and `@Response`; merged onto the Fetch `Response` at the end of the pipeline. Chainable: `status(code, statusText?)`, `header`, `headers`, `cookie`, `stream(body)`, `redirect(code, url)`, `forward({ method, path, query?, body? })`. `stream` / endpoint returns accept bytes, Web `ReadableStream`, or Node `Readable`/`ReadStream` and **pipe** to the client (backpressured; not fully buffered). Returning a `ServerResponse` from a handler finalizes that facade as the HTTP response (no JSON serialization), unless `forward` is pending — then the framework re-dispatches internally (no `Location`). Empty/`null`/`undefined` cookie values clear. Not a Fetch `Response`.
+_Avoid_: Response (the Fetch API object), ResponseBag (deprecated alias), setHeader/setCookie, reading a file into a Buffer before returning
 
 **ResponseBag**:
 Deprecated alias of **ServerResponse**.

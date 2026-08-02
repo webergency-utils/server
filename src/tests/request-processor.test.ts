@@ -553,6 +553,98 @@ describe( 'RequestProcessor.execute SSE', () =>
         });
     });
 
+    it( 'should pipe a Node Readable to the client without buffering the whole payload', async () =>
+    {
+        const { Readable } = await import( 'node:stream' );
+        const registry = new ApplicationRegistry();
+        const chunks = [ Buffer.from( 'hel' ), Buffer.from( 'lo-' ), Buffer.from( 'stream' ) ];
+        let pullCount = 0;
+        registry.registerController( 'StreamCtrl', {
+            download : () =>
+            {
+                // Push-style Readable — consumer-driven; no preloaded Buffer concat
+                return Readable.from( chunks, { objectMode : false });
+            }
+        });
+
+        await runWithRegistry( registry, async () =>
+        {
+            const res = await RequestProcessor.execute(
+                createEndpoint({ controller : 'StreamCtrl', methodName : 'download', path : '/stream' }),
+                createRequest({ url : 'http://localhost/stream' })
+            );
+
+            expect( res.body ).toBeInstanceOf( ReadableStream );
+            expect( res.headers.get( 'content-type' )).not.toBe( 'application/json' );
+
+            const reader = res.body!.getReader();
+            const received: Uint8Array[] = [];
+
+            for( ;; )
+            {
+                const { done, value } = await reader.read();
+
+                if( done ){ break }
+
+                pullCount++;
+                received.push( value );
+            }
+
+            expect( pullCount ).toBeGreaterThan( 0 );
+            expect( Buffer.concat( received.map( c => Buffer.from( c ))).toString()).toBe( 'hello-stream' );
+        });
+    });
+
+    it( 'should pipe Node Readable via ServerResponse.stream', async () =>
+    {
+        const { Readable } = await import( 'node:stream' );
+        const { ServerResponse } = await import( '../core/types.js' );
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'OwnedStreamCtrl', {
+            download : ( res: InstanceType<typeof ServerResponse> ) =>
+                res.status( 200 )
+                    .header( 'Content-Type', 'application/octet-stream' )
+                    .stream( Readable.from([ Buffer.from( 'piped' ) ]))
+        });
+
+        await runWithRegistry( registry, async () =>
+        {
+            const res = await RequestProcessor.execute(
+                createEndpoint({
+                    controller : 'OwnedStreamCtrl',
+                    methodName : 'download',
+                    path       : '/owned-stream',
+                    params     : [{ source : 'Response' }]
+                }),
+                createRequest({ url : 'http://localhost/owned-stream' })
+            );
+
+            expect( res.status ).toBe( 200 );
+            expect( res.headers.get( 'content-type' )).toBe( 'application/octet-stream' );
+            expect( await res.text()).toBe( 'piped' );
+        });
+    });
+
+    it( 'should not JSON.stringify a returned Node Readable', async () =>
+    {
+        const { Readable } = await import( 'node:stream' );
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'NoJsonCtrl', {
+            download : () => Readable.from([ Buffer.from( '{"not":"json-wrapped"}' ) ])
+        });
+
+        await runWithRegistry( registry, async () =>
+        {
+            const res = await RequestProcessor.execute(
+                createEndpoint({ controller : 'NoJsonCtrl', methodName : 'download', path : '/raw' }),
+                createRequest({ url : 'http://localhost/raw' })
+            );
+
+            expect( res.headers.get( 'content-type' )).not.toBe( 'application/json' );
+            expect( await res.text()).toBe( '{"not":"json-wrapped"}' );
+        });
+    });
+
     it( 'should finalize from a returned ServerResponse without JSON serialization', async () =>
     {
         const { ServerResponse } = await import( '../core/types.js' );

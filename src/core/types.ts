@@ -1,4 +1,5 @@
 import { ServerError } from '../errors.js';
+import { toStreamOrBinaryBody } from '../helpers/response-body.js';
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'OPTIONS' | 'ALL' | 'RPC';
 
@@ -191,6 +192,9 @@ export interface Logger {
 
 export type EndpointRequest = import( './server-request.js' ).ServerRequest;
 
+/** Body accepted by `ServerResponse.stream` / endpoint returns that pipe to the client. */
+export type StreamableBody = BodyInit | NodeJS.ReadableStream | null;
+
 export interface CookieOptions
 {
     maxAge?   : number
@@ -212,7 +216,7 @@ export class ServerResponse
     #status = 200;
     #statusSet = false;
     #statusText? : string;
-    #body?      : BodyInit | null;
+    #body?      : StreamableBody;
     #bodySet = false;
     #pendingForward? : SeoForward;
     readonly #headers = new Headers();
@@ -291,10 +295,11 @@ export class ServerResponse
     }
 
     /**
-     * Attach a response body (bytes, blob, or `ReadableStream` to pipe).
-     * Returning this `ServerResponse` from a handler finalizes the HTTP response with that body.
+     * Attach a response body to pipe to the client (bytes, blob, Web `ReadableStream`,
+     * or Node `Readable` / `fs.ReadStream`). Node streams are bridged with backpressure —
+     * not loaded fully into memory. Returning this `ServerResponse` finalizes that body.
      */
-    public stream( body: BodyInit | null ): this
+    public stream( body: StreamableBody ): this
     {
         this.#body = body;
         this.#bodySet = true;
@@ -325,7 +330,21 @@ export class ServerResponse
      */
     public toResponse(): Response
     {
-        return new Response( this.#bodySet ? this.#body! : null, {
+        let body: BodyInit | null = null;
+
+        if( this.#bodySet )
+        {
+            if( this.#body == null )
+            {
+                body = null;
+            }
+            else
+            {
+                body = toStreamOrBinaryBody( this.#body ) ?? ( this.#body as BodyInit );
+            }
+        }
+
+        return new Response( body, {
             status     : this.#status,
             statusText : this.#statusText ?? '',
             headers    : this.#headers

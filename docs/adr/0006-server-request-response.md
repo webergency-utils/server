@@ -28,7 +28,7 @@ Introduce sealed **`ServerRequest`** and **`ServerResponse`** classes injected b
 
 **Streaming uploads** are specified in [0007](./0007-file-uploads-multipart.md): hierarchical `@File` / `@Files`, in-tree MultiBuffer multipart parser, `ServerRequest.multipart()` / `upload()` / `uploads()`.
 
-**`ServerResponse`** evolves the former `ResponseBag` with `setHeader`, `setCookie`, `clearCookie`, and `redirect`. Handler return values still supply the body; `ArrayBuffer` / typed arrays / `Blob` / `ReadableStream` are returned as binary/stream responses (not `JSON.stringify`).
+**`ServerResponse`** evolves the former `ResponseBag` with `setHeader`, `setCookie`, `clearCookie`, and `redirect`. Handler return values still supply the body; `ArrayBuffer` / typed arrays / `Blob` / Web `ReadableStream` / Node `Readable` (`fs.ReadStream`) are returned as binary/stream responses (not `JSON.stringify`). Node streams are bridged with `Readable.toWeb` and piped to the socket with backpressure — the payload is not loaded fully into memory.
 
 `EndpointRequest` / `EndpointResponse` alias the wrappers. `ResponseBag` remains an alias of `ServerResponse` for compatibility.
 

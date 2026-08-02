@@ -269,7 +269,23 @@ await ms.shutdown();
 
 `@Request` injects **`ServerRequest`** (sealed; not Fetch). Convenience fields mirror `@Ip` / `@Peer` / …; buffered body helpers honor `maxBodySize`. Streaming uploads: `req.multipart()` / `req.upload(name)` / `req.uploads()` / `req.payload()`.
 
-`@Response` injects **`ServerResponse`** (same as middleware). Chainable: `status(code, statusText?)`, `header(name, value)`, `headers({ ... })`, `cookie(name, value?, options?)`, `stream(body)`, `redirect(code, url)`, `forward({ method, path, query?, body? })`. Empty/`null`/`undefined` cookie values clear the cookie. Returning a plain value still supplies the body (JSON / binary). **Returning the `ServerResponse` itself** means the handler owns the response — the framework finalizes with that facade’s status, headers, and optional `stream()` body and does not JSON-serialize the return value. **`forward`** stashes an internal rewrite (no `Location`); after the handler returns, the framework re-dispatches to that `method`+`path` on public/`@Internal` routes. Nested forwards are allowed (max 16 hops); cycles are rejected.
+`@Response` injects **`ServerResponse`** (same as middleware). Chainable: `status(code, statusText?)`, `header(name, value)`, `headers({ ... })`, `cookie(name, value?, options?)`, `stream(body)`, `redirect(code, url)`, `forward({ method, path, query?, body? })`. Empty/`null`/`undefined` cookie values clear the cookie. Returning a plain value still supplies the body (JSON / binary). **Returning a Node `Readable` / `fs.ReadStream` or Web `ReadableStream`** pipes bytes to the client with backpressure (not loaded fully into memory). **Returning the `ServerResponse` itself** means the handler owns the response — the framework finalizes with that facade’s status, headers, and optional `stream()` body and does not JSON-serialize the return value. **`forward`** stashes an internal rewrite (no `Location`); after the handler returns, the framework re-dispatches to that `method`+`path` on public/`@Internal` routes. Nested forwards are allowed (max 16 hops); cycles are rejected.
+
+```ts
+import { createReadStream } from 'node:fs';
+
+@Get('/file')
+download() {
+  return createReadStream('/path/to/large.bin'); // piped, not buffered
+}
+
+@Get('/file-owned')
+owned(@Response() res: ServerResponse) {
+  return res
+    .header('Content-Type', 'application/pdf')
+    .stream(createReadStream('/path/to/doc.pdf'));
+}
+```
 
 #### SEO / Internal quick start
 
