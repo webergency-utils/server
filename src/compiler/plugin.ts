@@ -29,24 +29,34 @@ const injectableMeta = ( kind: string, token: string ): ts.Expression =>
         ts.factory.createPropertyAssignment( 'token', ts.factory.createStringLiteral( token ))
     ], true );
 
+interface NeededEmitLocals {
+    validators  : Set<string>
+    parsers     : Set<string>
+    serializers : Set<string>
+}
+
 /**
- * The registry is program-wide, so a file must only declare the validators its own
- * endpoints reach — otherwise every file would carry every validator in the program.
- * Nested validators are referenced as `__val_<hash>` inside each expression, so the set is
- * closed transitively.
+ * The registry is program-wide, so a file must only declare the emit locals its own
+ * endpoints reach — otherwise every file would carry every expression in the program.
+ * Nested refs are referenced as `__val_` / `__parse_` / `__ser_<hash>` inside each
+ * expression, so the set is closed transitively.
  */
-function neededValidators( endpoints: readonly any[], validators: Map<string, ts.Expression> ): Set<string>
+function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry ): NeededEmitLocals
 {
-    const needed = new Set<string>();
-    const queue: string[] = [];
+    const needed: NeededEmitLocals = {
+        validators  : new Set(),
+        parsers     : new Set(),
+        serializers : new Set()
+    };
+    const queue: Array<{ kind : keyof NeededEmitLocals, hash : string }> = [];
 
-    const request = ( hash: unknown ) =>
+    const request = ( kind: keyof NeededEmitLocals, hash: unknown ) =>
     {
-        if( typeof hash !== 'string' || hash === '' || needed.has( hash )) { return }
+        if( typeof hash !== 'string' || hash === '' || needed[kind].has( hash )) { return }
 
-        if( !validators.has( hash )) { return }
-        needed.add( hash );
-        queue.push( hash );
+        if( !registry[kind].has( hash )) { return }
+        needed[kind].add( hash );
+        queue.push({ kind, hash });
     };
 
     const scanMetadata = ( value: any ) =>
@@ -62,7 +72,9 @@ function neededValidators( endpoints: readonly any[], validators: Map<string, ts
 
         for( const [ key, nested ] of Object.entries( value ))
         {
-            if( key === 'validator' || key === 'returnTypeValidator' ) { request( nested ) }
+            if( key === 'validator' || key === 'returnTypeValidator' ) { request( 'validators', nested ) }
+            else if( key === 'returnTypeSerializer' ) { request( 'serializers', nested ) }
+            else if( key === 'parser' || key === 'parserQuery' ) { request( 'parsers', nested ) }
             else { scanMetadata( nested ) }
         }
     };
@@ -71,10 +83,16 @@ function neededValidators( endpoints: readonly any[], validators: Map<string, ts
 
     while( queue.length > 0 )
     {
-        const expression = validators.get( queue.pop()! )!;
+        const { kind, hash } = queue.pop()!;
+        const expression = registry[kind].get( hash )!;
         const walk = ( node: ts.Node ) =>
         {
-            if( ts.isIdentifier( node ) && node.text.startsWith( '__val_' )) { request( node.text.slice( 6 )) }
+            if( ts.isIdentifier( node ))
+            {
+                if( node.text.startsWith( '__val_' )) { request( 'validators', node.text.slice( 6 )) }
+                else if( node.text.startsWith( '__parse_' )) { request( 'parsers', node.text.slice( 8 )) }
+                else if( node.text.startsWith( '__ser_' )) { request( 'serializers', node.text.slice( 6 )) }
+            }
             ts.forEachChild( node, walk );
         };
         walk( expression );
@@ -83,12 +101,17 @@ function neededValidators( endpoints: readonly any[], validators: Map<string, ts
     return needed;
 }
 
-/** Validators are emitted as file-local `const __val_<hash>`, so imports come first. */
-function validatorPrepends( registry: ProjectRegistry, needed: Set<string>, existing: readonly ts.Statement[]): ts.Statement[]
+function hasAnyNeeded( needed: NeededEmitLocals ): boolean
+{
+    return needed.validators.size > 0 || needed.parsers.size > 0 || needed.serializers.size > 0;
+}
+
+/** Emit locals are file-local `const __val_` / `__parse_` / `__ser_<hash>`, so imports come first. */
+function emitLocalPrepends( registry: ProjectRegistry, needed: NeededEmitLocals, existing: readonly ts.Statement[]): ts.Statement[]
 {
     const prepends: ts.Statement[] = [];
 
-    if( needed.size === 0 ) { return prepends }
+    if( !hasAnyNeeded( needed )) { return prepends }
 
     if( !hasNamespaceImport( existing, '__tcRuntime', '@webergency-utils/typechecker/runtime' ))
     {
@@ -106,7 +129,7 @@ function validatorPrepends( registry: ProjectRegistry, needed: Set<string>, exis
         );
     }
 
-    if( !hasVariableDeclaration( existing, 'validators' ) && !hasVariableDeclaration( prepends, 'validators' ))
+    if( needed.validators.size > 0 && !hasVariableDeclaration( existing, 'validators' ) && !hasVariableDeclaration( prepends, 'validators' ))
     {
         prepends.push(
             ts.factory.createVariableStatement(
@@ -126,27 +149,39 @@ function validatorPrepends( registry: ProjectRegistry, needed: Set<string>, exis
         );
     }
 
-    for( const [ hash, expr ] of registry.validators.entries())
+    const emitMap = (
+        map     : Map<string, ts.Expression>,
+        hashes  : Set<string>,
+        prefix  : string
+    ) =>
     {
-        if( !needed.has( hash )) { continue }
-
-        if( !hasVariableDeclaration( existing, `__val_${hash}` ) && !hasVariableDeclaration( prepends, `__val_${hash}` ))
+        for( const [ hash, expr ] of map.entries())
         {
-            prepends.push(
-                ts.factory.createVariableStatement(
-                    undefined,
-                    ts.factory.createVariableDeclarationList([
-                        ts.factory.createVariableDeclaration(
-                            ts.factory.createIdentifier( `__val_${hash}` ),
-                            undefined,
-                            undefined,
-                            expr
-                        )
-                    ], ts.NodeFlags.Const )
-                )
-            );
+            if( !hashes.has( hash )) { continue }
+            const name = `${prefix}${hash}`;
+
+            if( !hasVariableDeclaration( existing, name ) && !hasVariableDeclaration( prepends, name ))
+            {
+                prepends.push(
+                    ts.factory.createVariableStatement(
+                        undefined,
+                        ts.factory.createVariableDeclarationList([
+                            ts.factory.createVariableDeclaration(
+                                ts.factory.createIdentifier( name ),
+                                undefined,
+                                undefined,
+                                expr
+                            )
+                        ], ts.NodeFlags.Const )
+                    )
+                );
+            }
         }
-    }
+    };
+
+    emitMap( registry.validators, needed.validators, '__val_' );
+    emitMap( registry.parsers, needed.parsers, '__parse_' );
+    emitMap( registry.serializers, needed.serializers, '__ser_' );
 
     return prepends;
 }
@@ -351,8 +386,8 @@ export default function compilerPlugin( program: ts.Program, pluginConfig?: unkn
             endpointsByFile.set( sourceFile.fileName, fileEndpoints );
 
             // 3. Emit Symbol.for AOT meta on classes (no process-global registry)
-            const needed = neededValidators( fileEndpoints, registry.validators );
-            const prepends = validatorPrepends( registry, needed, transformedSourceFile.statements );
+            const needed = neededEmitLocals( fileEndpoints, registry );
+            const prepends = emitLocalPrepends( registry, needed, transformedSourceFile.statements );
             const appends = metadataAppends( registry, sourceFile.fileName, fileEndpoints );
 
             const mergedStatements = [...prepends, ...transformedSourceFile.statements];
@@ -403,7 +438,7 @@ function findInsertionIndex( statements: readonly ts.Statement[]): number
                 {
                     const text = decl.name.text;
 
-                    if( text !== 'validators' && text !== 'MetadataStore' && text !== '__server_metadata_store' && !text.startsWith( '__val_' )) 
+                    if( text !== 'validators' && text !== 'MetadataStore' && text !== '__server_metadata_store' && !text.startsWith( '__val_' ) && !text.startsWith( '__parse_' ) && !text.startsWith( '__ser_' )) 
                     {
                         isPrependedVar = false;
                         break;

@@ -89,18 +89,18 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( ctx.mode ).toBe( 'strict' );
     });
 
-    it( 'should set from:query for Param and Cookie sources', async () =>
+    it( 'should set from:query for Param Cookie Header Headers and Cookies', async () =>
     {
         const fromValues: unknown[] = [];
         const capture = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
         {
             fromValues.push( ctx.from );
 
-            return validators.number( v, 'n', ctx as never );
+            return v;
         });
         const req = createRequest({
             params  : { id : '7' },
-            headers : { cookie : 'age=9' }
+            headers : { cookie : 'age=9', 'x-count' : '3' }
         });
         const ctx = { success : true, errors : [], mode : 'strict' };
 
@@ -114,8 +114,23 @@ describe( 'RequestProcessor.resolveParam', () =>
             req,
             ctx
         );
+        await RequestProcessor.resolveParam(
+            { source : 'Header', name : 'x-count', validator : capture },
+            req,
+            ctx
+        );
+        await RequestProcessor.resolveParam(
+            { source : 'Headers', validator : capture },
+            req,
+            ctx
+        );
+        await RequestProcessor.resolveParam(
+            { source : 'Cookies', validator : capture },
+            req,
+            ctx
+        );
 
-        expect( fromValues ).toEqual([ 'query', 'query' ]);
+        expect( fromValues ).toEqual([ 'query', 'query', 'query', 'query', 'query' ]);
         expect( ctx.from ).toBeUndefined();
     });
 
@@ -290,6 +305,102 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( ctx.from ).toBeUndefined();
     });
 
+    it( 'should clone query bag before validation so req.query stays strings', async () =>
+    {
+        const req = createRequest({ query : { age : '28' } });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+        const parser = ( input: any ) =>
+        {
+            input.age = Number( input.age );
+
+            return input;
+        };
+
+        const parsed = await RequestProcessor.resolveParam(
+            { source : 'Query', parser : parser as any },
+            req,
+            ctx
+        );
+
+        expect( parsed.age ).toBe( 28 );
+        expect( req.query.age ).toBe( '28' );
+    });
+
+    it( 'should resolve Request as ServerRequest', async () =>
+    {
+        const { ServerRequest } = await import( '../core/server-request.js' );
+        const req = createRequest({});
+        const ctx = { success : true, errors : [], mode : 'strict' };
+        const resolved = await RequestProcessor.resolveParam({ source : 'Request' }, req, ctx );
+
+        expect( resolved ).toBeInstanceOf( ServerRequest );
+        expect( resolved.url ).toBe( 'http://localhost/path' );
+    });
+
+    it( 'should use parser for Query and map ParseError to 400-style ctx errors', async () =>
+    {
+        const { ParseError } = await import( '@webergency-utils/typechecker/runtime' );
+        const parser = vi.fn(( _v: unknown, path?: string ) =>
+        {
+            throw new ParseError( path || '', 'Type<number>' );
+        });
+        const req = createRequest({ query : { a : 'x' } });
+        const ctx = { success : true, errors : [] as any[], mode : 'strict' };
+
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Query', name : 'a', parser },
+            req,
+            ctx
+        );
+
+        expect( result ).toBe( 'x' );
+        expect( ctx.success ).toBe( false );
+        expect( ctx.errors ).toEqual([{ path : 'a', error : 'Type<number>' }]);
+        expect( parser ).toHaveBeenCalledWith( 'x', 'a' );
+    });
+
+    it( 'should prefer parserQuery for urlencoded Body', async () =>
+    {
+        const parser = vi.fn(() => ({ via : 'json' }));
+        const parserQuery = vi.fn(() => ({ via : 'query' }));
+        const req = createRequest({
+            body    : 'age=30',
+            headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Body', parser, parserQuery },
+            req,
+            ctx
+        );
+
+        expect( result ).toEqual({ via : 'query' });
+        expect( parserQuery ).toHaveBeenCalled();
+        expect( parser ).not.toHaveBeenCalled();
+    });
+
+    it( 'should use parser for JSON Body', async () =>
+    {
+        const parser = vi.fn(( v: unknown ) => ({ ...( v as object ), parsed : true }));
+        const parserQuery = vi.fn(() => ({ via : 'query' }));
+        const req = createRequest({
+            body    : JSON.stringify({ name : 'Ada' }),
+            headers : { 'Content-Type' : 'application/json' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const result = await RequestProcessor.resolveParam(
+            { source : 'Body', parser, parserQuery },
+            req,
+            ctx
+        );
+
+        expect( result ).toEqual({ name : 'Ada', parsed : true });
+        expect( parser ).toHaveBeenCalled();
+        expect( parserQuery ).not.toHaveBeenCalled();
+    });
+
     it( 'should resolve RawBody as ArrayBuffer without JSON parsing', async () =>
     {
         const req = createRequest({
@@ -418,6 +529,58 @@ describe( 'RequestProcessor.execute SSE', () =>
             expect( await zero.text()).toBe( '0' );
             expect( await no.text()).toBe( 'false' );
             expect( await empty.text()).toBe( '' );
+        });
+    });
+
+    it( 'should return binary bodies without JSON.stringify', async () =>
+    {
+        const registry = new ApplicationRegistry();
+        const bytes = new Uint8Array([ 1, 2, 3, 4 ]);
+        registry.registerController( 'BinCtrl', {
+            download : () => bytes
+        });
+
+        await runWithRegistry( registry, async () =>
+        {
+            const res = await RequestProcessor.execute(
+                createEndpoint({ controller : 'BinCtrl', methodName : 'download', path : '/bin' }),
+                createRequest({ url : 'http://localhost/bin' })
+            );
+            const ct = res.headers.get( 'content-type' );
+
+            expect( ct == null || !ct.includes( 'application/json' )).toBe( true );
+            expect( new Uint8Array( await res.arrayBuffer())).toEqual( bytes );
+        });
+    });
+
+    it( 'should finalize from a returned ServerResponse without JSON serialization', async () =>
+    {
+        const { ServerResponse } = await import( '../core/types.js' );
+        const registry = new ApplicationRegistry();
+        const bytes = new Uint8Array([ 9, 8, 7 ]);
+        registry.registerController( 'OwnedCtrl', {
+            download : ( res: InstanceType<typeof ServerResponse> ) =>
+                res.status( 201, 'Created' )
+                    .header( 'Content-Type', 'application/octet-stream' )
+                    .stream( bytes )
+        });
+
+        await runWithRegistry( registry, async () =>
+        {
+            const res = await RequestProcessor.execute(
+                createEndpoint({
+                    controller : 'OwnedCtrl',
+                    methodName : 'download',
+                    path       : '/owned',
+                    params     : [{ source : 'Response' }]
+                }),
+                createRequest({ url : 'http://localhost/owned' })
+            );
+
+            expect( res.status ).toBe( 201 );
+            expect( res.statusText ).toBe( 'Created' );
+            expect( res.headers.get( 'content-type' )).toBe( 'application/octet-stream' );
+            expect( new Uint8Array( await res.arrayBuffer())).toEqual( bytes );
         });
     });
 
@@ -853,7 +1016,9 @@ describe( 'RequestProcessor.executeRpc', () =>
 
         // Assert
         expect( result ).toEqual({ ok : true });
-        expect( seen[0] ).toMatchObject({ _json : { n : 1 }, url : 'rpc://localhost/rpc.run' });
+        const { ServerRequest } = await import( '../core/server-request.js' );
+        expect( seen[0] ).toBeInstanceOf( ServerRequest );
+        expect(( seen[0] as InstanceType<typeof ServerRequest> ).url ).toBe( 'rpc://localhost/rpc.run' );
         expect( seen[1] ).toEqual({ n : 1 });
         expect( seen[2] ).toBeUndefined();
         // No socket exists on the RPC path, so @ConnectedSocket resolves to null rather
@@ -901,4 +1066,74 @@ describe( 'RequestProcessor.executeRpc', () =>
         expect( result ).toEqual({ ok : true, via : 'interceptor' });
         expect( order ).toEqual([ 'before', 'handler', 'after' ]);
     });
+
+    it( 'should format endpoint response using returnTypeSerializer when provided', async () =>
+    {
+        const registry = new ApplicationRegistry();
+
+        registry.registerController( 'SerCtrl', {
+            getUser : () => ({ id : '123', name : 'Alice', extra : 'stripped-or-included' })
+        });
+
+        const meta = createEndpoint({
+            controller           : 'SerCtrl',
+            methodName           : 'getUser',
+            returnTypeSerializer : ( obj: any ) => `{"id":"${obj.id}","name":"${obj.name}"}`
+        });
+
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        const jsonText = await res.text();
+
+        expect( jsonText ).toBe( '{"id":"123","name":"Alice"}' );
+        expect( res.headers.get( 'content-type' )).toBe( 'application/json' );
+    });
+
+    it( 'should run returnTypeSerializer for primitive and any-shaped results', async () =>
+    {
+        const registry = new ApplicationRegistry();
+
+        registry.registerController( 'AnySerCtrl', {
+            num  : () => 42,
+            text : () => 'hello',
+            bag  : () => ({ keep : true, n : 1 })
+        });
+
+        const serialize = ( v: unknown ) => JSON.stringify( v );
+
+        await runWithRegistry( registry, async () =>
+        {
+            const num = await RequestProcessor.execute(
+                createEndpoint({
+                    controller           : 'AnySerCtrl',
+                    methodName           : 'num',
+                    returnTypeSerializer : serialize
+                }),
+                createRequest({})
+            );
+            const text = await RequestProcessor.execute(
+                createEndpoint({
+                    controller           : 'AnySerCtrl',
+                    methodName           : 'text',
+                    returnTypeSerializer : serialize
+                }),
+                createRequest({})
+            );
+            const bag = await RequestProcessor.execute(
+                createEndpoint({
+                    controller           : 'AnySerCtrl',
+                    methodName           : 'bag',
+                    returnTypeSerializer : serialize
+                }),
+                createRequest({})
+            );
+
+            expect( await num.text()).toBe( '42' );
+            expect( num.headers.get( 'content-type' )).toBe( 'application/json' );
+            expect( await text.text()).toBe( '"hello"' );
+            expect( await bag.text()).toBe( '{"keep":true,"n":1}' );
+        });
+    });
 });
+

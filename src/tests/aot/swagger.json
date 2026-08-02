@@ -2685,6 +2685,197 @@
           }
         }
       }
+    },
+    "/seo/blog/{slug}": {
+      "get": {
+        "summary": "SeoEmitController.blog",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "x-typescript-type": "undefined"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "query": {
+                          "anyOf": [
+                            {
+                              "x-typescript-type": "undefined"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        },
+                        "body": {
+                          "anyOf": [
+                            {
+                              "x-typescript-type": "undefined"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "method",
+                        "path"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/seo/posts/{id}": {
+      "get": {
+        "summary": "SeoTargetController.show",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/_internal/seo-secret": {
+      "get": {
+        "summary": "InternalEmitController.secret",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "secret"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/seo/pretty": {
+      "get": {
+        "summary": "SeoToInternalController.go",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "method": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "query": {
+                      "anyOf": [
+                        {
+                          "x-typescript-type": "undefined"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    },
+                    "body": {
+                      "anyOf": [
+                        {
+                          "x-typescript-type": "undefined"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "method",
+                    "path"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

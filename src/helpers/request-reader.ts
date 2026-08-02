@@ -2,6 +2,9 @@ import { AugmentedRequest } from '../core/types.js';
 import { SecurityOptions } from '../decorators.js';
 import { parseSize } from './security.js';
 import { QueryParser } from './parsers.js';
+import { parseHeaderValueParameter } from './http-header-parse.js';
+
+const UTF8_DECODER = new TextDecoder( 'utf-8' );
 
 export function getContentType( req: AugmentedRequest ): string | null
 {
@@ -10,6 +13,57 @@ export function getContentType( req: AugmentedRequest ): string | null
     if( !raw ){ return null }
 
     return raw.split( ';' )[0]?.trim()?.toLowerCase() || null;
+}
+
+/** `application/json` and structured suffixes (`application/vnd.api+json`, …). */
+export function isJsonContentType( contentType: string | null | undefined ): boolean
+{
+    if( !contentType ){ return false }
+
+    return contentType === 'application/json'
+        || /^application\/[a-z0-9!#$&^_.+-]*\+json$/.test( contentType );
+}
+
+/** `multipart/form-data` (boundary parameters ignored — use `getContentType`). */
+export function isMultipartContentType( contentType: string | null | undefined ): boolean
+{
+    return contentType === 'multipart/form-data';
+}
+
+/** Extract `charset` from a Content-Type header (quoted or bare). */
+export function getContentTypeCharset( contentTypeHeader: string | null ): string | undefined
+{
+    if( !contentTypeHeader ){ return undefined }
+
+    return parseHeaderValueParameter( contentTypeHeader, 'charset' );
+}
+
+function isUtf8Charset( label: string ): boolean
+{
+    const normalized = label.trim().toLowerCase().replace( /_/g, '-' );
+
+    return normalized === 'utf-8' || normalized === 'utf8' || normalized === 'unicode-1-1-utf-8';
+}
+
+/**
+ * Decode body bytes. UTF-8 (default / explicit) uses a shared decoder;
+ * other WHATWG labels construct a one-off `TextDecoder`. Unknown → 415.
+ */
+export function decodeBodyText( raw: ArrayBuffer, charset?: string | null ): string
+{
+    if( !charset || isUtf8Charset( charset ))
+    {
+        return UTF8_DECODER.decode( raw );
+    }
+
+    try
+    {
+        return new TextDecoder( charset ).decode( raw );
+    }
+    catch
+    {
+        throw Object.assign( new Error( `Unsupported charset: ${charset}` ), { status : 415 });
+    }
 }
 
 /**
@@ -205,8 +259,16 @@ export class RequestReader
 
         if( !raw.byteLength ){ return req._json = undefined }
 
-        const text = new TextDecoder().decode( raw );
         const contentType = getContentType( req );
+        const contentTypeHeader = req.headers.get( 'content-type' );
+
+        if( contentType === 'text/plain' )
+        {
+            return req._json = decodeBodyText( raw, getContentTypeCharset( contentTypeHeader ));
+        }
+
+        // JSON / urlencoded / sniff: UTF-8 (charset on those types is almost always utf-8)
+        const text = decodeBodyText( raw );
 
         if( !contentType )
         {
@@ -221,7 +283,7 @@ export class RequestReader
             return req._json = QueryParser.parse( text );
         }
 
-        if( contentType === 'application/json' )
+        if( isJsonContentType( contentType ))
         {
             return req._json = parseJsonBody( text );
         }

@@ -20,16 +20,19 @@ describe( 'generateManifestCode', () =>
         registry.modules.set( 'AppModule', { path : path.join( root, 'app.module.ts' ) });
         registry.externalManifests.add( path.join( root, 'vendor/_metadata.manifest.js' ));
         registry.validators.set( 'abc123', ts.factory.createIdentifier( 'validators.string' ));
+        registry.parsers.set( 'abc123_strip_json', ts.factory.createIdentifier( '(__parse_abc123_strip_json)' ));
+        registry.serializers.set( 'abc123_strip_json', ts.factory.createIdentifier( '(__ser_abc123_strip_json)' ));
         registry.endpoints.push({
-            httpMethod   : 'GET',
-            path         : '/hi',
-            controller   : 'AppController',
-            methodName   : 'hi',
-            guards       : [{ type : 'class', name : 'AuthGuard' }],
-            interceptors : [],
-            params       : [],
-            validator    : 'abc123',
-            meta         : { custom : { __raw_code__ : 'Date.now()' } }
+            httpMethod           : 'GET',
+            path                 : '/hi',
+            controller           : 'AppController',
+            methodName           : 'hi',
+            guards               : [{ type : 'class', name : 'AuthGuard' }],
+            interceptors         : [],
+            params               : [{ source : 'Body', parser : 'abc123_strip_json', parserQuery : 'abc123_strip_json' }],
+            returnTypeValidator  : 'abc123',
+            returnTypeSerializer : 'abc123_strip_json',
+            meta                 : { custom : { __raw_code__ : 'Date.now()' } }
         });
 
         // Act
@@ -45,6 +48,10 @@ describe( 'generateManifestCode', () =>
         expect( code ).toContain( 'const validators = __tcRuntime.validators' );
         expect( code ).toContain( 'EXTERNAL MANIFESTS' );
         expect( code ).toContain( 'var __val_abc123' );
+        expect( code ).toContain( 'var __parse_abc123_strip_json' );
+        expect( code ).toContain( 'var __ser_abc123_strip_json' );
+        expect( code ).toContain( 'parser: __parse_abc123_strip_json' );
+        expect( code ).toContain( 'returnTypeSerializer: __ser_abc123_strip_json' );
         expect( code ).toContain( 'registerEndpoint' );
     });
 });

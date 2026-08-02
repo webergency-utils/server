@@ -454,6 +454,62 @@ describe( 'RequestReader.getBody', () =>
         expect( body ).toEqual({ name : 'Ada' });
     });
 
+    it( 'should parse application/*+json as JSON', async () =>
+    {
+        const req = createRequest({
+            body    : JSON.stringify({ data : { id : '1' } }),
+            headers : { 'Content-Type' : 'application/vnd.api+json' }
+        });
+
+        expect( await RequestReader.getBody( req )).toEqual({ data : { id : '1' } });
+    });
+
+    it( 'should return text/plain bodies as a string', async () =>
+    {
+        const req = createRequest({
+            body    : 'hello plain',
+            headers : { 'Content-Type' : 'text/plain' }
+        });
+
+        const first = await RequestReader.getBody( req );
+        const second = await RequestReader.getBody( req );
+
+        expect( first ).toBe( 'hello plain' );
+        expect( first ).toBe( second );
+    });
+
+    it( 'should treat text/plain with charset as a string', async () =>
+    {
+        const req = createRequest({
+            body    : 'café',
+            headers : { 'Content-Type' : 'text/plain; charset=utf-8' }
+        });
+
+        expect( await RequestReader.getBody( req )).toBe( 'café' );
+    });
+
+    it( 'should decode text/plain with a non-utf8 charset', async () =>
+    {
+        // "café" in ISO-8859-1
+        const body = Uint8Array.from([ 0x63, 0x61, 0x66, 0xe9 ]).buffer;
+        const req = createRequest({
+            body,
+            headers : { 'Content-Type' : 'text/plain; charset=iso-8859-1' }
+        });
+
+        expect( await RequestReader.getBody( req )).toBe( 'café' );
+    });
+
+    it( 'should reject text/plain with an unknown charset', async () =>
+    {
+        const req = createRequest({
+            body    : 'x',
+            headers : { 'Content-Type' : 'text/plain; charset=not-a-real-encoding' }
+        });
+
+        await expect( RequestReader.getBody( req )).rejects.toMatchObject({ status : 415 });
+    });
+
     it( 'should sniff JSON or urlencoded when Content-Type is missing', async () =>
     {
         const jsonReq = createRequest({ body : '{"x":1}' });
@@ -469,8 +525,8 @@ describe( 'RequestReader.getBody', () =>
     it( 'should reject unsupported Content-Types and unsniffable bodies', async () =>
     {
         const other = createRequest({
-            body    : '{"y":2}',
-            headers : { 'Content-Type' : 'text/plain' }
+            body    : '<root/>',
+            headers : { 'Content-Type' : 'application/xml' }
         });
         const multipart = createRequest({
             body    : '--boundary',

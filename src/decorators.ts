@@ -2,6 +2,11 @@
  * PARAMETER DECORATORS (Strict - No Parentheses)
  */
 import { MiddlewareClass } from './core/types.js';
+import type { FileOptions, FileFieldOptions } from './helpers/file-upload.js';
+
+export type { FileOptions, FileFieldOptions, FileHandler } from './helpers/file-upload.js';
+export { UploadedFile } from './helpers/file-upload.js';
+export { MultipartPayload, type MultipartValue, type MultipartFieldValue } from './helpers/multipart.js';
 
 export const Request = ( target: any, key: string | symbol, idx: number ) => {};
 export const Context = ( target: any, key: string | symbol, idx: number ) => {};
@@ -42,11 +47,48 @@ export const Cookie = ( name: string ): ParameterDecorator => ( target: any, key
 export const ConnectedSocket = (): ParameterDecorator => ( target: any, key: string | symbol | undefined, idx: number ) => {};
 
 /**
+ * Inject all uploaded files from a multipart request.
+ * Requires hierarchical `@File({ ... })` config (or `ServerOptions.files` / module `files`).
+ */
+export const Files = (): ParameterDecorator => ( target: any, key: string | symbol | undefined, idx: number ) => {};
+
+/**
+ * File upload config (class / method) and field injection (parameter).
+ *
+ * Config (hierarchical — ServerOptions.files → Module.files → class → method):
+ * ```ts
+ * @File({ dest: '/tmp/uploads', maxFileSize: '10mb' })
+ * @Controller('/media')
+ * class MediaController {
+ *   @Post('/avatar')
+ *   @File('avatar', { dest: '/tmp/avatars' })
+ *   upload(@File('avatar') file: UploadedFile) { return { path: file.path } }
+ * }
+ * ```
+ */
+export function File( options?: FileOptions ): ClassDecorator & MethodDecorator;
+export function File( field: string, options?: FileFieldOptions ): MethodDecorator & ParameterDecorator;
+export function File( arg1?: any, arg2?: any ): any
+{
+    return () => {};
+}
+
+/**
  * CLASS/METHOD DECORATORS (Strict Paren-free)
  */
 export function Public( target: any ): void; 
 export function Public( target: any, key: string | symbol, descriptor: any ): void; 
 export function Public( arg1: any, arg2?: any, arg3?: any ): void {}
+
+/** Marks endpoints for the high-priority SEO router group. */
+export function Seo( target: any ): void;
+export function Seo( target: any, key: string | symbol, descriptor: any ): void;
+export function Seo( arg1: any, arg2?: any, arg3?: any ): void {}
+
+/** Marks endpoints as forward-only (excluded from external HTTP routing). */
+export function Internal( target: any ): void;
+export function Internal( target: any, key: string | symbol, descriptor: any ): void;
+export function Internal( arg1: any, arg2?: any, arg3?: any ): void {}
 
 export enum Scope {
     DEFAULT = 0,
@@ -339,6 +381,8 @@ export interface ModuleMetadata {
     controllers? : any[]
     providers?   : any[]
     exports?     : any[]
+    /** Default multipart / upload handling for controllers in this module. */
+    files?       : FileOptions
 }
 
 export function Module( metadata: ModuleMetadata ): ClassDecorator 

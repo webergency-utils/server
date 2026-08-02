@@ -79,7 +79,9 @@ describe( 'invokeGuards', () =>
         }));
 
         // Assert
-        expect( seen[0]).toBe( req );
+        const { ServerRequest } = await import( '../core/server-request.js' );
+        expect( seen[0]).toBeInstanceOf( ServerRequest );
+        expect(( seen[0] as InstanceType<typeof ServerRequest> ).url ).toBe( req.url );
         expect( seen[1]).toBe( '7' );
         expect( seen[2]).toBe( 'hi' );
         expect( seen[3]).toBe( 'abc' );
@@ -136,7 +138,11 @@ describe( 'invokeGuards', () =>
         }));
 
         // Assert
-        expect( controller.check ).toHaveBeenCalledWith( req );
+        expect( controller.check ).toHaveBeenCalledOnce();
+        expect( controller.check.mock.calls[0][0]).toBeInstanceOf(
+            ( await import( '../core/server-request.js' )).ServerRequest
+        );
+        expect( controller.check.mock.calls[0][0].url ).toBe( req.url );
     });
 
     it( 'should run beforeEach ahead of every guard and abort on throw', async () =>

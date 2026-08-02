@@ -53,7 +53,8 @@ export class ApplicationRegistry
 
     registerEndpoint( metadata: EndpointMetadata )
     {
-        const key = `${metadata.httpMethod.toUpperCase()} ${metadata.path}`;
+        const group = metadata.seo ? 'seo' : metadata.internal ? 'internal' : 'public';
+        const key = `${group}:${metadata.httpMethod.toUpperCase()} ${metadata.path}`;
 
         if( this.routeKeys.has( key ))
         {

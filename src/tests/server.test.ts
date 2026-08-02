@@ -504,7 +504,7 @@ describe( 'Server & Metadata', () =>
             expect( data.url ).toBe( 'http://example.com/params?q=1' );
             expect( data.path ).toBe( '/params' );
             expect( data.ip ).toBe( '127.0.0.1' );
-            expect( data.res ).toEqual({ headers : {}});
+            expect( data.res ).toEqual({});
             expect( data.ctx ).toBeDefined();
             expect( data.headers['x-test']).toBe( 'val' );
         });
@@ -512,10 +512,10 @@ describe( 'Server & Metadata', () =>
         it( 'should apply @Response headers and status onto the outbound response', async () =>
         {
             const ctrl = {
-                get : ( res: { headers : Headers, status : number }) =>
+                get : ( res: { header : ( n: string, v: string ) => unknown, status : ( n: number ) => unknown }) =>
                 {
-                    res.headers.set( 'x-from-handler', '1' );
-                    res.status = 201;
+                    res.header( 'x-from-handler', '1' );
+                    res.status( 201 );
 
                     return { ok : true };
                 }
@@ -1239,7 +1239,7 @@ describe( 'Server & Metadata', () =>
             await server.start();
             
             // Verify registration log
-            expect( consoleSpy ).toHaveBeenCalledWith( expect.stringContaining( 'Registered route: GET    /log-test -> LogCtrl.getLog' ));
+            expect( consoleSpy ).toHaveBeenCalledWith( expect.stringContaining( 'Registered route (public): GET    /log-test -> LogCtrl.getLog' ));
             
             // Simulate incoming request
             const request = new Request( 'http://localhost:3004/log-test', { method : 'GET' });
@@ -1567,7 +1567,9 @@ describe( 'Server & Metadata', () =>
             // Assert
             expect( guard.use ).toHaveBeenCalledOnce();
             expect( guardArgs[0]).toBeNull();
-            expect( guardArgs[1]).toBeInstanceOf( Request );
+            expect( guardArgs[1]).toBeInstanceOf(
+                ( await import( '../core/server-request.js' )).ServerRequest
+            );
             expect( guardArgs[2]).toBe( '42' );
             expect( guardArgs[3]).toBe( 'hi' );
             expect( guardArgs[4]).toBe( 'injected' );
@@ -2363,7 +2365,7 @@ describe( 'Server & Metadata', () =>
             {
                 constructor( private reg: ApplicationRegistry ) {}
 
-                async use( req: Request )
+                async use( req: import( '../core/server-request.js' ).ServerRequest )
                 {
                     const ctx = Context.get();
 
@@ -2379,7 +2381,7 @@ describe( 'Server & Metadata', () =>
 
                     const requiredRoles = reflector.getAllAndOverride<string[]>( 'roles', [handlerMethod, controllerClass]);
 
-                    const roleHeader = req.headers.get( 'x-role' );
+                    const roleHeader = req.headers['x-role'];
 
                     if( requiredRoles && ( !roleHeader || !requiredRoles.includes( roleHeader )))
                     {

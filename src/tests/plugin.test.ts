@@ -116,11 +116,13 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( compiled ).toContain( 'const validators = __tcRuntime.validators' );
         expect( compiled ).not.toContain( '__WEBERGENCY_TYPECHECKER_VALIDATORS__' );
         expect( compiled ).toContain( 'const __val_' );
+        expect( compiled ).toContain( 'const __parse_' );
         expect( compiled ).toContain( 'httpMethod: "GET"' );
         expect( compiled ).toContain( 'path: "/users/:id"' );
         expect( compiled ).toContain( 'httpMethod: "POST"' );
         expect( compiled ).toContain( 'path: "/users"' );
-        expect( compiled ).toContain( 'validator: __val_' );
+        expect( compiled ).toContain( 'parser: __parse_' );
+        expect( compiled ).toContain( 'parserQuery: __parse_' );
         expect( compiled ).toContain( 'kind: "controller"' );
         expect( compiled ).not.toContain( 'MetadataStore' );
     });
@@ -383,7 +385,30 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( compiled ).toContain( 'Symbol.for("webergency.server.controller")' );
         expect( compiled ).toContain( 'role' );
         expect( compiled ).toContain( 'returnTypeValidator' );
+        expect( compiled ).toContain( 'returnTypeSerializer' );
+        expect( compiled ).toContain( 'serializeAny' );
         expect( compiled ).toContain( 'sse: true' );
+    });
+
+    it( 'should attach serializer for any and unknown HTTP return types', () =>
+    {
+        const code = `
+      import { Controller, Get } from '../decorators.js';
+
+      @Controller('/opaque')
+      export class OpaqueController {
+        @Get('/any')
+        any(): any { return { free: true } }
+
+        @Get('/unknown')
+        unknown(): Promise<unknown> { return Promise.resolve( 1 ) }
+      }
+    `;
+
+        const compiled = compileAndTransform( code );
+
+        expect( compiled ).toContain( 'returnTypeSerializer' );
+        expect( compiled ).toContain( 'serializeAny' );
     });
 
     it( 'should insert Symbol metadata after binding patterns and __val_ vars', () =>
@@ -454,16 +479,22 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         });
 
         const declared = ( code: string ) => new Set(( code.match( /const (__val_[0-9a-f]+) =/g ) || []).map( m => m.slice( 6, -2 )));
+        const declaredParsers = ( code: string ) => new Set(( code.match( /const (__parse_[0-9a-f]+_[a-z]+_[a-z]+) =/g ) || []).map( m => m.slice( 6, -2 )));
         const firstVals = declared( output['temp_first_controller.ts']);
         const secondVals = declared( output['temp_second_controller.ts']);
+        const firstParsers = declaredParsers( output['temp_first_controller.ts']);
+        const secondParsers = declaredParsers( output['temp_second_controller.ts']);
 
         // The shared type resolves to the same hash in both files...
         expect([ ...secondVals ].some( hash => firstVals.has( hash ))).toBe( true );
+        expect([ ...secondParsers ].some( hash => firstParsers.has( hash ))).toBe( true );
         // ...while the type only one controller uses stays out of the other file.
         expect( output['temp_first_controller.ts']).toContain( 'nickname' );
         expect( output['temp_second_controller.ts']).not.toContain( 'nickname' );
         expect( secondVals.size ).toBeLessThan( firstVals.size );
-    });
+        expect( secondParsers.size ).toBeLessThan( firstParsers.size );
+        expect( output['temp_first_controller.ts']).toContain( 'parser: __parse_' );
+        expect( output['temp_first_controller.ts']).toContain( 'returnTypeSerializer: __ser_' );    });
 
     it( 'should report an unresolved @Protect argument instead of dropping the guard', () =>
     {

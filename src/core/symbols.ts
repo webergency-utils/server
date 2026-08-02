@@ -28,6 +28,7 @@ export type ModuleAotMeta =
     guards?       : any[]
     interceptors? : any[]
     exports?      : any[]
+    files?        : any
 };
 
 export type InjectableAotMeta =

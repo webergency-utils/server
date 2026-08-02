@@ -28,11 +28,15 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
     let imports = 'import { MetadataStore } from \'@webergency-utils/server\';\n';
 
     // Custom constraint/transform helpers must already be imported by the emitting file;
-    // validator expressions reference them by bare identifier.
-    if( registry.validators.size > 0 )
+    // validator/parser/serializer expressions reference them by bare identifier.
+    if( registry.validators.size > 0 || registry.parsers.size > 0 || registry.serializers.size > 0 )
     {
         imports += 'import * as __tcRuntime from \'@webergency-utils/typechecker/runtime\';\n';
-        imports += 'const validators = __tcRuntime.validators;\n';
+
+        if( registry.validators.size > 0 )
+        {
+            imports += 'const validators = __tcRuntime.validators;\n';
+        }
     }
 
     let logic = '\n// --- SINGLETONS ---\n';
@@ -67,8 +71,6 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
         external += `try { await import('./${relPath}'); } catch(e) { console.warn("⚠️ Failed to load external manifest: ${relPath}", e.message); }\n`;
     }
 
-    const validatorCodeMap = new Map<string, string>();
-    let validatorsCode = '\n// --- VALIDATORS ---\n';
     const printer = ts.createPrinter({ newLine : ts.NewLineKind.LineFeed });
 
     const formatCode = ( node: ts.Node ) => 
@@ -76,11 +78,36 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
         return printer.printNode( ts.EmitHint.Expression, node, undefined as any );
     };
 
-    for( const [hash, expr] of registry.validators.entries()) 
+    let emitLocalsCode = '';
+
+    if( registry.validators.size > 0 )
     {
-        const code = formatCode( expr );
-        validatorsCode += `var __val_${hash} = ${code};\n\n`;
-        validatorCodeMap.set( hash, `__val_${hash}` );
+        emitLocalsCode += '\n// --- VALIDATORS ---\n';
+
+        for( const [hash, expr] of registry.validators.entries()) 
+        {
+            emitLocalsCode += `var __val_${hash} = ${formatCode( expr )};\n\n`;
+        }
+    }
+
+    if( registry.parsers.size > 0 )
+    {
+        emitLocalsCode += '\n// --- PARSERS ---\n';
+
+        for( const [hash, expr] of registry.parsers.entries()) 
+        {
+            emitLocalsCode += `var __parse_${hash} = ${formatCode( expr )};\n\n`;
+        }
+    }
+
+    if( registry.serializers.size > 0 )
+    {
+        emitLocalsCode += '\n// --- SERIALIZERS ---\n';
+
+        for( const [hash, expr] of registry.serializers.entries()) 
+        {
+            emitLocalsCode += `var __ser_${hash} = ${formatCode( expr )};\n\n`;
+        }
     }
 
     let endpointsCode = '\n// --- ENDPOINTS ---\n';
@@ -95,13 +122,19 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
             }
         }
 
-        // Replace validator hashes with actual code references
+        // Replace hash strings with actual code references
         let epJson = JSON.stringify( ep, null, 4 );
         epJson = epJson.replace( /"(validator|returnTypeValidator)":\s*"([^"]+)"/g, ( match, key, hash ) => 
         {
-            const code = validatorCodeMap.get( hash );
-
-            return code ? `"${key}": ${code}` : match;
+            return hash ? `"${key}": __val_${hash}` : match;
+        });
+        epJson = epJson.replace( /"(returnTypeSerializer)":\s*"([^"]+)"/g, ( match, key, hash ) => 
+        {
+            return hash ? `"${key}": __ser_${hash}` : match;
+        });
+        epJson = epJson.replace( /"(parser|parserQuery)":\s*"([^"]+)"/g, ( match, key, hash ) => 
+        {
+            return hash ? `"${key}": __parse_${hash}` : match;
         });
 
         // Replace __raw_code__ placeholders before cleaning up quotes
@@ -126,8 +159,16 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
         endpointsCode += `MetadataStore.registerEndpoint(${epJson});\n\n`;
     }
 
-    return imports + external + logic + ( validatorCodeMap.size > 0 ? validatorsCode : '' ) + endpointsCode;
+    return imports + external + logic + emitLocalsCode + endpointsCode;
 }
+
+const HASH_IDENT_KEYS: Record<string, string> = {
+    validator            : '__val_',
+    returnTypeValidator  : '__val_',
+    returnTypeSerializer : '__ser_',
+    parser               : '__parse_',
+    parserQuery          : '__parse_'
+};
 
 /** Rebuild a parsed decorator value as an expression, restoring `__raw_code__` verbatim. */
 export function objectToExpression( obj: any ): ts.Expression 
@@ -165,12 +206,14 @@ export function objectToExpression( obj: any ): ts.Expression
 
         for( const [key, value] of Object.entries( obj )) 
         {
-            if(( key === 'validator' || key === 'returnTypeValidator' ) && typeof value === 'string' && value !== '' ) 
+            const prefix = HASH_IDENT_KEYS[key];
+
+            if( prefix && typeof value === 'string' && value !== '' ) 
             {
                 properties.push(
                     ts.factory.createPropertyAssignment(
                         ts.factory.createIdentifier( key ),
-                        ts.factory.createIdentifier( `__val_${value}` )
+                        ts.factory.createIdentifier( `${prefix}${value}` )
                     )
                 );
             }

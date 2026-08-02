@@ -1,7 +1,7 @@
 import ts from 'typescript';
-import { buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
+import { buildParser, buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
 import { ProjectRegistry } from './registry.js';
-import { PARAM_DECORATORS, extractCorsConfig, extractSecurityConfig, extractResponseMode } from './decorator-config.js';
+import { PARAM_DECORATORS, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig } from './decorator-config.js';
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
 
 /**
@@ -94,6 +94,7 @@ export const guardName = ( guard: any ) => guard.name;
 export interface ClassMetadata {
     corsConfigs     : any[]
     securityConfigs : any[]
+    fileConfigs     : any[]
     guards          : any[]
     interceptors    : string[]
     middlewares     : string[]
@@ -126,7 +127,7 @@ export class MetadataCollector
             if( i < skipCount ) { continue }
             const p = pArray[i];
             const decs = ts.getDecorators( p );
-            let dName = '', pName = '', vHash = '', vMode: any = undefined;
+            let dName = '', pName = '', vMode: any = undefined;
 
             let isInject = false;
             let injectToken = '';
@@ -223,6 +224,17 @@ export class MetadataCollector
                                     vMode = e.arguments[1].text as any;
                                 }
                             }
+                            else if( dName === 'Files' )
+                            {
+                                // `@Files()` — no field name
+                            }
+                            else if( dName === 'File' )
+                            {
+                                if( e.arguments[0] && ts.isStringLiteral( e.arguments[0]))
+                                {
+                                    pName = e.arguments[0].text;
+                                }
+                            }
                             else if( ![ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'RawBody', 'Request', 'Context', 'Response' ].includes( dName ) && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
                             {
                                 pName = e.arguments[0].text;
@@ -252,18 +264,42 @@ export class MetadataCollector
 
             if( dName ) 
             {
-                const type = checker.getTypeAtLocation( p );
-                const hash = generateHash( type, checker );
-
-                if(['Body', 'Query', 'Param', 'Cookie'].includes( dName )) 
+                if(['Body', 'Query', 'Param', 'Cookie', 'Header', 'Headers', 'Cookies'].includes( dName )) 
                 {
-                    if( !registry.validators.has( hash )) 
+                    const type = checker.getTypeAtLocation( p );
+                    const typeHash = generateHash( type, checker );
+                    const mode = vMode || 'strip';
+
+                    if( dName === 'Body' ) 
                     {
-                        buildValidator( type, checker, registry.validators );
+                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'json' });
+                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
+                        // Multipart (and assert-style) path: validators support UploadedFile via instanceof.
+                        buildValidator( type, checker, registry.validators, typeHash );
+                        metadata.push({
+                            source      : dName,
+                            name        : pName,
+                            parser      : `${typeHash}_${mode}_json`,
+                            parserQuery : `${typeHash}_${mode}_query`,
+                            validator   : typeHash,
+                            mode        : vMode
+                        });
                     }
-                    vHash = hash;
+                    else 
+                    {
+                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
+                        metadata.push({
+                            source : dName,
+                            name   : pName,
+                            parser : `${typeHash}_${mode}_query`,
+                            mode   : vMode
+                        });
+                    }
                 }
-                metadata.push({ source : dName, name : pName, validator : vHash, mode : vMode });
+                else 
+                {
+                    metadata.push({ source : dName, name : pName, validator : '', mode : vMode });
+                }
             }
             else 
             {
@@ -475,6 +511,7 @@ export class MetadataCollector
         const sourceFile = classDecl.getSourceFile();
         const corsConfigs: any[] = [];
         const securityConfigs: any[] = [];
+        const fileConfigs: any[] = [];
         let guards: any[] = [];
         let interceptors: string[] = [];
         let middlewares: string[] = [];
@@ -495,6 +532,7 @@ export class MetadataCollector
                     const parentMeta = this.collectClassMetadata( baseDecl );
                     corsConfigs.push( ...parentMeta.corsConfigs );
                     securityConfigs.push( ...parentMeta.securityConfigs );
+                    fileConfigs.push( ...parentMeta.fileConfigs );
                     guards.push( ...parentMeta.guards );
                     interceptors.push( ...parentMeta.interceptors );
                     middlewares.push( ...parentMeta.middlewares );
@@ -519,6 +557,13 @@ export class MetadataCollector
             securityConfigs.push( directSecurity );
         }
 
+        const directFile = extractFileConfig( decorators, sourceFile );
+
+        if( directFile !== undefined )
+        {
+            fileConfigs.push( directFile );
+        }
+
         guards = applyDirectives( guards, this.guardDirectives( decorators ), guardName );
         interceptors = applyDirectives( interceptors, this.interceptorDirectives( decorators ), byName );
         middlewares = applyDirectives( middlewares, this.middlewareDirectives( decorators ), byName );
@@ -533,6 +578,7 @@ export class MetadataCollector
         return {
             corsConfigs,
             securityConfigs,
+            fileConfigs,
             guards,
             interceptors,
             middlewares,

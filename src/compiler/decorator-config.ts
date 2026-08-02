@@ -21,7 +21,9 @@ export const PARAM_DECORATORS: Record<string, string> = {
     'Payload'         : 'Body',
     'Peer'            : 'Peer',
     'Cookies'         : 'Cookies',
-    'Cookie'          : 'Cookie'
+    'Cookie'          : 'Cookie',
+    'File'            : 'File',
+    'Files'           : 'Files'
 };
 
 /**
@@ -134,6 +136,77 @@ export function extractSecurityConfig( decorators: readonly ts.Decorator[] | und
     return extractConfigDecorator( 'Security', decorators, sourceFile );
 }
 
+/**
+ * Collect `@File` config from class/method decorators.
+ * - `@File({ dest })` → top-level options
+ * - `@File('avatar', { maxFileSize })` → `fields.avatar`
+ * Multiple decorators merge (fields deep-merged).
+ */
+export function extractFileConfig( decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile ): any
+{
+    if( !decorators ){ return undefined }
+
+    let merged: any = undefined;
+
+    for( const d of decorators )
+    {
+        const isCall = ts.isCallExpression( d.expression );
+        const ident = isCall ? d.expression.expression : d.expression;
+
+        if( !ts.isIdentifier( ident ) || ident.text !== 'File' ){ continue }
+
+        if( !isCall )
+        {
+            merged = merged ? { ...merged } : {};
+
+            continue;
+        }
+
+        const args = d.expression.arguments;
+
+        if( args.length === 0 )
+        {
+            merged = merged ? { ...merged } : {};
+
+            continue;
+        }
+
+        const first = parseExpression( args[0], sourceFile );
+
+        if( typeof first === 'string' )
+        {
+            const fieldOpts = args.length > 1 ? parseExpression( args[1], sourceFile ) : {};
+            merged = merged ? { ...merged } : {};
+            merged.fields = { ...( merged.fields || {}), [first] : { ...( merged.fields?.[first] || {}), ...( fieldOpts || {}) } };
+        }
+        else if( first && typeof first === 'object' )
+        {
+            const fields =
+            {
+                ...( merged?.fields || {}),
+                ...( first.fields || {})
+            };
+
+            if( merged?.fields && first.fields )
+            {
+                for( const key of Object.keys( first.fields ))
+                {
+                    fields[key] = { ...( merged.fields[key] || {}), ...first.fields[key] };
+                }
+            }
+
+            merged =
+            {
+                ...( merged || {}),
+                ...first,
+                fields : Object.keys( fields ).length ? fields : undefined
+            };
+        }
+    }
+
+    return merged;
+}
+
 /** Later `@ResponseMode` wins, matching the original scan-to-the-end behaviour. */
 export function extractResponseMode( decorators: readonly ts.Decorator[] | undefined ): string | undefined
 {
@@ -168,4 +241,29 @@ export function hasPublicDecorator( decorators: readonly ts.Decorator[] | undefi
     }
 
     return false;
+}
+
+/** Paren-free `@Seo` / `@Internal` — identifier or call expression. */
+function hasNamedDecorator( decorators: readonly ts.Decorator[] | undefined, name: string ): boolean
+{
+    if( !decorators ){ return false }
+
+    for( const d of decorators )
+    {
+        const text = d.expression.getText();
+
+        if( text === name || text.startsWith( `${name}(` )){ return true }
+    }
+
+    return false;
+}
+
+export function hasSeoDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
+{
+    return hasNamedDecorator( decorators, 'Seo' );
+}
+
+export function hasInternalDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
+{
+    return hasNamedDecorator( decorators, 'Internal' );
 }

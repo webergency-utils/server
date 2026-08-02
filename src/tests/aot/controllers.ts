@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware, Seo, Internal, SeoForward } from '../../index.js';
 
 import { constraint, format, tag } from '@webergency-utils/typechecker';
 
@@ -711,8 +711,8 @@ export class SimpleTestMiddleware implements Middleware
 {
     use( req: EndpointRequest, res: EndpointResponse ) 
     {
-        req.headers.set( 'x-middleware-one', 'active' );
-        res.headers.set( 'x-middleware-res-one', 'response-active' );
+        req.headers['x-middleware-one'] = 'active';
+        res.header( 'x-middleware-res-one', 'response-active' );
     }
 }
 
@@ -721,8 +721,8 @@ export class CallbackTestMiddleware implements Middleware
 {
     async useCallback( req: EndpointRequest, res: EndpointResponse, next: (error?: any) => Promise<void> | void ) 
     {
-        req.headers.set( 'x-middleware-two', 'callback-active' );
-        res.headers.set( 'x-middleware-res-two', 'response-callback-active' );
+        req.headers['x-middleware-two'] = 'callback-active';
+        res.header( 'x-middleware-res-two', 'response-callback-active' );
         await next();
     }
 }
@@ -732,7 +732,7 @@ export class MiddlewareCheckingGuard implements Guard
 {
     use( req: EndpointRequest ) 
     {
-        const one = req.headers.get( 'x-middleware-one' );
+        const one = req.headers['x-middleware-one'];
         if( !one ) 
         {
             throw { status : 403, message : 'Middleware did not run before Guard' };
@@ -746,21 +746,21 @@ export class MiddlewareTestController
 {
     @Get( '/both' )
     @Protect( MiddlewareCheckingGuard )
-    both( req: EndpointRequest ) 
+    both( req: EndpointRequest ): { one: string | null, two: string | null }
     {
         return {
-            one : req.headers.get( 'x-middleware-one' ),
-            two : req.headers.get( 'x-middleware-two' )
+            one : req.headers['x-middleware-one'] ?? null,
+            two : req.headers['x-middleware-two'] ?? null
         };
     }
 
     @Get( '/override' )
     @OverrideUse( SimpleTestMiddleware )
-    override( req: EndpointRequest ) 
+    override( req: EndpointRequest ): { one: string | null, two: string | null }
     {
         return {
-            one : req.headers.get( 'x-middleware-one' ),
-            two : req.headers.get( 'x-middleware-two' )
+            one : req.headers['x-middleware-one'] ?? null,
+            two : req.headers['x-middleware-two'] ?? null
         };
     }
 }
@@ -771,21 +771,21 @@ export class MiddlewareUnmiddlewareController
 {
     @Get( '/remove-one' )
     @Unuse( SimpleTestMiddleware )
-    removeOne( req: EndpointRequest ) 
+    removeOne( req: EndpointRequest ): { one: string | null, two: string | null }
     {
         return {
-            one : req.headers.get( 'x-middleware-one' ),
-            two : req.headers.get( 'x-middleware-two' )
+            one : req.headers['x-middleware-one'] ?? null,
+            two : req.headers['x-middleware-two'] ?? null
         };
     }
 
     @Get( '/remove-all' )
     @Unuse
-    removeAll( req: EndpointRequest ) 
+    removeAll( req: EndpointRequest ): { one: string | null, two: string | null }
     {
         return {
-            one : req.headers.get( 'x-middleware-one' ),
-            two : req.headers.get( 'x-middleware-two' )
+            one : req.headers['x-middleware-one'] ?? null,
+            two : req.headers['x-middleware-two'] ?? null
         };
     }
 }
@@ -855,5 +855,47 @@ export class MethodPublicController
     }
 }
 
+@Controller()
+@Seo
+export class SeoEmitController 
+{
+    @Get( '/seo/blog/:slug' )
+    blog( @Param( 'slug' ) slug: string ): SeoForward | void
+    {
+        if( slug === 'miss' ){ return }
 
+        return { method : 'GET', path : `/seo/posts/${slug}` };
+    }
+}
 
+@Controller()
+export class SeoTargetController 
+{
+    @Get( '/seo/posts/:id' )
+    show( @Param( 'id' ) id: string )
+    {
+        return { id };
+    }
+}
+
+@Controller()
+@Internal
+export class InternalEmitController 
+{
+    @Get( '/_internal/seo-secret' )
+    secret()
+    {
+        return { secret : true };
+    }
+}
+
+@Controller()
+@Seo
+export class SeoToInternalController 
+{
+    @Get( '/seo/pretty' )
+    go(): SeoForward
+    {
+        return { method : 'GET', path : '/_internal/seo-secret' };
+    }
+}

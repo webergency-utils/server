@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events';
-import { Router } from './core/router.js';
+import { Router, RouteMatch } from './core/router.js';
 import { QueryParser } from './helpers/parsers.js';
 import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/registry.js';
 import { bootstrapRegistry } from './core/bootstrap.js';
-import { EndpointMetadata, AugmentedRequest, Logger, LogContext } from './core/types.js';
-import { CorsOptions, SecurityOptions } from './decorators.js';
+import { EndpointMetadata, AugmentedRequest, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
+import { CorsOptions, SecurityOptions, type FileOptions } from './decorators.js';
 import { handleCors, isPreflight } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
 
@@ -22,6 +22,9 @@ import { RequestReader, getContentType, requestLikelyHasBody } from './helpers/r
 import { httpStatusFromError } from './errors.js';
 import { resolveClientIp } from './helpers/client-ip.js';
 import { resolveRequestId, REQUEST_ID_HEADER } from './helpers/request-id.js';
+
+/** Max internal rewrite hops per request (cycle detection is separate). */
+const MAX_FORWARD_DEPTH = 16;
 
 
 export class ConsoleLogger implements Logger 
@@ -56,6 +59,8 @@ export interface ServerOptions {
     port              : number
     cors?             : CorsOptions
     security?         : SecurityOptions | boolean
+    /** Global multipart / upload defaults (merged under module / `@File`). */
+    files?            : FileOptions
     shutdownTimeout?  : number
     controllers?      : any[]
     providers?        : any[]
@@ -102,7 +107,12 @@ export type ServerEvents = {
 
 export class Server extends EventEmitter 
 {
+    /** High-priority SEO route group (`@Seo`). */
+    private seoRouter = new Router();
+    /** Public (non-SEO, non-Internal) routes. */
     private router = new Router();
+    /** Forward-only routes (`@Internal`). */
+    private internalRouter = new Router();
     private activeRequests = 0;
     private serverAdapter? : ServerAdapter;
     private _isShuttingDown = false;
@@ -181,14 +191,68 @@ export class Server extends EventEmitter
 
             this.registry.resolveAll();
 
+            const publicKeys = new Set<string>();
+            const internalKeys = new Set<string>();
+            const seoKeys = new Set<string>();
+
             for( const endpoint of this.registry.getEndpoints())
             {
-                this.router.add( endpoint );
+                if( endpoint.seo && endpoint.internal )
+                {
+                    throw new Error(
+                        `Endpoint ${endpoint.controller}.${endpoint.methodName} cannot be both @Seo and @Internal`
+                    );
+                }
+
+                const key = `${endpoint.httpMethod} ${endpoint.path}`;
+
+                if( endpoint.seo )
+                {
+                    if( seoKeys.has( key ))
+                    {
+                        throw new Error( `Duplicate SEO route: ${key}` );
+                    }
+
+                    seoKeys.add( key );
+                    this.seoRouter.add( endpoint );
+                }
+                else if( endpoint.internal )
+                {
+                    if( internalKeys.has( key ))
+                    {
+                        throw new Error( `Duplicate Internal route: ${key}` );
+                    }
+
+                    if( publicKeys.has( key ))
+                    {
+                        throw new Error( `Internal route ${key} conflicts with a public route` );
+                    }
+
+                    internalKeys.add( key );
+                    this.internalRouter.add( endpoint );
+                }
+                else
+                {
+                    if( publicKeys.has( key ))
+                    {
+                        throw new Error( `Duplicate public route: ${key}` );
+                    }
+
+                    if( internalKeys.has( key ))
+                    {
+                        throw new Error( `Public route ${key} conflicts with an Internal route` );
+                    }
+
+                    publicKeys.add( key );
+                    this.router.add( endpoint );
+                }
 
                 if( this.options.logs )
                 {
+                    const group = endpoint.seo ? 'seo' : endpoint.internal ? 'internal' : 'public';
+
                     this.logger.info(
-                        `Registered route: ${endpoint.httpMethod.padEnd( 6 )} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
+                        `Registered route (${group}): ${endpoint.httpMethod.padEnd( 6 )} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
                         {
                             type       : 'registration',
                             method     : endpoint.httpMethod,
@@ -202,9 +266,11 @@ export class Server extends EventEmitter
 
             // Compiling here means overlapping patterns are reported at bootstrap rather
             // than silently shadowing each other on the first request.
+            this.seoRouter.compile();
             this.router.compile();
+            this.internalRouter.compile();
 
-            for( const warning of this.router.warnings )
+            for( const warning of [ ...this.seoRouter.warnings, ...this.router.warnings, ...this.internalRouter.warnings ])
             {
                 this.logger.warn( warning, { type : 'registration' });
             }
@@ -416,12 +482,182 @@ export class Server extends EventEmitter
     /** 204 with `Allow`, per RFC 9110 for an OPTIONS request with no user handler. */
     private optionsResponse( path: string, precomputed?: string[]): Response 
     {
-        const allowed = precomputed ?? this.router.allowedMethods( path );
+        const allowed = precomputed ?? this.externalAllowedMethods( path );
         const headers: Record<string, string> = {};
 
         if( allowed.length > 0 ) { headers['Allow'] = allowed.join( ', ' ) }
 
         return new Response( null, { status : 204, headers });
+    }
+
+    /** Allow list for external clients (SEO ∪ public; never Internal). */
+    private externalAllowedMethods( path: string ): string[]
+    {
+        const allowed = new Set<string>([
+            ...this.seoRouter.allowedMethods( path ),
+            ...this.router.allowedMethods( path )
+        ]);
+
+        return [ ...allowed ];
+    }
+
+    private applyMatchBags( req: AugmentedRequest, match: RouteMatch, url: URL ): void
+    {
+        req.params = match.params;
+        req.query = QueryParser.parse( url.search.startsWith( '?' ) ? url.search.slice( 1 ) : url.search );
+        req.globalCors = this.options.cors;
+        req.cors = match.metadata.cors;
+        req.globalSecurity = this.options.security;
+        req.security = match.metadata.security;
+        req.globalFiles = this.options.files;
+        req.files = match.metadata.files;
+        req.meta = match.metadata.meta;
+    }
+
+    private async runEndpoint(
+        metadata: EndpointMetadata,
+        req: AugmentedRequest,
+        securityConfig?: SecurityOptions
+    ): Promise<Response>
+    {
+        try
+        {
+            return await this.runEndpointTimed( metadata, req, securityConfig );
+        }
+        catch( err: any )
+        {
+            if( err instanceof ForwardIntent )
+            {
+                return this.executeForward( err.target, req );
+            }
+
+            throw err;
+        }
+    }
+
+    private async runEndpointTimed(
+        metadata: EndpointMetadata,
+        req: AugmentedRequest,
+        securityConfig?: SecurityOptions
+    ): Promise<Response>
+    {
+        if( securityConfig?.timeout )
+        {
+            const timeoutMs = securityConfig.timeout;
+            const controller = new AbortController();
+            req.abortSignal = controller.signal;
+            const timer = setTimeout(() => controller.abort(), timeoutMs );
+            const work = RequestProcessor.execute( metadata, req, securityConfig );
+
+            try
+            {
+                return await Promise.race([
+                    work,
+                    new Promise<never>(( _, reject ) =>
+                    {
+                        const fail = () =>
+                        {
+                            reject( Object.assign( new Error( `Request Timeout (${timeoutMs}ms)` ), { status : 408 }));
+                        };
+
+                        if( controller.signal.aborted )
+                        {
+                            fail();
+
+                            return;
+                        }
+
+                        controller.signal.addEventListener( 'abort', fail, { once : true });
+                    })
+                ]);
+            }
+            finally
+            {
+                clearTimeout( timer );
+                void work.catch(() => undefined );
+            }
+        }
+
+        return RequestProcessor.execute( metadata, req, securityConfig );
+    }
+
+    /**
+     * Internal rewrite: look up `method`+`path` on public ∪ internal (SEO skipped).
+     * Nested forwards are allowed up to {@link MAX_FORWARD_DEPTH}; cycles are rejected.
+     */
+    private async executeForward( target: SeoForward, req: AugmentedRequest ): Promise<Response>
+    {
+        const method = target.method.toUpperCase();
+        const path = target.path.startsWith( '/' ) ? target.path : `/${target.path}`;
+        const hopKey = `${method} ${path}`;
+        const stack = req.forwardStack ?? ( req.forwardStack = []);
+
+        if( stack.includes( hopKey ))
+        {
+            throw Object.assign(
+                new Error( `Forward cycle detected: ${[ ...stack, hopKey ].join( ' -> ' )}` ),
+                { status : 500 }
+            );
+        }
+
+        if( stack.length >= MAX_FORWARD_DEPTH )
+        {
+            throw Object.assign(
+                new Error( `Forward depth exceeded (max ${MAX_FORWARD_DEPTH})` ),
+                { status : 500 }
+            );
+        }
+
+        stack.push( hopKey );
+        req.forwardDepth = stack.length;
+
+        const match =
+            this.router.lookup( method, path ).match
+            || this.internalRouter.lookup( method, path ).match;
+
+        if( !match )
+        {
+            throw Object.assign(
+                new Error( `Forward target not found: ${method} ${path}` ),
+                { status : 500 }
+            );
+        }
+
+        req.params = match.params;
+        req.query = { ...req.query, ...( target.query || {}) };
+        req.cors = match.metadata.cors;
+        req.security = match.metadata.security;
+        req.files = match.metadata.files;
+        req.meta = match.metadata.meta;
+
+        if( target.body )
+        {
+            req.forwardBody = target.body;
+        }
+        else
+        {
+            delete req.forwardBody;
+        }
+
+        const securityConfig = mergeSecurityConfigs([ this.options.security, match.metadata.security ]);
+
+        try
+        {
+            // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
+            return await this.runEndpoint( match.metadata, req, securityConfig );
+        }
+        catch( err: any )
+        {
+            if( err instanceof SeoFallthrough )
+            {
+                throw Object.assign(
+                    new Error( 'SEO fallthrough is not valid during forward' ),
+                    { status : 500 }
+                );
+            }
+
+            throw err;
+        }
     }
 
     public fetch = async ( request: Request ): Promise<Response> => 
@@ -594,15 +830,20 @@ export class Server extends EventEmitter
             });
         }
 
-        let finalMatch: any = null;
+        let finalMatch: RouteMatch | null = null;
         try 
         {
-            // One lookup yields the match, the Allow list for a wrong-verb request, and the
-            // cross-method route whose CORS/security config an OPTIONS answer should use.
-            const lookup = this.router.lookup( method, path );
-            const match = lookup.match;
+            // SEO group first (matchAll for void fallthrough), then public. Internal never
+            // participates in external lookup.
+            const seoMatches = isUpgrade ? [] : this.seoRouter.matchAll( method, path );
+            const publicLookup = this.router.lookup( method, path );
+            const seoLookup = this.seoRouter.lookup( method, path );
+            const externalAllowed = this.externalAllowedMethods( path );
 
-            finalMatch = match || ( method === 'OPTIONS' ? lookup.fallback : null );
+            const match = seoMatches[0] || publicLookup.match;
+            finalMatch = match || ( method === 'OPTIONS'
+                ? ( seoLookup.fallback || publicLookup.fallback )
+                : null );
 
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
             const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
@@ -645,7 +886,7 @@ export class Server extends EventEmitter
 
                 logOptions( 204 );
 
-                return applySecurityHeaders( this.optionsResponse( path, lookup.allowed ), securityConfig );
+                return applySecurityHeaders( this.optionsResponse( path, externalAllowed ), securityConfig );
             }
 
             // Non-preflight OPTIONS falls through to an @Options / @All handler when one
@@ -661,14 +902,14 @@ export class Server extends EventEmitter
 
                 logOptions( 204 );
 
-                return applyCors( applySecurityHeaders( this.optionsResponse( path, lookup.allowed ), securityConfig ), corsConfig );
+                return applyCors( applySecurityHeaders( this.optionsResponse( path, externalAllowed ), securityConfig ), corsConfig );
             }
 
-            if( !finalMatch ) 
+            if( !finalMatch && seoMatches.length === 0 ) 
             {
                 // The path exists under other verbs, so this is 405 + Allow, not 404. An
                 // upgrade request is exempt: WS is a transport, not an advertised method.
-                const wrongMethod = !isUpgrade && lookup.allowed.length > 0;
+                const wrongMethod = !isUpgrade && externalAllowed.length > 0;
                 const status = wrongMethod ? 405 : 404;
 
                 if( this.options.logs ) 
@@ -685,7 +926,7 @@ export class Server extends EventEmitter
                 }
                 let res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
                     status,
-                    headers : wrongMethod ? { Allow : lookup.allowed.join( ', ' ) } : undefined
+                    headers : wrongMethod ? { Allow : externalAllowed.join( ', ' ) } : undefined
                 });
                 res = applyCors( res, this.options.cors );
                 res = applySecurityHeaders( res, mergeSecurityConfigs([this.options.security]));
@@ -695,6 +936,18 @@ export class Server extends EventEmitter
 
             if( isUpgrade ) 
             {
+                // WS only lives on the public router (SEO/Internal are HTTP resolvers).
+                const wsMatch = publicLookup.match;
+
+                if( !wsMatch )
+                {
+                    logOptions( 404, 'Not Found' );
+
+                    return withRequestId( new Response( 'Not Found', { status : 404 }));
+                }
+
+                finalMatch = wsMatch;
+
                 // Enforce guards before upgrading
                 const registry = getRegistry();
                 const controllerModule = registry.getTokenModule( finalMatch.metadata.controller );
@@ -739,100 +992,122 @@ export class Server extends EventEmitter
             }
 
             const req = request as AugmentedRequest;
-            req.params = finalMatch.params;
-            req.query = QueryParser.parse( url.search.startsWith( '?' ) ? url.search.slice( 1 ) : url.search );
-            req.globalCors = this.options.cors;
-            req.cors = finalMatch.metadata.cors;
-            req.globalSecurity = this.options.security;
-            req.security = finalMatch.metadata.security;
-            req.meta = finalMatch.metadata.meta;
+            let response: Response | undefined;
+            let activeSecurity = securityConfig;
+            let activeCors = corsConfig;
 
-            // Enforce allowedContentTypes (require a matching CT when a body is indicated)
-            if( securityConfig?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
+            const enforceSecurityGates = ( cfg: SecurityOptions | undefined ) =>
             {
-                const contentType = getContentType( req );
-                const allowed = securityConfig.allowedContentTypes.map( t => t.toLowerCase());
-
-                if( requestLikelyHasBody( req ))
+                // Enforce allowedContentTypes (require a matching CT when a body is indicated)
+                if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
                 {
-                    if( !contentType || !allowed.includes( contentType ))
+                    const contentType = getContentType( req );
+                    const allowed = cfg.allowedContentTypes.map( t => t.toLowerCase());
+
+                    if( requestLikelyHasBody( req ))
                     {
-                        throw Object.assign( new Error( `Unsupported Media Type: ${contentType || 'missing'}` ), { status : 415 });
+                        if( !contentType || !allowed.includes( contentType ))
+                        {
+                            throw Object.assign( new Error( `Unsupported Media Type: ${contentType || 'missing'}` ), { status : 415 });
+                        }
+                    }
+                    else if( contentType && !allowed.includes( contentType ))
+                    {
+                        throw Object.assign( new Error( `Unsupported Media Type: ${contentType}` ), { status : 415 });
                     }
                 }
-                else if( contentType && !allowed.includes( contentType ))
+
+                // Enforce rateLimit
+                if( cfg?.rateLimit ) 
                 {
-                    throw Object.assign( new Error( `Unsupported Media Type: ${contentType}` ), { status : 415 });
+                    const ip = resolveClientIp( req, this.options.trustProxy );
+                    const limit = this.rateLimiter.consume( ip, path, cfg.rateLimit );
+
+                    if( !limit.allowed ) 
+                    {
+                        throw Object.assign( new Error( 'Too Many Requests' ), {
+                            status  : 429,
+                            headers : { 'Retry-After' : String( limit.retryAfter ) }
+                        });
+                    }
+                }
+            };
+
+            // Try SEO matches in specificity order; void → next; forward → internal hop.
+            for( const seoMatch of seoMatches )
+            {
+                this.applyMatchBags( req, seoMatch, url );
+                activeSecurity = mergeSecurityConfigs([ this.options.security, seoMatch.metadata.security ]);
+                activeCors = seoMatch.metadata.cors !== undefined ? seoMatch.metadata.cors : this.options.cors;
+                enforceSecurityGates( activeSecurity );
+
+                try
+                {
+                    response = await this.runEndpoint( seoMatch.metadata, req, activeSecurity );
+                    break;
+                }
+                catch( err: any )
+                {
+                    if( err instanceof SeoFallthrough )
+                    {
+                        response = undefined;
+                        continue;
+                    }
+
+                    throw err;
                 }
             }
 
-            // Enforce rateLimit
-            if( securityConfig?.rateLimit ) 
+            // After SEO miss / all fallthrough → public router.
+            if( response === undefined )
             {
-                const ip = resolveClientIp( req, this.options.trustProxy );
-                const limit = this.rateLimiter.consume( ip, path, securityConfig.rateLimit );
+                const pubMatch = publicLookup.match;
 
-                if( !limit.allowed ) 
+                if( !pubMatch )
                 {
-                    throw Object.assign( new Error( 'Too Many Requests' ), {
-                        status  : 429,
-                        headers : { 'Retry-After' : String( limit.retryAfter ) }
+                    // SEO already declined (void fallthrough): do not advertise SEO verbs as Allow.
+                    const allowedAfterSeo = seoMatches.length > 0
+                        ? publicLookup.allowed
+                        : externalAllowed;
+                    const wrongMethod = allowedAfterSeo.length > 0;
+                    const status = wrongMethod ? 405 : 404;
+                    let res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
+                        status,
+                        headers : wrongMethod ? { Allow : allowedAfterSeo.join( ', ' ) } : undefined
                     });
+                    res = applyCors( res, this.options.cors );
+                    res = applySecurityHeaders( res, mergeSecurityConfigs([ this.options.security ]));
+
+                    if( this.options.logs )
+                    {
+                        const duration = Date.now() - startTime;
+                        this.logger.info( `<-- ${method} ${path} - ${status} ${wrongMethod ? 'Method Not Allowed' : 'Not Found'} (${duration}ms)`, {
+                            type : 'request_end',
+                            method,
+                            path,
+                            status,
+                            duration,
+                            requestId
+                        });
+                    }
+
+                    return withRequestId( res );
                 }
+
+                this.applyMatchBags( req, pubMatch, url );
+                activeSecurity = mergeSecurityConfigs([ this.options.security, pubMatch.metadata.security ]);
+                activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
+                enforceSecurityGates( activeSecurity );
+                response = await this.runEndpoint( pubMatch.metadata, req, activeSecurity );
             }
 
-            // Enforce timeout
-            let response: Response;
-
-            if( securityConfig?.timeout ) 
-            {
-                const timeoutMs = securityConfig.timeout;
-                const controller = new AbortController();
-                req.abortSignal = controller.signal;
-                const timer = setTimeout(() => controller.abort(), timeoutMs );
-                const work = RequestProcessor.execute( finalMatch.metadata, req, securityConfig );
-
-                try 
-                {
-                    response = await Promise.race([
-                        work,
-                        new Promise<never>(( _, reject ) => 
-                        {
-                            const fail = () =>
-                            {
-                                reject( Object.assign( new Error( `Request Timeout (${timeoutMs}ms)` ), { status : 408 }));
-                            };
-
-                            if( controller.signal.aborted )
-                            {
-                                fail();
-
-                                return;
-                            }
-
-                            controller.signal.addEventListener( 'abort', fail, { once : true });
-                        })
-                    ]);
-                }
-                finally 
-                {
-                    clearTimeout( timer );
-                    // Timed-out work may still settle later; swallow to avoid unhandled rejection.
-                    void work.catch(() => undefined );
-                }
-            }
-            else 
-            {
-                response = await RequestProcessor.execute( finalMatch.metadata, req, securityConfig );
-            }
-
-            response = applyCors( response, corsConfig );
-            response = applySecurityHeaders( response, securityConfig );
+            response = applyCors( response!, activeCors );
+            response = applySecurityHeaders( response, activeSecurity );
 
             // RFC 9110: an OPTIONS response should advertise Allow.
             if( method === 'OPTIONS' && !response.headers.has( 'Allow' )) 
             {
-                const allowed = this.router.allowedMethods( path );
+                const allowed = this.externalAllowedMethods( path );
 
                 if( allowed.length > 0 ) 
                 {

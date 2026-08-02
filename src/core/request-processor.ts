@@ -1,35 +1,65 @@
 import { Context } from './context.js';
 import { MetadataStore } from './metadata.js';
-import { RequestReader, getEffectiveBodyContentType } from '../helpers/request-reader.js';
-import { EndpointMetadata, ParamMetadata, AugmentedRequest, ResponseBag } from './types.js';
-import { SecurityOptions } from '../decorators.js';
+import { RequestReader, getEffectiveBodyContentType, isMultipartContentType } from '../helpers/request-reader.js';
+import { EndpointMetadata, ParamMetadata, AugmentedRequest, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
+import { ServerRequest, parseCookieHeader, resolveRequestFileOptions } from './server-request.js';
+import { SecurityOptions, type FileOptions } from '../decorators.js';
+import { getModuleMeta } from './symbols.js';
 import { httpStatusFromError } from '../errors.js';
 import { resolveClientIp } from '../helpers/client-ip.js';
 import { invokeGuards } from './guard-runner.js';
+import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
 
-function parseCookies( cookieHeader: string | null ): Record<string, string> 
+function resolveModuleFileOptions( moduleInstance: any ): FileOptions | undefined
 {
-    const cookies: Record<string, string> = {};
+    if( !moduleInstance ){ return undefined }
 
-    if( !cookieHeader ) { return cookies }
+    const ctor = moduleInstance.constructor;
+    const meta = ( ctor && getModuleMeta( ctor ))
+        || moduleInstance.__moduleMetadata__
+        || ctor?.__moduleMetadata__;
 
-    const pairs = cookieHeader.split( ';' );
+    return meta?.files;
+}
 
-    for( const pair of pairs ) 
+/** Bodies that must not go through JSON.stringify. */
+function isBinaryOrStreamBody( value: unknown ): boolean
+{
+    if( value == null ){ return false }
+
+    if( typeof Blob !== 'undefined' && value instanceof Blob ){ return true }
+
+    if( value instanceof ArrayBuffer ){ return true }
+
+    if( ArrayBuffer.isView( value )){ return true }
+
+    if( typeof ReadableStream !== 'undefined' && value instanceof ReadableStream ){ return true }
+
+    return false;
+}
+
+function parseErrorCode( err: ParseError ): string
+{
+    const prefix = err.path ? `Parse error at "${err.path}": ` : 'Parse error: ';
+
+    if( err.message.startsWith( prefix ))
     {
-        const idx = pair.indexOf( '=' );
-
-        if( idx === -1 ) { continue }
-        const key = pair.substring( 0, idx ).trim();
-        const val = pair.substring( idx + 1 ).trim();
-
-        if( cookies[key] === undefined ) 
-        {
-            cookies[key] = val;
-        }
+        return err.message.slice( prefix.length );
     }
 
-    return cookies;
+    return err.message;
+}
+
+function serializationErrorCode( err: SerializationError ): string
+{
+    const prefix = err.path ? `Serialization error at "${err.path}": ` : 'Serialization error: ';
+
+    if( err.message.startsWith( prefix ))
+    {
+        return err.message.slice( prefix.length );
+    }
+
+    return err.message;
 }
 
 export class RequestProcessor 
@@ -39,6 +69,32 @@ export class RequestProcessor
         if( req.abortSignal?.aborted )
         {
             throw Object.assign( new Error( 'Request Timeout' ), { status : 408 });
+        }
+    }
+
+    private static assertForwardCompatible( bag: ServerResponse, result: unknown ): void
+    {
+        if( bag.bodySet )
+        {
+            throw Object.assign( new Error( 'Cannot forward after streaming a response body' ), { status : 500 });
+        }
+
+        if( bag.toResponse().headers.has( 'Location' ))
+        {
+            throw Object.assign( new Error( 'Cannot combine redirect and forward' ), { status : 500 });
+        }
+
+        if( result instanceof ServerResponse && result !== bag )
+        {
+            if( result.bodySet )
+            {
+                throw Object.assign( new Error( 'Cannot forward after streaming a response body' ), { status : 500 });
+            }
+
+            if( result.toResponse().headers.has( 'Location' ))
+            {
+                throw Object.assign( new Error( 'Cannot combine redirect and forward' ), { status : 500 });
+            }
         }
     }
 
@@ -71,7 +127,8 @@ export class RequestProcessor
         return validated;
     }
 
-    private static formatSseChunk( chunk: any ): string
+    /** Format one SSE yield: prefer serializer for `data` JSON when present. */
+    private static formatSseChunk( chunk: any, serializer?: ( v: any ) => string ): string
     {
         if( typeof chunk === 'object' && chunk !== null )
         {
@@ -83,11 +140,22 @@ export class RequestProcessor
 
             if( 'retry' in chunk ){ sseString += `retry: ${chunk.retry}\n` }
             const dataVal = 'data' in chunk ? chunk.data : chunk;
-            const dataStr = typeof dataVal === 'object' ? JSON.stringify( dataVal ) : String( dataVal );
+            let dataStr: string;
+
+            if( serializer )
+            {
+                dataStr = serializer( dataVal );
+            }
+            else 
+            {
+                dataStr = typeof dataVal === 'object' ? JSON.stringify( dataVal ) : String( dataVal );
+            }
             sseString += `data: ${dataStr}\n\n`;
 
             return sseString;
         }
+
+        if( serializer ){ return `data: ${serializer( chunk )}\n\n` }
 
         return `data: ${String( chunk )}\n\n`;
     }
@@ -99,7 +167,8 @@ export class RequestProcessor
         securityConfig?: SecurityOptions,
         contextModule?: any,
         ws?: any,
-        responseBag?: ResponseBag
+        responseBag?: ServerResponse,
+        serverRequest?: ServerRequest
     ): Promise<any> 
     {
         this.throwIfAborted( req );
@@ -108,12 +177,36 @@ export class RequestProcessor
         switch ( p.source ) 
         {
             case 'Param': val = req.params[p.name!]; break;
-            case 'Body': val = await RequestReader.getBody( req, securityConfig ); break;
+            case 'Body': {
+                if( isMultipartContentType( getEffectiveBodyContentType( req )))
+                {
+                    const facade = serverRequest ?? new ServerRequest( req, securityConfig );
+                    const payload = await facade.payload();
+                    // Query-shaped bag: text fields + UploadedFile / UploadedFile[].
+                    // Validated below via assert-style validator with from: 'query'.
+                    val = payload.toObject();
+                }
+                else
+                {
+                    val = await RequestReader.getBody( req, securityConfig );
+                }
+
+                if( req.forwardBody && val && typeof val === 'object' && !Array.isArray( val ))
+                {
+                    val = { ...val, ...req.forwardBody };
+                }
+                else if( req.forwardBody && ( val === undefined || val === null ))
+                {
+                    val = { ...req.forwardBody };
+                }
+
+                break;
+            }
             case 'RawBody': val = await RequestReader.getRawBody( req, securityConfig ); break;
-            case 'Query': val = p.name ? req.query[p.name] : req.query; break;
+            case 'Query': val = p.name ? req.query[p.name] : { ...req.query }; break;
             case 'Header': val = req.headers.get( p.name! ); break;
             case 'Headers': val = Object.fromEntries( req.headers.entries()); break;
-            case 'Request': val = req; break;
+            case 'Request': val = serverRequest ?? new ServerRequest( req, securityConfig ); break;
             case 'Response': val = responseBag; break;
             case 'Ip': val = resolveClientIp( req ); break;
             case 'Url': val = req.url; break;
@@ -127,32 +220,90 @@ export class RequestProcessor
                 break;
             }
             case 'Cookies': {
-                const cookieHeader = req.headers.get( 'cookie' );
-                val = parseCookies( cookieHeader );
+                val = parseCookieHeader( req.headers.get( 'cookie' ));
                 break;
             }
             case 'Cookie': {
-                const cookieHeader = req.headers.get( 'cookie' );
-                const cookies = parseCookies( cookieHeader );
-                val = p.name ? cookies[p.name] : cookies;
+                const cookies = parseCookieHeader( req.headers.get( 'cookie' ));
+                val = p.name ? cookies[p.name] : { ...cookies };
+                break;
+            }
+            case 'File': {
+                if( !p.name )
+                {
+                    throw Object.assign( new Error( '@File parameter requires a field name' ), { status : 500 });
+                }
+
+                const facade = serverRequest ?? new ServerRequest( req, securityConfig );
+                const file = await facade.upload( p.name );
+                val = file;
+                break;
+            }
+            case 'Files': {
+                const facade = serverRequest ?? new ServerRequest( req, securityConfig );
+                val = await facade.uploads( p.name || undefined );
                 break;
             }
         }
 
-        if( p.validator && typeof p.validator === 'function' ) 
+        const bodyContentType = p.source === 'Body' ? getEffectiveBodyContentType( req ) : null;
+        const bodyIsMultipart = p.source === 'Body' && isMultipartContentType( bodyContentType );
+        const bodyIsUrlencoded = p.source === 'Body' && bodyContentType === 'application/x-www-form-urlencoded';
+
+        // Multipart uses the assert/validator channel (from: 'query'), not buildParser —
+        // parsers lack class instanceof for UploadedFile fields.
+        if( !bodyIsMultipart && ( p.parser || p.parserQuery ))
+        {
+            let parserFn: (( input: any, path?: string ) => any ) | undefined;
+
+            if( bodyIsUrlencoded )
+            {
+                const fn = p.parserQuery || p.parser;
+                parserFn = typeof fn === 'function' ? fn : undefined;
+            }
+            else
+            {
+                parserFn = typeof p.parser === 'function' ? p.parser : undefined;
+            }
+
+            if( parserFn )
+            {
+                try
+                {
+                    val = parserFn( val, p.name || p.source.toLowerCase());
+                }
+                catch( e: any )
+                {
+                    if( e instanceof ParseError )
+                    {
+                        ctx.success = false;
+                        ctx.errors.push({ path : e.path, error : parseErrorCode( e ) });
+
+                        return val;
+                    }
+
+                    throw e;
+                }
+
+                return val;
+            }
+        }
+
+        if( p.validator && typeof p.validator === 'function' )
         {
             const oldMode = ctx.mode;
             const oldFrom = ctx.from;
 
-            if( p.mode ) { ctx.mode = p.mode }
+            if( p.mode ){ ctx.mode = p.mode }
 
-            if( p.source === 'Query' || p.source === 'Param' || p.source === 'Cookie' ) 
+            if( p.source === 'Query' || p.source === 'Param' || p.source === 'Cookie'
+                || p.source === 'Header' || p.source === 'Headers' || p.source === 'Cookies' )
             {
                 ctx.from = 'query';
             }
-            else if( p.source === 'Body' ) 
+            else if( p.source === 'Body' )
             {
-                ctx.from = getEffectiveBodyContentType( req ) === 'application/x-www-form-urlencoded' ? 'query' : 'json';
+                ctx.from = ( bodyIsUrlencoded || bodyIsMultipart ) ? 'query' : 'json';
             }
 
             val = p.validator( val, p.name || p.source.toLowerCase(), ctx );
@@ -183,7 +334,10 @@ export class RequestProcessor
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
             const ctx = { success : true, errors : [], mode : 'strict' };
-            const middlewareResponse = new ResponseBag();
+            const middlewareResponse = new ServerResponse();
+            const moduleFiles = resolveModuleFileOptions( controllerModule );
+            const filesConfig = resolveRequestFileOptions( req, moduleFiles );
+            const serverRequest = new ServerRequest( req, securityConfig, filesConfig );
 
             const finalHandler = async () => 
             {
@@ -194,7 +348,7 @@ export class RequestProcessor
 
                 for( const p of metadata.params ) 
                 {
-                    args.push( await this.resolveParam( p, req, ctx, securityConfig, controllerModule, undefined, middlewareResponse ));
+                    args.push( await this.resolveParam( p, req, ctx, securityConfig, controllerModule, undefined, middlewareResponse, serverRequest ));
                 }
 
                 this.throwIfAborted( req );
@@ -212,6 +366,49 @@ export class RequestProcessor
 
                 this.throwIfAborted( req );
 
+                const pending =
+                    ( result instanceof ServerResponse ? result.pendingForward : undefined )
+                    || middlewareResponse.pendingForward;
+
+                if( metadata.seo )
+                {
+                    if( result === undefined || result === null )
+                    {
+                        throw new SeoFallthrough();
+                    }
+
+                    if( isSeoForward( result ))
+                    {
+                        throw new ForwardIntent( result );
+                    }
+
+                    if( pending )
+                    {
+                        this.assertForwardCompatible( middlewareResponse, result );
+
+                        throw new ForwardIntent( pending );
+                    }
+
+                    throw Object.assign(
+                        new Error( 'SEO endpoint must return a SeoForward descriptor or void' ),
+                        { status : 500 }
+                    );
+                }
+
+                if( pending )
+                {
+                    this.assertForwardCompatible( middlewareResponse, result );
+
+                    throw new ForwardIntent( pending );
+                }
+
+                // Returning ServerResponse means the handler owns the HTTP response
+                // (status / headers / optional streamed body) — skip JSON / return-type paths.
+                if( result instanceof ServerResponse )
+                {
+                    return result.toResponse();
+                }
+
                 if( result instanceof Response ) { return result }
 
                 if( metadata.meta?.sse ) 
@@ -222,7 +419,10 @@ export class RequestProcessor
                         'Connection'    : 'keep-alive'
                     });
 
-                    const validator = typeof metadata.returnTypeValidator === 'function'
+                    const serializer = typeof metadata.returnTypeSerializer === 'function'
+                        ? metadata.returnTypeSerializer
+                        : undefined;
+                    const validator = !serializer && typeof metadata.returnTypeValidator === 'function'
                         ? metadata.returnTypeValidator
                         : undefined;
                     const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
@@ -239,8 +439,22 @@ export class RequestProcessor
                                 {
                                     for await ( const chunk of result ) 
                                     {
-                                        const validated = RequestProcessor.validateSseChunk( chunk, validator, mode );
-                                        controller.enqueue( encoder.encode( RequestProcessor.formatSseChunk( validated )));
+                                        try 
+                                        {
+                                            const payload = serializer
+                                                ? chunk
+                                                : RequestProcessor.validateSseChunk( chunk, validator, mode );
+                                            controller.enqueue( encoder.encode( RequestProcessor.formatSseChunk( payload, serializer )));
+                                        }
+                                        catch( err: any ) 
+                                        {
+                                            if( err instanceof SerializationError ) 
+                                            {
+                                                throw new Error( `Response validation failed: ${JSON.stringify([{ path : err.path, error : serializationErrorCode( err ) }])}` );
+                                            }
+
+                                            throw err;
+                                        }
                                     }
                                     controller.close();
                                 }
@@ -263,6 +477,25 @@ export class RequestProcessor
                     return new Response( bodyStream, { headers });
                 }
 
+                if( typeof metadata.returnTypeSerializer === 'function' )
+                {
+                    try 
+                    {
+                        const jsonStr = metadata.returnTypeSerializer( result );
+
+                        return new Response( jsonStr, { headers : { 'Content-Type' : 'application/json' } });
+                    }
+                    catch( e: any ) 
+                    {
+                        if( e instanceof SerializationError ) 
+                        {
+                            throw new Error( `Response validation failed: ${JSON.stringify([{ path : e.path, error : serializationErrorCode( e ) }])}` );
+                        }
+
+                        throw e;
+                    }
+                }
+
                 let validatedResult = result;
 
                 if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
@@ -277,8 +510,20 @@ export class RequestProcessor
                     }
                 }
 
-                return ( typeof validatedResult === 'object' ? new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } }) : new Response( validatedResult == null ? '' : String( validatedResult )));
+                if( isBinaryOrStreamBody( validatedResult ))
+                {
+                    return new Response( validatedResult as BodyInit );
+                }
+
+                if( typeof validatedResult === 'object' && validatedResult !== null )
+                {
+                    return new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } });
+                }
+
+                return new Response( validatedResult == null ? '' : String( validatedResult ));
             };
+
+
 
             // 4. Wrap in Interceptor Chain
             let chain = finalHandler;
@@ -310,7 +555,7 @@ export class RequestProcessor
 
                         if( typeof middlewareInstance.use === 'function' ) 
                         {
-                            await middlewareInstance.use( req, middlewareResponse );
+                            await middlewareInstance.use( serverRequest, middlewareResponse );
                         }
                         else if( typeof middlewareInstance.useCallback === 'function' ) 
                         {
@@ -329,7 +574,7 @@ export class RequestProcessor
                                             resolve();
                                         }
                                     };
-                                    const res = middlewareInstance.useCallback( req, middlewareResponse, next );
+                                    const res = middlewareInstance.useCallback( serverRequest, middlewareResponse, next );
 
                                     if( res instanceof Promise ) 
                                     {
@@ -351,8 +596,9 @@ export class RequestProcessor
                     controller,
                     controllerModule,
                     securityConfig,
-                    response   : middlewareResponse,
-                    beforeEach : () => this.throwIfAborted( req )
+                    response      : middlewareResponse,
+                    serverRequest,
+                    beforeEach    : () => this.throwIfAborted( req )
                 });
 
                 this.throwIfAborted( req );
@@ -361,6 +607,11 @@ export class RequestProcessor
             }
             catch ( err: any ) 
             {
+                if( err instanceof SeoFallthrough || err instanceof ForwardIntent )
+                {
+                    throw err;
+                }
+
                 if( err instanceof Response ) 
                 {
                     return middlewareResponse.applyTo( err );
@@ -424,7 +675,7 @@ export class RequestProcessor
 
                 for( const p of metadata.params ) 
                 {
-                    args.push( await this.resolveParam( p, req, ctx, undefined, controllerModule, ws ));
+                    args.push( await this.resolveParam( p, req, ctx, undefined, controllerModule, ws, undefined, new ServerRequest( req )));
                 }
 
                 if( !ctx.success ) 

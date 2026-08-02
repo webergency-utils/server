@@ -11,246 +11,243 @@ import * as __tcRuntime from "@webergency-utils/typechecker/runtime";
 const validators = __tcRuntime.validators;
 const __val_473287f8298dba71 = validators.string;
 const __val_12886f9d00055adf = validators.number;
-const __val_04c78f82f98a8cf4 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["name", "age"]), "User");
+const __val_04c78f82f98a8cf4 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "User");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["name", false, __val_473287f8298dba71],
-        ["age", false, __val_12886f9d00055adf]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["name", "age"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["name", "age"]), [
+    ["name", false, __val_473287f8298dba71],
+    ["age", false, __val_12886f9d00055adf]
+]);
 const __val_d31fde334b3f24e2 = (v, path, ctx) => validators.literal(v, path, ctx, false);
 const __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, true);
-const __val_ced862ef1505bc73 = (v, path, ctx) => validators.union(v, path, ctx, [__val_d31fde334b3f24e2, __val_561da1284502fef1], "Type<boolean>");
-const __val_c67915707769fcf5 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: User; }");
+const __val_ced862ef1505bc73 = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<boolean>"))([__val_d31fde334b3f24e2, __val_561da1284502fef1]);
+const __val_c67915707769fcf5 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: User; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_04c78f82f98a8cf4]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["success", "data"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_04c78f82f98a8cf4]
+]);
 const __val_6d1570e5b8d6d45a = (v, path, ctx) => validators.literal(v, path, ctx, "simple");
-const __val_2258654cc0f69d37 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["type", "val"]), "{ type: \"simple\"; val: string; }");
+const __val_2258654cc0f69d37 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ type: \"simple\"; val: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["type", false, __val_6d1570e5b8d6d45a],
-        ["val", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["type", "val"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["type", "val"]), [
+    ["type", false, __val_6d1570e5b8d6d45a],
+    ["val", false, __val_473287f8298dba71]
+]);
 const __val_68056e96638382b6 = (v, path, ctx) => validators.literal(v, path, ctx, "complex");
 const __val_e5da2f9fabafe20e = (v, path, ctx) => validators.array(v, path, ctx, __val_473287f8298dba71);
-const __val_b421a9236dfde58e = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["id", "tags"]), "{ id: number; tags: string[]; }");
+const __val_b421a9236dfde58e = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ id: number; tags: string[]; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["id", false, __val_12886f9d00055adf],
-        ["tags", false, __val_e5da2f9fabafe20e]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["id", "tags"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_5c5ed695091ba342 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["type", "data"]), "{ type: \"complex\"; data: { id: number; tags: string[]; }; }");
+})(new Set(["id", "tags"]), [
+    ["id", false, __val_12886f9d00055adf],
+    ["tags", false, __val_e5da2f9fabafe20e]
+]);
+const __val_5c5ed695091ba342 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ type: \"complex\"; data: { id: number; tags: string[]; }; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["type", false, __val_68056e96638382b6],
-        ["data", false, __val_b421a9236dfde58e]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["type", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["type", "data"]), [
+    ["type", false, __val_68056e96638382b6],
+    ["data", false, __val_b421a9236dfde58e]
+]);
 const __val_0b60aa399d818c05 = (byTag => (v, path, ctx) => validators.taggedUnion(v, path, ctx, "type", byTag, "Type<MyUnion>"))(new Map([
     ["simple", __val_2258654cc0f69d37],
     ["complex", __val_5c5ed695091ba342]
 ]));
-const __val_a068761681a0a813 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: MyUnion; }");
+const __val_a068761681a0a813 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: MyUnion; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_0b60aa399d818c05]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_55e3fcb8d722f805 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["reason"]), "{ reason: string; }");
+})(new Set(["success", "data"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_0b60aa399d818c05]
+]);
+const __val_55e3fcb8d722f805 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ reason: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["reason", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["reason"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["reason"]), [
+    ["reason", false, __val_473287f8298dba71]
+]);
 const __val_2d1db52869bf4329 = (v, path, ctx) => validators.literal(v, path, ctx, "active");
 const __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, "inactive");
-const __val_857204a536cb022c = (v, path, ctx) => validators.union(v, path, ctx, [__val_55e3fcb8d722f805, __val_2d1db52869bf4329, __val_88e643147651d549], "Type<Status>");
-const __val_2d6ea820a293bacf = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "s"]), "{ success: boolean; s: Status; }");
+const __val_857204a536cb022c = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<Status>"))([__val_55e3fcb8d722f805, __val_2d1db52869bf4329, __val_88e643147651d549]);
+const __val_2d6ea820a293bacf = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; s: Status; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["s", false, __val_857204a536cb022c]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "s"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_affb28566d707e35 = (v, path, ctx) => validators.union(v, path, ctx, [__val_473287f8298dba71, __val_12886f9d00055adf], "Type<string|number>");
+})(new Set(["success", "s"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["s", false, __val_857204a536cb022c]
+]);
+const __val_affb28566d707e35 = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<string|number>"))([__val_473287f8298dba71, __val_12886f9d00055adf]);
 const __val_8c1c1b2d325f9de6 = (v, path, ctx) => validators.array(v, path, ctx, __val_affb28566d707e35);
-const __val_a042f9877fc2376a = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: MixedArray; }");
+const __val_a042f9877fc2376a = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: MixedArray; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_8c1c1b2d325f9de6]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["success", "data"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_8c1c1b2d325f9de6]
+]);
 const __val_ca383f8818520f0b = (v, path, ctx) => validators.optional(v, path, ctx, __val_04c78f82f98a8cf4);
-const __val_fdba127064c2547c = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["id", "user", "tags"]), "Nested");
+const __val_fdba127064c2547c = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "Nested");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["id", false, __val_12886f9d00055adf],
-        ["user", true, __val_ca383f8818520f0b],
-        ["tags", false, __val_e5da2f9fabafe20e]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["id", "user", "tags"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_d0b53ff733685c2c = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: Nested; }");
+})(new Set(["id", "user", "tags"]), [
+    ["id", false, __val_12886f9d00055adf],
+    ["user", true, __val_ca383f8818520f0b],
+    ["tags", false, __val_e5da2f9fabafe20e]
+]);
+const __val_d0b53ff733685c2c = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: Nested; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_fdba127064c2547c]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_f28f8acf7e68cbfd = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["a", "b"]), "Intersection");
+})(new Set(["success", "data"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_fdba127064c2547c]
+]);
+const __val_f28f8acf7e68cbfd = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "Intersection");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["a", false, __val_473287f8298dba71],
-        ["b", false, __val_12886f9d00055adf]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["a", "b"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_0d157d33684c0018 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: Intersection; }");
+})(new Set(["a", "b"]), [
+    ["a", false, __val_473287f8298dba71],
+    ["b", false, __val_12886f9d00055adf]
+]);
+const __val_0d157d33684c0018 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: Intersection; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_f28f8acf7e68cbfd]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_85a41b63d9a32b8b = (v, path, ctx) => validators.union(v, path, ctx, [__val_2d1db52869bf4329, __val_88e643147651d549], "Type<\"active\"|\"inactive\">");
-const __val_0084393b0d7248e4 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "status"]), "{ success: boolean; status: \"active\" | \"inactive\"; }");
+})(new Set(["success", "data"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_f28f8acf7e68cbfd]
+]);
+const __val_85a41b63d9a32b8b = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<\"active\"|\"inactive\">"))([__val_2d1db52869bf4329, __val_88e643147651d549]);
+const __val_0084393b0d7248e4 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; status: \"active\" | \"inactive\"; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["status", false, __val_85a41b63d9a32b8b]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "status"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_d9bb28ea073c815e = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "tags"]), "{ success: boolean; tags: string[]; }");
+})(new Set(["success", "status"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["status", false, __val_85a41b63d9a32b8b]
+]);
+const __val_d9bb28ea073c815e = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; tags: string[]; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["tags", false, __val_e5da2f9fabafe20e]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "tags"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_99c40ab405926cb5 = validators.date;
-const __val_eefd1c8d7e793bf3 = validators.regexp;
-const __val_75d012fe28656e0a = validators.bigint;
-const __val_0dcd607745c5cb3e = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "age", "active", "date", "pattern", "big"]), "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }");
+})(new Set(["success", "tags"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["tags", false, __val_e5da2f9fabafe20e]
+]);
+const __val_0dcd607745c5cb3e = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; age: number; active: boolean; date: string; pattern: string; big: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["age", false, __val_12886f9d00055adf],
-        ["active", false, __val_ced862ef1505bc73],
-        ["date", false, __val_473287f8298dba71],
-        ["pattern", false, __val_473287f8298dba71],
-        ["big", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "age", "active", "date", "pattern", "big"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_91d782a2d0de1354 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["name", "active"]), "{ name: string; active: boolean; }");
+})(new Set(["success", "age", "active", "date", "pattern", "big"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["age", false, __val_12886f9d00055adf],
+    ["active", false, __val_ced862ef1505bc73],
+    ["date", false, __val_473287f8298dba71],
+    ["pattern", false, __val_473287f8298dba71],
+    ["big", false, __val_473287f8298dba71]
+]);
+const __val_91d782a2d0de1354 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ name: string; active: boolean; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["name", false, __val_473287f8298dba71],
-        ["active", false, __val_ced862ef1505bc73]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["name", "active"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_4ac5d9e4f4205e53 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "user"]), "{ success: boolean; user: { name: string; active: boolean; }; }");
+})(new Set(["name", "active"]), [
+    ["name", false, __val_473287f8298dba71],
+    ["active", false, __val_ced862ef1505bc73]
+]);
+const __val_4ac5d9e4f4205e53 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; user: { name: string; active: boolean; }; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["user", false, __val_91d782a2d0de1354]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "user"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["success", "user"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["user", false, __val_91d782a2d0de1354]
+]);
 const __val_32873a7f224f38d8 = (v, path, ctx) => validators.literal(v, path, ctx, "string");
 const __val_628f6ca4b78e6b50 = (v, path, ctx) => validators.literal(v, path, ctx, "number");
 const __val_46a7c6afe9b432e6 = (v, path, ctx) => validators.literal(v, path, ctx, "bigint");
@@ -259,33 +256,33 @@ const __val_046317c2cffaf10d = (v, path, ctx) => validators.literal(v, path, ctx
 const __val_df6b16b0e625bf20 = (v, path, ctx) => validators.literal(v, path, ctx, "undefined");
 const __val_e64d77191bc932bb = (v, path, ctx) => validators.literal(v, path, ctx, "object");
 const __val_9120d5d091aa5bf3 = (v, path, ctx) => validators.literal(v, path, ctx, "function");
-const __val_1e1a258db2184d0e = (v, path, ctx) => validators.union(v, path, ctx, [__val_32873a7f224f38d8, __val_628f6ca4b78e6b50, __val_46a7c6afe9b432e6, __val_1207c37d006fe9f8, __val_046317c2cffaf10d, __val_df6b16b0e625bf20, __val_e64d77191bc932bb, __val_9120d5d091aa5bf3], "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">");
-const __val_87e266a791052d41 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "val", "type"]), "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+const __val_1e1a258db2184d0e = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">"))([__val_32873a7f224f38d8, __val_628f6ca4b78e6b50, __val_46a7c6afe9b432e6, __val_1207c37d006fe9f8, __val_046317c2cffaf10d, __val_df6b16b0e625bf20, __val_e64d77191bc932bb, __val_9120d5d091aa5bf3]);
+const __val_87e266a791052d41 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["val", false, __val_affb28566d707e35],
-        ["type", false, __val_1e1a258db2184d0e]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "val", "type"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["success", "val", "type"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["val", false, __val_affb28566d707e35],
+    ["type", false, __val_1e1a258db2184d0e]
+]);
 const __val_9a141e74a6c02429 = (v, path, ctx) => validators.templateLiteral(v, path, ctx, validators.safeRegExp("^id-[0-9]+(\\.[0-9]+)?$"), "`id-${number}`");
-const __val_6b50e5736cb6bb55 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "id"]), "{ success: boolean; id: `id-${number}`; }");
+const __val_6b50e5736cb6bb55 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; id: `id-${number}`; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["id", false, __val_9a141e74a6c02429]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "id"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["success", "id"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["id", false, __val_9a141e74a6c02429]
+]);
 const __val_e5fc42b4aba2c6d1 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -308,19 +305,19 @@ const __val_a1975336d1e3a054 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_68075fba117f092a = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "pass", "age"]), "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }");
+const __val_68075fba117f092a = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; pass: string & MinLength<8, string>; age: number & Minimum<18, string>; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["pass", false, __val_e5fc42b4aba2c6d1],
-        ["age", false, __val_a1975336d1e3a054]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "pass", "age"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["success", "pass", "age"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["pass", false, __val_e5fc42b4aba2c6d1],
+    ["age", false, __val_a1975336d1e3a054]
+]);
 const __val_bb2935cf2223ae40 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -332,40 +329,40 @@ const __val_bb2935cf2223ae40 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_796c4eac83a7a861 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["val"]), "CustomUser");
+const __val_796c4eac83a7a861 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "CustomUser");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["val", false, __val_bb2935cf2223ae40]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["val"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_4a8765d306ac1e9b = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success", "data"]), "{ success: boolean; data: CustomUser; }");
+})(new Set(["val"]), [
+    ["val", false, __val_bb2935cf2223ae40]
+]);
+const __val_4a8765d306ac1e9b = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: CustomUser; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73],
-        ["data", false, __val_796c4eac83a7a861]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success", "data"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_b237870e8da1ad64 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["message"]), "{ message: string; }");
+})(new Set(["success", "data"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_796c4eac83a7a861]
+]);
+const __val_b237870e8da1ad64 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ message: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["message", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["message"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["message"]), [
+    ["message", false, __val_473287f8298dba71]
+]);
 const __val_36b3db4fc7b251a9 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -399,19 +396,19 @@ const __val_a564a7ce790d29ed = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_fb804057ab9cb051 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["min", "max", "mult"]), "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }");
+const __val_fb804057ab9cb051 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ min: number & ExclusiveMinimum<10, string>; max: number & ExclusiveMaximum<20, string>; mult: number & MultipleOf<5, string>; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["min", false, __val_36b3db4fc7b251a9],
-        ["max", false, __val_397edf756fbe38e0],
-        ["mult", false, __val_a564a7ce790d29ed]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["min", "max", "mult"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["min", "max", "mult"]), [
+    ["min", false, __val_36b3db4fc7b251a9],
+    ["max", false, __val_397edf756fbe38e0],
+    ["mult", false, __val_a564a7ce790d29ed]
+]);
 const __val_871344223c5ce37c = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -434,30 +431,19 @@ const __val_a9030587ebb4386c = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_a3b8237cd422e3c4 = (v, path, ctx) => {
-    const _s = ctx.success;
-    ctx.success = true;
-    v = validators.string(v, path, ctx);
-    if (ctx.success && v !== undefined && v !== null) {
-        v = validators.format(v, path, ctx, "date");
-    }
-    if (_s === false)
-        ctx.success = false;
-    return v;
-};
-const __val_a744c47def1902a9 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["email", "uuid", "date"]), "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string; }");
+const __val_a744c47def1902a9 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ email: string & Format<\"email\", string>; uuid: string & Format<\"uuid\", string>; date: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["email", false, __val_871344223c5ce37c],
-        ["uuid", false, __val_a9030587ebb4386c],
-        ["date", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["email", "uuid", "date"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["email", "uuid", "date"]), [
+    ["email", false, __val_871344223c5ce37c],
+    ["uuid", false, __val_a9030587ebb4386c],
+    ["date", false, __val_473287f8298dba71]
+]);
 const __val_78d9364193f14947 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
@@ -482,78 +468,554 @@ const __val_e932e0ca2e5a5a04 = (v, path, ctx) => {
         ctx.success = false;
     return v;
 };
-const __val_263dff44d887120e = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["msg", "dbUrl", "logged"]), "{ msg: string; dbUrl: string; logged: string; }");
+const __val_263dff44d887120e = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ msg: string; dbUrl: string; logged: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["msg", false, __val_473287f8298dba71],
-        ["dbUrl", false, __val_473287f8298dba71],
-        ["logged", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["msg", "dbUrl", "logged"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_ab68d46bd18d4a0a = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["dbUrl"]), "{ dbUrl: string; }");
+})(new Set(["msg", "dbUrl", "logged"]), [
+    ["msg", false, __val_473287f8298dba71],
+    ["dbUrl", false, __val_473287f8298dba71],
+    ["logged", false, __val_473287f8298dba71]
+]);
+const __val_ab68d46bd18d4a0a = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ dbUrl: string; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["dbUrl", false, __val_473287f8298dba71]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["dbUrl"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_e955dd67e417e2f5 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["success"]), "{ success: boolean; }");
+})(new Set(["dbUrl"]), [
+    ["dbUrl", false, __val_473287f8298dba71]
+]);
+const __val_e955dd67e417e2f5 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["success", false, __val_ced862ef1505bc73]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["success"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_07a8cc3cc8aea7a1 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["val"]), "{ val: number; }");
+})(new Set(["success"]), [
+    ["success", false, __val_ced862ef1505bc73]
+]);
+const __val_07a8cc3cc8aea7a1 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ val: number; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["val", false, __val_12886f9d00055adf]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["val"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-const __val_0b6ca95199f89861 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["a", "b"]), "SumPayload");
+})(new Set(["val"]), [
+    ["val", false, __val_12886f9d00055adf]
+]);
+const __val_0b6ca95199f89861 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "SumPayload");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["a", false, __val_12886f9d00055adf],
-        ["b", false, __val_12886f9d00055adf]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["a", "b"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
+})(new Set(["a", "b"]), [
+    ["a", false, __val_12886f9d00055adf],
+    ["b", false, __val_12886f9d00055adf]
+]);
 const __val_6bd4d7da4d0dd205 = (v, path, ctx) => validators.nullable(v, path, ctx, __val_473287f8298dba71);
-const __val_d78a5e9e3b797aa6 = (v, path, ctx) => {
-    const obj = validators.object(v, path, ctx, new Set(["one", "two"]), "{ one: string | null; two: string | null; }");
+const __val_d78a5e9e3b797aa6 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ one: string | null; two: string | null; }");
     if (obj === false)
         return v;
     const data = validators.objectShell(obj, ctx, true);
-    validators.props(obj, data, path, ctx, [
-        ["one", false, __val_6bd4d7da4d0dd205],
-        ["two", false, __val_6bd4d7da4d0dd205]
-    ]);
-    validators.stripExtras(data, ctx, new Set(["one", "two"]));
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
     return data;
-};
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public } from '../../index.js';
+})(new Set(["one", "two"]), [
+    ["one", false, __val_6bd4d7da4d0dd205],
+    ["two", false, __val_6bd4d7da4d0dd205]
+]);
+const __val_3854fe5bb34caec3 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ id: string; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["id"]), [
+    ["id", false, __val_473287f8298dba71]
+]);
+const __val_10fc726648976d5a = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ secret: boolean; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["secret"]), [
+    ["secret", false, __val_ced862ef1505bc73]
+]);
+const __parse_04c78f82f98a8cf4_strict_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+    if (!__keys.has(k)) {
+        throw new __tcRuntime.ParseError(p, "PropertyNotAllowed<" + k + ">");
+    }
+} return res; })(obj, path); });
+const __parse_04c78f82f98a8cf4_strict_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+    if (!__keys.has(k)) {
+        throw new __tcRuntime.ParseError(p, "PropertyNotAllowed<" + k + ">");
+    }
+} return res; })(rawQuery, path); });
+const __parse_04c78f82f98a8cf4_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age") }; return res; })(obj, path); });
+const __parse_04c78f82f98a8cf4_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age") }; return res; })(rawQuery, path); });
+const __parse_04c78f82f98a8cf4_relaxed_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+    if (!__keys.has(k)) {
+        res[k] = o[k];
+    }
+} return res; })(obj, path); });
+const __parse_04c78f82f98a8cf4_relaxed_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+    if (!__keys.has(k)) {
+        res[k] = o[k];
+    }
+} return res; })(rawQuery, path); });
+const __parse_0b60aa399d818c05_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (v, p) { switch (v && v["type"]) {
+    case "simple": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (v !== "simple") {
+            throw new __tcRuntime.ParseError(path, "Literal<'simple'>");
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "val": __tcRuntime.expectString(o.val, (p) ? (p) + "." + "val" : "val") }; return res; })(v, p);
+    case "complex": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (v !== "complex") {
+            throw new __tcRuntime.ParseError(path, "Literal<'complex'>");
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "data": (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.expectNumber(o.id, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id"), "tags": (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectString(item, itemP); }); })(o.tags, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "tags" : "tags") }; return res; })(o.data, (p) ? (p) + "." + "data" : "data") }; return res; })(v, p);
+    default: throw new __tcRuntime.ParseError(p, "Type<MyUnion>");
+} })(obj, path); });
+const __parse_0b60aa399d818c05_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (v, p) { switch (v && v["type"]) {
+    case "simple": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (typeof v !== "string") {
+            throw new __tcRuntime.ParseError(path, "Literal<'simple'>");
+        } if (v !== "simple") {
+            throw new __tcRuntime.ParseError(path, "Literal<'simple'>");
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "val": __tcRuntime.expectString(o.val, (p) ? (p) + "." + "val" : "val") }; return res; })(v, p);
+    case "complex": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (typeof v !== "string") {
+            throw new __tcRuntime.ParseError(path, "Literal<'complex'>");
+        } if (v !== "complex") {
+            throw new __tcRuntime.ParseError(path, "Literal<'complex'>");
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "data": (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.coerceNumber(o.id, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id"), "tags": __tcRuntime.coerceArray(o.tags, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "tags" : "tags", (item, itemP) => __tcRuntime.expectString(item, itemP)) }; return res; })(o.data, (p) ? (p) + "." + "data" : "data") }; return res; })(v, p);
+    default: throw new __tcRuntime.ParseError(p, "Type<MyUnion>");
+} })(rawQuery, path); });
+const __parse_857204a536cb022c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.parseUnion(rawQuery, path, "Type<Status>", [(v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "reason": __tcRuntime.expectString(o.reason, (p) ? (p) + "." + "reason" : "reason") }; return res; })(v, p), (v, p) => (function (v, path) { if (typeof v !== "string") {
+        throw new __tcRuntime.ParseError(path, "Literal<'active'>");
+    } if (v !== "active") {
+        throw new __tcRuntime.ParseError(path, "Literal<'active'>");
+    } return v; })(v, p), (v, p) => (function (v, path) { if (typeof v !== "string") {
+        throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
+    } if (v !== "inactive") {
+        throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
+    } return v; })(v, p)]); });
+const __parse_8c1c1b2d325f9de6_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.parseUnion(item, itemP, "Type<string|number>", [(v, p) => __tcRuntime.expectString(v, p), (v, p) => __tcRuntime.expectNumber(v, p)]); }); })(obj, path); });
+const __parse_8c1c1b2d325f9de6_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceArray(rawQuery, path, (item, itemP) => __tcRuntime.parseUnion(item, itemP, "Type<string|number>", [(v, p) => __tcRuntime.expectString(v, p), (v, p) => __tcRuntime.coerceNumber(v, p)])); });
+const __parse_fdba127064c2547c_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.expectNumber(o.id, (path) ? (path) + "." + "id" : "id"), "user": o.user === undefined ? undefined : __tcRuntime.parseUnion(o.user, (path) ? (path) + "." + "user" : "user", "Type<User|undefined>", [(v, p) => (function (v, path) { if (v !== undefined) {
+            throw new __tcRuntime.ParseError(path, "Type<undefined>");
+        } return v; })(v, p), (v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (p) ? (p) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (p) ? (p) + "." + "age" : "age") }; return res; })(v, p)]), "tags": (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectString(item, itemP); }); })(o.tags, (path) ? (path) + "." + "tags" : "tags") }; return res; })(obj, path); });
+const __parse_fdba127064c2547c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.coerceNumber(o.id, (path) ? (path) + "." + "id" : "id"), "user": o.user === undefined ? undefined : __tcRuntime.parseUnion(o.user, (path) ? (path) + "." + "user" : "user", "Type<User|undefined>", [(v, p) => (function (v, path) { if (v !== undefined) {
+            throw new __tcRuntime.ParseError(path, "Type<undefined>");
+        } return v; })(v, p), (v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (p) ? (p) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (p) ? (p) + "." + "age" : "age") }; return res; })(v, p)]), "tags": __tcRuntime.coerceArray(o.tags, (path) ? (path) + "." + "tags" : "tags", (item, itemP) => __tcRuntime.expectString(item, itemP)) }; return res; })(rawQuery, path); });
+const __parse_f28f8acf7e68cbfd_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.expectString(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.expectNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(obj, path); });
+const __parse_f28f8acf7e68cbfd_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.expectString(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.coerceNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(rawQuery, path); });
+const __parse_85a41b63d9a32b8b_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.parseUnion(rawQuery, path, "Type<\"active\"|\"inactive\">", [(v, p) => (function (v, path) { if (typeof v !== "string") {
+        throw new __tcRuntime.ParseError(path, "Literal<'active'>");
+    } if (v !== "active") {
+        throw new __tcRuntime.ParseError(path, "Literal<'active'>");
+    } return v; })(v, p), (v, p) => (function (v, path) { if (typeof v !== "string") {
+        throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
+    } if (v !== "inactive") {
+        throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
+    } return v; })(v, p)]); });
+const __parse_e5da2f9fabafe20e_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceArray(rawQuery, path, (item, itemP) => __tcRuntime.expectString(item, itemP)); });
+const __parse_12886f9d00055adf_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceNumber(rawQuery, path); });
+const __parse_ced862ef1505bc73_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceBoolean(rawQuery, path); });
+const __parse_99c40ab405926cb5_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceDate(rawQuery, path); });
+const __parse_eefd1c8d7e793bf3_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (v, path) { if (v instanceof RegExp) {
+    return v;
+} if (typeof v === "string") {
+    const match = v.match(/^\/(.*)\/([gimuy]*)$/);
+    if (match) {
+        try {
+            return new RegExp(match[1], match[2]);
+        }
+        catch (e) { }
+    }
+    try {
+        return new RegExp(v);
+    }
+    catch (e) { }
+} if (v && typeof v === "object" && typeof v.source === "string") {
+    try {
+        return new RegExp(v.source, typeof v.flags === "string" ? v.flags : "");
+    }
+    catch (e) { }
+} throw new __tcRuntime.ParseError(path, "Type<RegExp>"); })(rawQuery, path); });
+const __parse_75d012fe28656e0a_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceBigInt(rawQuery, path); });
+const __parse_91d782a2d0de1354_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "active": __tcRuntime.coerceBoolean(o.active, (path) ? (path) + "." + "active" : "active") }; return res; })(rawQuery, path); });
+const __parse_affb28566d707e35_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.parseUnion(rawQuery, path, "Type<string|number>", [(v, p) => __tcRuntime.expectString(v, p), (v, p) => __tcRuntime.coerceNumber(v, p)]); });
+const __parse_9a141e74a6c02429_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (v, path) { if (typeof v !== "string" || !(new RegExp("^id-[0-9]+(\\.[0-9]+)?$")).test(v)) {
+    throw new __tcRuntime.ParseError(path, "`id-${number}`");
+} return v; })(rawQuery, path); });
+const __parse_e5fc42b4aba2c6d1_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minLength", "value": 8 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_a1975336d1e3a054_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minimum", "value": 18 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_796c4eac83a7a861_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "val": (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = __tcRuntime.expectNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [], "json"); if (__v !== undefined && __v !== null) {
+        {
+            const _ctx = { success: true, errors: [], mode: "strict", from: "json", root: root };
+            __tcRuntime.validators.custom(__v, p, _ctx, isEvenNumber);
+            if (!_ctx.success) {
+                throw new __tcRuntime.ParseError(p, (_ctx.errors[0] && _ctx.errors[0].error) || "Custom");
+            }
+        }
+    } return __v; })(o.val, (path) ? (path) + "." + "val" : "val", obj) }; return res; })(obj, path); });
+const __parse_796c4eac83a7a861_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "val": (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [], "query"); if (__v !== undefined && __v !== null) {
+        {
+            const _ctx = { success: true, errors: [], mode: "strict", from: "query", root: root };
+            __tcRuntime.validators.custom(__v, p, _ctx, isEvenNumber);
+            if (!_ctx.success) {
+                throw new __tcRuntime.ParseError(p, (_ctx.errors[0] && _ctx.errors[0].error) || "Custom");
+            }
+        }
+    } return __v; })(o.val, (path) ? (path) + "." + "val" : "val", rawQuery) }; return res; })(rawQuery, path); });
+const __parse_36b3db4fc7b251a9_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "exclusiveMinimum", "value": 10 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_397edf756fbe38e0_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "exclusiveMaximum", "value": 20 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_a564a7ce790d29ed_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "multipleOf", "value": 5 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_871344223c5ce37c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "email" }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_a9030587ebb4386c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "uuid" }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_a3b8237cd422e3c4_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "date" }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_78d9364193f14947_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectString(item, itemP); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minItems", "value": 2 }, { "type": "maxItems", "value": 3 }], "json"); return __v; })(obj, path, obj); });
+const __parse_78d9364193f14947_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.expectString(item, itemP)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minItems", "value": 2 }, { "type": "maxItems", "value": 3 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_e932e0ca2e5a5a04_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectNumber(item, itemP); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "json"); return __v; })(obj, path, obj); });
+const __parse_e932e0ca2e5a5a04_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.coerceNumber(item, itemP)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_473287f8298dba71_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.expectString(rawQuery, path); });
+const __parse_0b6ca95199f89861_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.expectNumber(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.expectNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(obj, path); });
+const __parse_0b6ca95199f89861_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.coerceNumber(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.coerceNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(rawQuery, path); });
+const __parse_473287f8298dba71_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
+    const t = input.trim();
+    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
+        try {
+            obj = JSON.parse(input);
+        }
+        catch (e) {
+            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+        }
+    }
+    else {
+        obj = input;
+    }
+}
+else {
+    obj = input;
+} return __tcRuntime.expectString(obj, path); });
+const __ser_c67915707769fcf5_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("data", "Type<Object>");
+} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "data.name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("data.age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_a068761681a0a813_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (val) { switch (val["type"]) {
+    case "simple": return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+        throw new __tcRuntime.SerializationError("data", "Type<Object>");
+    } let parts = []; parts.push("\"type\":" + (obj.type === "simple" ? "\"simple\"" : (function () { throw new __tcRuntime.SerializationError("data.type", "Literal<'simple'>"); })())); parts.push("\"val\":" + __tcRuntime.serializeString(obj.val, "data.val")); return "{" + parts.join(",") + "}"; })(obj.data);
+    case "complex": return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+        throw new __tcRuntime.SerializationError("data", "Type<Object>");
+    } let parts = []; parts.push("\"type\":" + (obj.type === "complex" ? "\"complex\"" : (function () { throw new __tcRuntime.SerializationError("data.type", "Literal<'complex'>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+        throw new __tcRuntime.SerializationError("data.data", "Type<Object>");
+    } let parts = []; parts.push("\"id\":" + (typeof obj.id === "number" && !Number.isNaN(obj.id) ? String(obj.id) : (function () { throw new __tcRuntime.SerializationError("data.data.id", "Type<number>"); })())); parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => __tcRuntime.serializeString(item, "data.data.tags[]"), "data.data.tags")); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(obj.data);
+    default: throw new __tcRuntime.SerializationError("data", "Type<MyUnion>");
+} })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_2d6ea820a293bacf_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"s\":" + __tcRuntime.serializeUnion(obj.s, "s", "Type<Status>", [val => (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+        throw new __tcRuntime.SerializationError("s", "Type<Object>");
+    } let parts = []; parts.push("\"reason\":" + __tcRuntime.serializeString(obj.reason, "s.reason")); return "{" + parts.join(",") + "}"; })(val), val => (val === "active" ? "\"active\"" : (function () { throw new __tcRuntime.SerializationError("s", "Literal<'active'>"); })()), val => (val === "inactive" ? "\"inactive\"" : (function () { throw new __tcRuntime.SerializationError("s", "Literal<'inactive'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_a042f9877fc2376a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + __tcRuntime.serializeArray(obj.data, item => __tcRuntime.serializeUnion(item, "data[]", "Type<string|number>", [val => __tcRuntime.serializeString(val, "data[]"), val => (typeof val === "number" && !Number.isNaN(val) ? String(val) : (function () { throw new __tcRuntime.SerializationError("data[]", "Type<number>"); })())]), "data")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_d0b53ff733685c2c_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("data", "Type<Object>");
+} let parts = []; parts.push("\"id\":" + (typeof obj.id === "number" && !Number.isNaN(obj.id) ? String(obj.id) : (function () { throw new __tcRuntime.SerializationError("data.id", "Type<number>"); })())); if (obj.user !== undefined) {
+    parts.push("\"user\":" + __tcRuntime.serializeUnion(obj.user, "data.user", "Type<User|undefined>", [val => (val === undefined ? "null" : (function () { throw new __tcRuntime.SerializationError("data.user", "Type<undefined>"); })()), val => (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+            throw new __tcRuntime.SerializationError("data.user", "Type<Object>");
+        } let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "data.user.name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("data.user.age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(val)]));
+} parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => __tcRuntime.serializeString(item, "data.tags[]"), "data.tags")); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_0d157d33684c0018_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("data", "Type<Object>");
+} let parts = []; parts.push("\"a\":" + __tcRuntime.serializeString(obj.a, "data.a")); parts.push("\"b\":" + (typeof obj.b === "number" && !Number.isNaN(obj.b) ? String(obj.b) : (function () { throw new __tcRuntime.SerializationError("data.b", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_0084393b0d7248e4_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"status\":" + __tcRuntime.serializeUnion(obj.status, "status", "Type<\"active\"|\"inactive\">", [val => (val === "active" ? "\"active\"" : (function () { throw new __tcRuntime.SerializationError("status", "Literal<'active'>"); })()), val => (val === "inactive" ? "\"inactive\"" : (function () { throw new __tcRuntime.SerializationError("status", "Literal<'inactive'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_d9bb28ea073c815e_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => __tcRuntime.serializeString(item, "tags[]"), "tags")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_0dcd607745c5cb3e_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); parts.push("\"active\":" + (typeof obj.active === "boolean" ? (obj.active ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("active", "Type<boolean>"); })())); parts.push("\"date\":" + __tcRuntime.serializeString(obj.date, "date")); parts.push("\"pattern\":" + __tcRuntime.serializeString(obj.pattern, "pattern")); parts.push("\"big\":" + __tcRuntime.serializeString(obj.big, "big")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_4ac5d9e4f4205e53_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"user\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("user", "Type<Object>");
+} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "user.name")); parts.push("\"active\":" + (typeof obj.active === "boolean" ? (obj.active ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("user.active", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(obj.user)); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_87e266a791052d41_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"val\":" + __tcRuntime.serializeUnion(obj.val, "val", "Type<string|number>", [val => __tcRuntime.serializeString(val, "val"), val => (typeof val === "number" && !Number.isNaN(val) ? String(val) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })())])); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_6b50e5736cb6bb55_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"id\":" + __tcRuntime.serializeString(obj.id, "id")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_68075fba117f092a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"pass\":" + __tcRuntime.serializeString(obj.pass, "pass")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_4a8765d306ac1e9b_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("data", "Type<Object>");
+} let parts = []; parts.push("\"val\":" + (typeof obj.val === "number" && !Number.isNaN(obj.val) ? String(obj.val) : (function () { throw new __tcRuntime.SerializationError("data.val", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_b237870e8da1ad64_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"message\":" + __tcRuntime.serializeString(obj.message, "message")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_fb804057ab9cb051_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"min\":" + (typeof obj.min === "number" && !Number.isNaN(obj.min) ? String(obj.min) : (function () { throw new __tcRuntime.SerializationError("min", "Type<number>"); })())); parts.push("\"max\":" + (typeof obj.max === "number" && !Number.isNaN(obj.max) ? String(obj.max) : (function () { throw new __tcRuntime.SerializationError("max", "Type<number>"); })())); parts.push("\"mult\":" + (typeof obj.mult === "number" && !Number.isNaN(obj.mult) ? String(obj.mult) : (function () { throw new __tcRuntime.SerializationError("mult", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_a744c47def1902a9_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"email\":" + __tcRuntime.serializeString(obj.email, "email")); parts.push("\"uuid\":" + __tcRuntime.serializeString(obj.uuid, "uuid")); parts.push("\"date\":" + __tcRuntime.serializeString(obj.date, "date")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_78d9364193f14947_strip_json = (function (input) { return __tcRuntime.serializeArray(input, item => __tcRuntime.serializeString(item, "[]"), ""); });
+const __ser_e932e0ca2e5a5a04_strip_json = (function (input) { return __tcRuntime.serializeArray(input, item => (typeof item === "number" && !Number.isNaN(item) ? String(item) : (function () { throw new __tcRuntime.SerializationError("[]", "Type<number>"); })()), ""); });
+const __ser_473287f8298dba71_strip_json = (function (input) { return __tcRuntime.serializeString(input, ""); });
+const __ser_263dff44d887120e_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"msg\":" + __tcRuntime.serializeString(obj.msg, "msg")); parts.push("\"dbUrl\":" + __tcRuntime.serializeString(obj.dbUrl, "dbUrl")); parts.push("\"logged\":" + __tcRuntime.serializeString(obj.logged, "logged")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_ab68d46bd18d4a0a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"dbUrl\":" + __tcRuntime.serializeString(obj.dbUrl, "dbUrl")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_e955dd67e417e2f5_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_07a8cc3cc8aea7a1_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"val\":" + (typeof obj.val === "number" && !Number.isNaN(obj.val) ? String(obj.val) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_07a8cc3cc8aea7a1_strict_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; const __keys = new Set(["val"]); parts.push("\"val\":" + (typeof obj.val === "number" && !Number.isNaN(obj.val) ? String(obj.val) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })())); for (const k in obj) {
+    if (!__keys.has(k) && obj[k] !== undefined) {
+        throw new __tcRuntime.SerializationError("", "PropertyNotAllowed<" + k + ">");
+    }
+} return "{" + parts.join(",") + "}"; })(input); });
+const __ser_12886f9d00055adf_strip_json = (function (input) { return (typeof input === "number" && !Number.isNaN(input) ? String(input) : (function () { throw new __tcRuntime.SerializationError("", "Type<number>"); })()); });
+const __ser_04c78f82f98a8cf4_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_04c78f82f98a8cf4_strict_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; const __keys = new Set(["name", "age"]); parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); for (const k in obj) {
+    if (!__keys.has(k) && obj[k] !== undefined) {
+        throw new __tcRuntime.SerializationError("", "PropertyNotAllowed<" + k + ">");
+    }
+} return "{" + parts.join(",") + "}"; })(input); });
+const __ser_04c78f82f98a8cf4_relaxed_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; const __keys = new Set(["name", "age"]); parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); for (const k in obj) {
+    if (!__keys.has(k) && obj[k] !== undefined) {
+        parts.push(JSON.stringify(k) + ":" + JSON.stringify(obj[k]));
+    }
+} return "{" + parts.join(",") + "}"; })(input); });
+const __ser_d78a5e9e3b797aa6_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"one\":" + __tcRuntime.serializeUnion(obj.one, "one", "Type<string|null>", [val => (val === null ? "null" : (function () { throw new __tcRuntime.SerializationError("one", "Type<null>"); })()), val => __tcRuntime.serializeString(val, "one")])); parts.push("\"two\":" + __tcRuntime.serializeUnion(obj.two, "two", "Type<string|null>", [val => (val === null ? "null" : (function () { throw new __tcRuntime.SerializationError("two", "Type<null>"); })()), val => __tcRuntime.serializeString(val, "two")])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_3854fe5bb34caec3_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"id\":" + __tcRuntime.serializeString(obj.id, "id")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_10fc726648976d5a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"secret\":" + (typeof obj.secret === "boolean" ? (obj.secret ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("secret", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(input); });
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public, Seo, Internal } from '../../index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
 export class GlobalErrorSanitizer {
     static __injections__ = {
@@ -1412,8 +1874,8 @@ let SimpleTestMiddleware = class SimpleTestMiddleware {
         propertyDeps: {}
     };
     use(req, res) {
-        req.headers.set('x-middleware-one', 'active');
-        res.headers.set('x-middleware-res-one', 'response-active');
+        req.headers['x-middleware-one'] = 'active';
+        res.header('x-middleware-res-one', 'response-active');
     }
 };
 SimpleTestMiddleware = __decorate([
@@ -1426,8 +1888,8 @@ let CallbackTestMiddleware = class CallbackTestMiddleware {
         propertyDeps: {}
     };
     async useCallback(req, res, next) {
-        req.headers.set('x-middleware-two', 'callback-active');
-        res.headers.set('x-middleware-res-two', 'response-callback-active');
+        req.headers['x-middleware-two'] = 'callback-active';
+        res.header('x-middleware-res-two', 'response-callback-active');
         await next();
     }
 };
@@ -1441,7 +1903,7 @@ let MiddlewareCheckingGuard = class MiddlewareCheckingGuard {
         propertyDeps: {}
     };
     use(req) {
-        const one = req.headers.get('x-middleware-one');
+        const one = req.headers['x-middleware-one'];
         if (!one) {
             throw { status: 403, message: 'Middleware did not run before Guard' };
         }
@@ -1458,14 +1920,14 @@ let MiddlewareTestController = class MiddlewareTestController {
     };
     both(req) {
         return {
-            one: req.headers.get('x-middleware-one'),
-            two: req.headers.get('x-middleware-two')
+            one: req.headers['x-middleware-one'] ?? null,
+            two: req.headers['x-middleware-two'] ?? null
         };
     }
     override(req) {
         return {
-            one: req.headers.get('x-middleware-one'),
-            two: req.headers.get('x-middleware-two')
+            one: req.headers['x-middleware-one'] ?? null,
+            two: req.headers['x-middleware-two'] ?? null
         };
     }
 };
@@ -1489,14 +1951,14 @@ let MiddlewareUnmiddlewareController = class MiddlewareUnmiddlewareController {
     };
     removeOne(req) {
         return {
-            one: req.headers.get('x-middleware-one'),
-            two: req.headers.get('x-middleware-two')
+            one: req.headers['x-middleware-one'] ?? null,
+            two: req.headers['x-middleware-two'] ?? null
         };
     }
     removeAll(req) {
         return {
-            one: req.headers.get('x-middleware-one'),
-            two: req.headers.get('x-middleware-two')
+            one: req.headers['x-middleware-one'] ?? null,
+            two: req.headers['x-middleware-two'] ?? null
         };
     }
 };
@@ -1605,6 +2067,78 @@ MethodPublicController = __decorate([
     Protect(PublicDenyGuard)
 ], MethodPublicController);
 export { MethodPublicController };
+let SeoEmitController = class SeoEmitController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    blog(slug) {
+        if (slug === 'miss') {
+            return;
+        }
+        return { method: 'GET', path: `/seo/posts/${slug}` };
+    }
+};
+__decorate([
+    Get('/seo/blog/:slug'),
+    __param(0, Param('slug'))
+], SeoEmitController.prototype, "blog", null);
+SeoEmitController = __decorate([
+    Controller(),
+    Seo
+], SeoEmitController);
+export { SeoEmitController };
+let SeoTargetController = class SeoTargetController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    show(id) {
+        return { id };
+    }
+};
+__decorate([
+    Get('/seo/posts/:id'),
+    __param(0, Param('id'))
+], SeoTargetController.prototype, "show", null);
+SeoTargetController = __decorate([
+    Controller()
+], SeoTargetController);
+export { SeoTargetController };
+let InternalEmitController = class InternalEmitController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    secret() {
+        return { secret: true };
+    }
+};
+__decorate([
+    Get('/_internal/seo-secret')
+], InternalEmitController.prototype, "secret", null);
+InternalEmitController = __decorate([
+    Controller(),
+    Internal
+], InternalEmitController);
+export { InternalEmitController };
+let SeoToInternalController = class SeoToInternalController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    go() {
+        return { method: 'GET', path: '/_internal/seo-secret' };
+    }
+};
+__decorate([
+    Get('/seo/pretty')
+], SeoToInternalController.prototype, "go", null);
+SeoToInternalController = __decorate([
+    Controller(),
+    Seo
+], SeoToInternalController);
+export { SeoToInternalController };
 DiGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "DiGuard"
@@ -1683,6 +2217,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_04c78f82f98a8cf4_strict_json,
+                    parserQuery: __parse_04c78f82f98a8cf4_strict_query,
                     validator: __val_04c78f82f98a8cf4,
                     mode: "strict"
                 }],
@@ -1690,7 +2226,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_c67915707769fcf5
+            returnTypeValidator: __val_c67915707769fcf5,
+            returnTypeSerializer: __ser_c67915707769fcf5_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1700,6 +2237,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_04c78f82f98a8cf4_strict_json,
+                    parserQuery: __parse_04c78f82f98a8cf4_strict_query,
                     validator: __val_04c78f82f98a8cf4,
                     mode: "strict"
                 }],
@@ -1707,7 +2246,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: ["GlobalErrorSanitizer"],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_c67915707769fcf5
+            returnTypeValidator: __val_c67915707769fcf5,
+            returnTypeSerializer: __ser_c67915707769fcf5_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1717,6 +2257,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_04c78f82f98a8cf4_strip_json,
+                    parserQuery: __parse_04c78f82f98a8cf4_strip_query,
                     validator: __val_04c78f82f98a8cf4,
                     mode: "strip"
                 }],
@@ -1724,7 +2266,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_c67915707769fcf5
+            returnTypeValidator: __val_c67915707769fcf5,
+            returnTypeSerializer: __ser_c67915707769fcf5_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1734,6 +2277,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_04c78f82f98a8cf4_relaxed_json,
+                    parserQuery: __parse_04c78f82f98a8cf4_relaxed_query,
                     validator: __val_04c78f82f98a8cf4,
                     mode: "relaxed"
                 }],
@@ -1741,7 +2286,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_c67915707769fcf5
+            returnTypeValidator: __val_c67915707769fcf5,
+            returnTypeSerializer: __ser_c67915707769fcf5_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1751,6 +2297,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_0b60aa399d818c05_strip_json,
+                    parserQuery: __parse_0b60aa399d818c05_strip_query,
                     validator: __val_0b60aa399d818c05,
                     mode: "strip"
                 }],
@@ -1758,7 +2306,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_a068761681a0a813
+            returnTypeValidator: __val_a068761681a0a813,
+            returnTypeSerializer: __ser_a068761681a0a813_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1768,14 +2317,15 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "s",
-                    validator: __val_857204a536cb022c,
+                    parser: __parse_857204a536cb022c_strip_query,
                     mode: "strip"
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_2d6ea820a293bacf
+            returnTypeValidator: __val_2d6ea820a293bacf,
+            returnTypeSerializer: __ser_2d6ea820a293bacf_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1785,6 +2335,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_8c1c1b2d325f9de6_strip_json,
+                    parserQuery: __parse_8c1c1b2d325f9de6_strip_query,
                     validator: __val_8c1c1b2d325f9de6,
                     mode: "strip"
                 }],
@@ -1792,7 +2344,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_a042f9877fc2376a
+            returnTypeValidator: __val_a042f9877fc2376a,
+            returnTypeSerializer: __ser_a042f9877fc2376a_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1802,6 +2355,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_fdba127064c2547c_strip_json,
+                    parserQuery: __parse_fdba127064c2547c_strip_query,
                     validator: __val_fdba127064c2547c,
                     mode: "strip"
                 }],
@@ -1809,7 +2364,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_d0b53ff733685c2c
+            returnTypeValidator: __val_d0b53ff733685c2c,
+            returnTypeSerializer: __ser_d0b53ff733685c2c_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1819,6 +2375,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_f28f8acf7e68cbfd_strip_json,
+                    parserQuery: __parse_f28f8acf7e68cbfd_strip_query,
                     validator: __val_f28f8acf7e68cbfd,
                     mode: "strip"
                 }],
@@ -1826,7 +2384,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_0d157d33684c0018
+            returnTypeValidator: __val_0d157d33684c0018,
+            returnTypeSerializer: __ser_0d157d33684c0018_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1836,14 +2395,15 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "status",
-                    validator: __val_85a41b63d9a32b8b,
+                    parser: __parse_85a41b63d9a32b8b_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_0084393b0d7248e4
+            returnTypeValidator: __val_0084393b0d7248e4,
+            returnTypeSerializer: __ser_0084393b0d7248e4_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1853,14 +2413,15 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "tags",
-                    validator: __val_e5da2f9fabafe20e,
+                    parser: __parse_e5da2f9fabafe20e_strip_query,
                     mode: "strip"
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_d9bb28ea073c815e
+            returnTypeValidator: __val_d9bb28ea073c815e,
+            returnTypeSerializer: __ser_d9bb28ea073c815e_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1870,34 +2431,35 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "age",
-                    validator: __val_12886f9d00055adf,
+                    parser: __parse_12886f9d00055adf_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "active",
-                    validator: __val_ced862ef1505bc73,
+                    parser: __parse_ced862ef1505bc73_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "date",
-                    validator: __val_99c40ab405926cb5,
+                    parser: __parse_99c40ab405926cb5_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "pattern",
-                    validator: __val_eefd1c8d7e793bf3,
+                    parser: __parse_eefd1c8d7e793bf3_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "big",
-                    validator: __val_75d012fe28656e0a,
+                    parser: __parse_75d012fe28656e0a_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_0dcd607745c5cb3e
+            returnTypeValidator: __val_0dcd607745c5cb3e,
+            returnTypeSerializer: __ser_0dcd607745c5cb3e_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1907,14 +2469,15 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "user",
-                    validator: __val_91d782a2d0de1354,
+                    parser: __parse_91d782a2d0de1354_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_4ac5d9e4f4205e53
+            returnTypeValidator: __val_4ac5d9e4f4205e53,
+            returnTypeSerializer: __ser_4ac5d9e4f4205e53_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1924,14 +2487,15 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "val",
-                    validator: __val_affb28566d707e35,
+                    parser: __parse_affb28566d707e35_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_87e266a791052d41
+            returnTypeValidator: __val_87e266a791052d41,
+            returnTypeSerializer: __ser_87e266a791052d41_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1941,14 +2505,15 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "id",
-                    validator: __val_9a141e74a6c02429,
+                    parser: __parse_9a141e74a6c02429_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_6b50e5736cb6bb55
+            returnTypeValidator: __val_6b50e5736cb6bb55,
+            returnTypeSerializer: __ser_6b50e5736cb6bb55_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1958,19 +2523,20 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "pass",
-                    validator: __val_e5fc42b4aba2c6d1,
+                    parser: __parse_e5fc42b4aba2c6d1_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "age",
-                    validator: __val_a1975336d1e3a054,
+                    parser: __parse_a1975336d1e3a054_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_68075fba117f092a
+            returnTypeValidator: __val_68075fba117f092a,
+            returnTypeSerializer: __ser_68075fba117f092a_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -1980,6 +2546,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_796c4eac83a7a861_strip_json,
+                    parserQuery: __parse_796c4eac83a7a861_strip_query,
                     validator: __val_796c4eac83a7a861,
                     mode: "strip"
                 }],
@@ -1987,7 +2555,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_4a8765d306ac1e9b
+            returnTypeValidator: __val_4a8765d306ac1e9b,
+            returnTypeSerializer: __ser_4a8765d306ac1e9b_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -2010,7 +2579,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_b237870e8da1ad64
+            returnTypeValidator: __val_b237870e8da1ad64,
+            returnTypeSerializer: __ser_b237870e8da1ad64_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -2022,7 +2592,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_b237870e8da1ad64
+            returnTypeValidator: __val_b237870e8da1ad64,
+            returnTypeSerializer: __ser_b237870e8da1ad64_strip_json
         },
         {
             controller: "TypeSafetyController",
@@ -2034,7 +2605,8 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_b237870e8da1ad64
+            returnTypeValidator: __val_b237870e8da1ad64,
+            returnTypeSerializer: __ser_b237870e8da1ad64_strip_json
         }
     ]
 };
@@ -2052,24 +2624,25 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "min",
-                    validator: __val_36b3db4fc7b251a9,
+                    parser: __parse_36b3db4fc7b251a9_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "max",
-                    validator: __val_397edf756fbe38e0,
+                    parser: __parse_397edf756fbe38e0_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "mult",
-                    validator: __val_a564a7ce790d29ed,
+                    parser: __parse_a564a7ce790d29ed_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_fb804057ab9cb051
+            returnTypeValidator: __val_fb804057ab9cb051,
+            returnTypeSerializer: __ser_fb804057ab9cb051_strip_json
         },
         {
             controller: "TagParityController",
@@ -2079,24 +2652,25 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "email",
-                    validator: __val_871344223c5ce37c,
+                    parser: __parse_871344223c5ce37c_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "uuid",
-                    validator: __val_a9030587ebb4386c,
+                    parser: __parse_a9030587ebb4386c_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "date",
-                    validator: __val_a3b8237cd422e3c4,
+                    parser: __parse_a3b8237cd422e3c4_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_a744c47def1902a9
+            returnTypeValidator: __val_a744c47def1902a9,
+            returnTypeSerializer: __ser_a744c47def1902a9_strip_json
         },
         {
             controller: "TagParityController",
@@ -2106,6 +2680,8 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_78d9364193f14947_strip_json,
+                    parserQuery: __parse_78d9364193f14947_strip_query,
                     validator: __val_78d9364193f14947,
                     mode: undefined
                 }],
@@ -2113,7 +2689,8 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_78d9364193f14947
+            returnTypeValidator: __val_78d9364193f14947,
+            returnTypeSerializer: __ser_78d9364193f14947_strip_json
         },
         {
             controller: "TagParityController",
@@ -2123,6 +2700,8 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_e932e0ca2e5a5a04_strip_json,
+                    parserQuery: __parse_e932e0ca2e5a5a04_strip_query,
                     validator: __val_e932e0ca2e5a5a04,
                     mode: undefined
                 }],
@@ -2130,7 +2709,8 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_e932e0ca2e5a5a04
+            returnTypeValidator: __val_e932e0ca2e5a5a04,
+            returnTypeSerializer: __ser_e932e0ca2e5a5a04_strip_json
         }
     ]
 };
@@ -2151,6 +2731,7 @@ SecureController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json,
             security: {
                 frameguard: "deny"
             }
@@ -2166,6 +2747,7 @@ SecureController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json,
             security: {
                 frameguard: false
             }
@@ -2196,6 +2778,7 @@ InheritedController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json,
             security: {
                 frameguard: "deny",
                 timeout: 500
@@ -2212,6 +2795,7 @@ InheritedController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json,
             security: {
                 frameguard: false
             }
@@ -2234,7 +2818,8 @@ DiTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_263dff44d887120e
+            returnTypeValidator: __val_263dff44d887120e,
+            returnTypeSerializer: __ser_263dff44d887120e_strip_json
         },
         {
             controller: "DiTestController",
@@ -2251,7 +2836,8 @@ DiTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_ab68d46bd18d4a0a
+            returnTypeValidator: __val_ab68d46bd18d4a0a,
+            returnTypeSerializer: __ser_ab68d46bd18d4a0a_strip_json
         },
         {
             controller: "DiTestController",
@@ -2274,7 +2860,8 @@ DiTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_e955dd67e417e2f5
+            returnTypeValidator: __val_e955dd67e417e2f5,
+            returnTypeSerializer: __ser_e955dd67e417e2f5_strip_json
         },
         {
             controller: "DiTestController",
@@ -2297,7 +2884,8 @@ DiTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_e955dd67e417e2f5
+            returnTypeValidator: __val_e955dd67e417e2f5,
+            returnTypeSerializer: __ser_e955dd67e417e2f5_strip_json
         }
     ]
 };
@@ -2338,12 +2926,12 @@ RealtimeController[Symbol.for("webergency.server.controller")] = {
                 }, {
                     source: "Param",
                     name: "room",
-                    validator: __val_473287f8298dba71,
+                    parser: __parse_473287f8298dba71_strip_query,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "token",
-                    validator: __val_473287f8298dba71,
+                    parser: __parse_473287f8298dba71_strip_query,
                     mode: undefined
                 }],
             guards: [],
@@ -2408,7 +2996,8 @@ RealtimeController[Symbol.for("webergency.server.controller")] = {
             meta: {
                 sse: true
             },
-            returnTypeValidator: __val_07a8cc3cc8aea7a1
+            returnTypeValidator: __val_07a8cc3cc8aea7a1,
+            returnTypeSerializer: __ser_07a8cc3cc8aea7a1_strip_json
         },
         {
             controller: "RealtimeController",
@@ -2423,7 +3012,8 @@ RealtimeController[Symbol.for("webergency.server.controller")] = {
                 sse: true
             },
             returnTypeMode: "strip",
-            returnTypeValidator: __val_07a8cc3cc8aea7a1
+            returnTypeValidator: __val_07a8cc3cc8aea7a1,
+            returnTypeSerializer: __ser_07a8cc3cc8aea7a1_strip_json
         },
         {
             controller: "RealtimeController",
@@ -2438,7 +3028,8 @@ RealtimeController[Symbol.for("webergency.server.controller")] = {
                 sse: true
             },
             returnTypeMode: "strict",
-            returnTypeValidator: __val_07a8cc3cc8aea7a1
+            returnTypeValidator: __val_07a8cc3cc8aea7a1,
+            returnTypeSerializer: __ser_07a8cc3cc8aea7a1_strict_json
         }
     ]
 };
@@ -2456,6 +3047,8 @@ MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_0b6ca95199f89861_strip_json,
+                    parserQuery: __parse_0b6ca95199f89861_strip_query,
                     validator: __val_0b6ca95199f89861,
                     mode: undefined
                 }],
@@ -2465,7 +3058,8 @@ MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
             meta: {
                 rpc: true
             },
-            returnTypeValidator: __val_12886f9d00055adf
+            returnTypeValidator: __val_12886f9d00055adf,
+            returnTypeSerializer: __ser_12886f9d00055adf_strip_json
         },
         {
             controller: "MathMicroserviceController",
@@ -2475,6 +3069,8 @@ MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_473287f8298dba71_strip_json,
+                    parserQuery: __parse_473287f8298dba71_strip_query,
                     validator: __val_473287f8298dba71,
                     mode: undefined
                 }],
@@ -2484,7 +3080,8 @@ MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
             meta: {
                 rpc: true
             },
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         },
         {
             controller: "MathMicroserviceController",
@@ -2494,6 +3091,8 @@ MathMicroserviceController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Body",
                     name: "",
+                    parser: __parse_473287f8298dba71_strip_json,
+                    parserQuery: __parse_473287f8298dba71_strip_query,
                     validator: __val_473287f8298dba71,
                     mode: undefined
                 }],
@@ -2523,7 +3122,8 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         },
         {
             controller: "ReturnTypeController",
@@ -2535,7 +3135,8 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         },
         {
             controller: "ReturnTypeController",
@@ -2547,7 +3148,8 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         },
         {
             controller: "ReturnTypeController",
@@ -2557,14 +3159,15 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "branch",
-                    validator: __val_473287f8298dba71,
+                    parser: __parse_473287f8298dba71_strip_query,
                     mode: undefined
                 }],
             guards: [],
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         },
         {
             controller: "ReturnTypeController",
@@ -2578,7 +3181,8 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             meta: {
                 rpc: true
             },
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         },
         {
             controller: "ReturnTypeController",
@@ -2592,7 +3196,8 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             meta: {
                 rpc: true
             },
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         },
         {
             controller: "ReturnTypeController",
@@ -2606,7 +3211,8 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             meta: {
                 rpc: true
             },
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strip_json
         }
     ]
 };
@@ -2627,7 +3233,8 @@ StrictResponseController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeMode: "strict",
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strict_json
         },
         {
             controller: "StrictResponseController",
@@ -2640,7 +3247,8 @@ StrictResponseController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeMode: "relaxed",
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_relaxed_json
         }
     ]
 };
@@ -2668,7 +3276,8 @@ InheritedResponseController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeMode: "relaxed",
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_relaxed_json
         },
         {
             controller: "InheritedResponseController",
@@ -2681,7 +3290,8 @@ InheritedResponseController[Symbol.for("webergency.server.controller")] = {
             middlewares: [],
             meta: {},
             returnTypeMode: "strict",
-            returnTypeValidator: __val_04c78f82f98a8cf4
+            returnTypeValidator: __val_04c78f82f98a8cf4,
+            returnTypeSerializer: __ser_04c78f82f98a8cf4_strict_json
         }
     ]
 };
@@ -2714,7 +3324,8 @@ UnprotectedClassController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2734,7 +3345,8 @@ UnprotectedClassAllController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2760,7 +3372,8 @@ UnprotectedMethodController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         },
         {
             controller: "UnprotectedMethodController",
@@ -2772,7 +3385,8 @@ UnprotectedMethodController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2799,7 +3413,8 @@ UninterceptedClassController[Symbol.for("webergency.server.controller")] = {
             interceptors: ["AnotherInterceptor"],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2819,7 +3434,8 @@ UninterceptedClassAllController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2839,7 +3455,8 @@ UninterceptedMethodController[Symbol.for("webergency.server.controller")] = {
             interceptors: ["AnotherInterceptor"],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         },
         {
             controller: "UninterceptedMethodController",
@@ -2851,7 +3468,8 @@ UninterceptedMethodController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2887,7 +3505,8 @@ MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["SimpleTestMiddleware", "CallbackTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_d78a5e9e3b797aa6
+            returnTypeValidator: __val_d78a5e9e3b797aa6,
+            returnTypeSerializer: __ser_d78a5e9e3b797aa6_strip_json
         },
         {
             controller: "MiddlewareTestController",
@@ -2904,7 +3523,8 @@ MiddlewareTestController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["SimpleTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_d78a5e9e3b797aa6
+            returnTypeValidator: __val_d78a5e9e3b797aa6,
+            returnTypeSerializer: __ser_d78a5e9e3b797aa6_strip_json
         }
     ]
 };
@@ -2929,7 +3549,8 @@ MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: ["CallbackTestMiddleware"],
             meta: {},
-            returnTypeValidator: __val_d78a5e9e3b797aa6
+            returnTypeValidator: __val_d78a5e9e3b797aa6,
+            returnTypeSerializer: __ser_d78a5e9e3b797aa6_strip_json
         },
         {
             controller: "MiddlewareUnmiddlewareController",
@@ -2946,7 +3567,8 @@ MiddlewareUnmiddlewareController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_d78a5e9e3b797aa6
+            returnTypeValidator: __val_d78a5e9e3b797aa6,
+            returnTypeSerializer: __ser_d78a5e9e3b797aa6_strip_json
         }
     ]
 };
@@ -2972,7 +3594,8 @@ GuardInterceptorOrderController[Symbol.for("webergency.server.controller")] = {
             interceptors: ["CountingInterceptor"],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -2992,7 +3615,8 @@ ClassPublicController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
@@ -3012,11 +3636,105 @@ MethodPublicController[Symbol.for("webergency.server.controller")] = {
             interceptors: [],
             middlewares: [],
             meta: {},
-            returnTypeValidator: __val_473287f8298dba71
+            returnTypeValidator: __val_473287f8298dba71,
+            returnTypeSerializer: __ser_473287f8298dba71_strip_json
         }
     ]
 };
 MethodPublicController[Symbol.for("webergency.server.injectable")] = {
     kind: "controller",
     token: "MethodPublicController"
+};
+SeoEmitController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "SeoEmitController",
+            methodName: "blog",
+            httpMethod: "GET",
+            path: "/seo/blog/:slug",
+            params: [{
+                    source: "Param",
+                    name: "slug",
+                    parser: __parse_473287f8298dba71_strip_query,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            seo: true
+        }
+    ]
+};
+SeoEmitController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "SeoEmitController"
+};
+SeoTargetController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "SeoTargetController",
+            methodName: "show",
+            httpMethod: "GET",
+            path: "/seo/posts/:id",
+            params: [{
+                    source: "Param",
+                    name: "id",
+                    parser: __parse_473287f8298dba71_strip_query,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_3854fe5bb34caec3,
+            returnTypeSerializer: __ser_3854fe5bb34caec3_strip_json
+        }
+    ]
+};
+SeoTargetController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "SeoTargetController"
+};
+InternalEmitController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "InternalEmitController",
+            methodName: "secret",
+            httpMethod: "GET",
+            path: "/_internal/seo-secret",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_10fc726648976d5a,
+            returnTypeSerializer: __ser_10fc726648976d5a_strip_json,
+            internal: true
+        }
+    ]
+};
+InternalEmitController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "InternalEmitController"
+};
+SeoToInternalController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "SeoToInternalController",
+            methodName: "go",
+            httpMethod: "GET",
+            path: "/seo/pretty",
+            params: [],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            seo: true
+        }
+    ]
+};
+SeoToInternalController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "SeoToInternalController"
 };

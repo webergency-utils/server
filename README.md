@@ -105,13 +105,14 @@ Entry points:
 1. **AOT transformer / `webergency-tsc`** — Analyzes controllers at build time; emits `Symbol.for` meta + typechecker validators into each file’s JS. Decorators are no-ops without that emit.
 2. **Per-Server registry** — `ApplicationRegistry` is owned by each `Server` / `Microservice`. Bootstrap walks modules/controllers lazily on first `start()`/`fetch()`. Active registry is available to the request/DI stack via `getRegistry()` / `runWithRegistry()`.
 3. **Adapters** — Maps Web Standard `Request` / `Response` to `Bun.serve`, `Deno.serve`, or Node `http`/`https` (Node 22+). Runtime is auto-detected.
-4. **Pipeline** — Match route → security checks → middlewares → guards → interceptors → handler → response merge (`ResponseBag` headers/status).
-5. **Routing** — Exact paths resolve through a per-method map with no regex. Pattern routes are bucketed per method and tried most-specific first, so `/users/me` beats `/users/:id` and `/files/:name` beats `/files/*rest` no matter what order they were registered in. Registration order only breaks ties between equally specific patterns, and a pattern that can never be reached (e.g. a second `/u/:key` after `/u/:id`) is warned about at bootstrap. A request whose path matches only under other verbs gets **405** with `Allow`; an unknown path is still 404. A WebSocket upgrade to a non-WS path stays 404, since WS is a transport rather than an advertised method.
+4. **Pipeline** — Match route → security checks → middlewares → guards → interceptors → handler → response merge (`ServerResponse` headers/status).
+5. **Routing** — Exact paths resolve through a per-method map with no regex. Pattern routes are bucketed per method and tried most-specific first, so `/users/me` beats `/users/:id` and `/files/:name` beats `/files/*rest` no matter what order they were registered in. Registration order only breaks ties between equally specific patterns, and a pattern that can never be reached (e.g. a second `/u/:key` after `/u/:id`) is warned about at bootstrap. A request whose path matches only under other verbs gets **405** with `Allow`; an unknown path is still 404. A WebSocket upgrade to a non-WS path stays 404, since WS is a transport rather than an advertised method. **SEO / Internal:** `@Seo` endpoints form a high-priority group tried before public routes; they return `{ method, path, query?, body? }` or void (fallthrough). `@Internal` paths are forward-only (direct HTTP → 404). `ServerResponse.forward` / SEO returns re-dispatch on public ∪ internal (SEO skipped; nested hops allowed, cycles rejected). See `docs/adr/0008-seo-internal-dispatch.md`.
 6. **OPTIONS** — Genuine CORS preflight is answered by the framework before guards, using the target route's own `@Cors` config. A plain `OPTIONS` request routes normally to `@Options` / `@All`, or gets `204` + `Allow`. Asterisk-form `OPTIONS *` reports server-wide `Allow` without routing.
-7. **Body `from` modes** — Query, path, cookie, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON bodies use `from: 'json'`. Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
+7. **Body `from` modes** — Query, path, cookie, header, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON / `application/*+json` and `text/plain` use `from: 'json'` (`text/plain` is the raw string, charset-aware). Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
 8. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
 9. **Request ID** — Every request accepts or generates `X-Request-Id`, exposes it on `RequestContext` / `LogContext`, and echoes it on the response.
 10. **Health** — Optional `health` probes answer before routing: liveness while the process can answer, readiness only when bootstrapped, listening, and not shutting down. OpenTelemetry is left to consumer interceptors / `Server` events — see `docs/adr/0005-observability.md`.
+11. **ServerRequest / ServerResponse** — Sealed facades injected by `@Request` / `@Response` (and middleware). Not Fetch types. Buffered uploads via `req.formData()` / `req.file()`; streaming multipart via `@File` / `req.multipart()` / `req.upload()` (MultiBuffer parser). See `docs/adr/0006-server-request-response.md` and `docs/adr/0007-file-uploads-multipart.md`.
 
 **Dependencies:** `@webergency-utils/typechecker` supplies runtime validators referenced by AOT-emitted code. Peer `typescript` (`^5 || ^6`) is required for `webergency-tsc`, the transformer plugin, and `register`. Package type is ESM (`"type": "module"`).
 
@@ -121,7 +122,9 @@ Entry points:
 * **Endpoint** — Handler mapped to a verb + path (or RPC pattern).
 * **Validation mode** — `strict` | `strip` | `relaxed` for body/query/response shaping.
 * **`from`** — Typechecker coercion mode (`json` vs `query`) chosen from the parameter source / Content-Type.
-* **ResponseBag** — Mutable headers/status bag shared by middleware and `@Response`.
+* **ServerRequest** — Sealed request facade (`@Request` / middleware); string bags + body helpers. Not Fetch `Request`.
+* **ServerResponse** — Mutable headers/status bag (`@Response` / middleware); chainable `status` / `header` / `headers` / `cookie` / `redirect` / `forward`. Not Fetch `Response`. (`ResponseBag` is a deprecated alias.)
+* **SeoForward / `@Seo` / `@Internal` / forward** — SEO-first route group, rewrite descriptor, forward-only endpoints, and one-hop internal re-dispatch (no `Location`). See ADR 0008.
 * **Guard / Interceptor / Middleware** — Auth gate, wrap-around handler, and pre-handler hooks.
 * **Adapter** — Runtime bridge (`Node` / `Bun` / `Deno`) under `Server`.
 * **ApplicationRegistry** — Per-instance route/DI registry filled from `Symbol.for` meta at bootstrap.
@@ -237,6 +240,8 @@ await ms.shutdown();
 * `@Intercept` / `@OverrideIntercept` / `@Unintercept` — Interceptors.
 * `@Use` / `@OverrideUse` / `@Unuse` — Middlewares.
 * `@Public` — Marks route/class public (framework-specific bypass metadata).
+* `@Seo` — Paren-free; high-priority SEO route group (return `SeoForward` or void).
+* `@Internal` — Paren-free; forward-only (not externally routable).
 * `@Meta(...)` / `@SetMetadata(key, value)` — Arbitrary metadata for `Reflector`.
 * `@Injectable(options?)` / `@Inject(token?)` / `@Module(metadata)` / `@Global()` — DI.
 * Lifecycle interfaces: `OnModuleInit`, `OnApplicationBootstrap`, `OnModuleDestroy`, `BeforeApplicationShutdown`, `OnApplicationShutdown`.
@@ -255,12 +260,46 @@ await ms.shutdown();
 
 **With arguments:**
 
-* `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `from: 'json'`; urlencoded → `from: 'query'`. Missing CT sniffs JSON then form; unsupported CT (including multipart) → **415**; bad JSON → **400**. Uploads: `@Request` + `req.formData()`.
+* `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `parser` (`from: 'json'`); `text/plain` → string; urlencoded → `parserQuery` (`from: 'query'`); **`multipart/form-data` → bag + AOT validator (`from: 'query'`)** so DTOs like `{ title: string; documents: UploadedFile[] }` coerce strings and keep file instances. Missing CT sniffs JSON then form; unsupported CT → **415**; bad JSON → **400**.
+* `@File` / `@Files` — Streaming multipart uploads. Class/method `@File({ dest, maxFileSize, onFile, fields })` configures handling (merged ServerOptions.files → Module.files → controller → endpoint). Parameter `@File('field')` injects `UploadedFile`; `@Files()` injects all files. Prefer `dest` for temp/disk paths, or `onFile` for custom sinks (e.g. S3). For the full form bag use `@Body()` with multipart Content-Type.
 * `@Query(name?, mode?)` — Query string (`from: 'query'`).
-* `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie.
+* `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie (`from: 'query'`).
+* `@Headers` / `@Cookies` — Whole string maps, AOT-validated against the parameter type (`from: 'query'`); parsers receive a copy and do not mutate `ServerRequest` bags.
 * `@ConnectedSocket()` — WebSocket instance for `@Ws`.
 
-`@Response` injects the shared `ResponseBag` (same as middleware). Set `headers` / `status` (`statusCode` alias); the handler return value still supplies the body.
+`@Request` injects **`ServerRequest`** (sealed; not Fetch). Convenience fields mirror `@Ip` / `@Peer` / …; buffered body helpers honor `maxBodySize`. Streaming uploads: `req.multipart()` / `req.upload(name)` / `req.uploads()` / `req.payload()`.
+
+`@Response` injects **`ServerResponse`** (same as middleware). Chainable: `status(code, statusText?)`, `header(name, value)`, `headers({ ... })`, `cookie(name, value?, options?)`, `stream(body)`, `redirect(code, url)`, `forward({ method, path, query?, body? })`. Empty/`null`/`undefined` cookie values clear the cookie. Returning a plain value still supplies the body (JSON / binary). **Returning the `ServerResponse` itself** means the handler owns the response — the framework finalizes with that facade’s status, headers, and optional `stream()` body and does not JSON-serialize the return value. **`forward`** stashes an internal rewrite (no `Location`); after the handler returns, the framework re-dispatches to that `method`+`path` on public/`@Internal` routes. Nested forwards are allowed (max 16 hops); cycles are rejected.
+
+#### SEO / Internal quick start
+
+```ts
+import { Controller, Get, Param, Seo, Internal, SeoForward } from '@webergency-utils/server';
+
+@Controller()
+@Seo
+class SeoController {
+  constructor(private pages: PageRepo) {}
+
+  @Get('/blog/:slug')
+  async blog(@Param('slug') slug: string): Promise<SeoForward | void> {
+    const page = await this.pages.findBySlug(slug);
+    if (!page) return; // fall through to the next SEO match, then public routes
+    return { method: 'GET', path: page.path, query: page.query };
+  }
+}
+
+@Controller()
+@Internal
+class CheckoutInternal {
+  @Get('/_internal/checkout')
+  run() {
+    return { ok: true };
+  }
+}
+```
+
+SEO handlers are matched before public routes and may only return a rewrite descriptor or void. `@Internal` paths are reachable only via `forward` / SEO rewrite (direct HTTP → 404).
 
 `@Ip` uses `trustProxy` + TCP peer / `X-Forwarded-For` (see `ServerOptions.trustProxy`).
 
@@ -273,11 +312,11 @@ await ms.shutdown();
 Coercion via `from`:
 
 * JSON body: revive Date / RegExp / bigint / Set / Map shapes; no `"30"` → `30`.
-* Query / Param / Cookie / urlencoded: string coercion and single→array wrapping when needed.
+* Query / Param / Cookie / Header / Headers / Cookies / urlencoded: string coercion and single→array wrapping when needed.
 
 ### Types & helpers
 
-* `EndpointRequest` / `EndpointResponse` (`ResponseBag`) / `Middleware` / `MiddlewareClass`
+* `ServerRequest` / `ServerResponse` / `EndpointRequest` / `EndpointResponse` / `ResponseBag` (alias) / `CookieOptions` / `Middleware` / `MiddlewareClass`
 * `ServerWebSocket`, `PeerCert`, `PeerCertSubject`, `TlsOptions`
 * `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
 * `Scope` (`DEFAULT` | `TRANSIENT` | `REQUEST`)
@@ -338,7 +377,7 @@ await server.start();
 ### `@Body` returns 415
 
 **Cause:** Non-empty body with unsupported Content-Type, or `allowedContentTypes` set and Content-Type missing/not allowlisted when a body is indicated.  
-**Fix:** Send `application/json` or `application/x-www-form-urlencoded`, or omit the body. Use `@Request` + `formData()` for multipart.
+**Fix:** Send `application/json`, `text/plain`, `application/x-www-form-urlencoded`, or `multipart/form-data` (via `@Body` DTO / `@File` / `@Files`), or omit the body. Buffered `formData()` / `file()` also work for small uploads.
 
 ### `@Ip` ignores `X-Forwarded-For`
 

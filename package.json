@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "license": "MIT",
   "type": "module",
@@ -52,7 +52,7 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.4.0"
+    "@webergency-utils/typechecker": "^0.5.2"
   },
   "peerDependencies": {
     "typescript": "^5 || ^6"

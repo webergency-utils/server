@@ -251,7 +251,7 @@ describe( 'Security Helper & Integration Tests', () =>
                 {
                     for( let i = 0; i < 40; i++ )
                     {
-                        if( req.abortSignal?.aborted )
+                        if( req.signal?.aborted )
                         {
                             aborted = true;
                             break;

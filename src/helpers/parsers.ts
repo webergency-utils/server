@@ -13,6 +13,16 @@ function createPlainObject(): Record<string | number, any>
     return {};
 }
 
+/**
+ * Mutable bag with PHP/Rails-style `assign(key, value)` bracket unflattening.
+ * Used by urlencoded `QueryParser` and multipart `MultipartPayload.toObject()`.
+ */
+export type FormBag =
+{
+    assign( key: string | number, value: any ): void
+    [key: string]: any
+};
+
 const Query = new Proxy( Object, {
     construct : () =>
     {
@@ -67,8 +77,15 @@ const Query = new Proxy( Object, {
                             {
                                 obj[k].push( value );
                             }
-                            else if( typeof obj[k] === 'object' && obj[k] !== null )
+                            else if(
+                                typeof obj[k] === 'object'
+                                && obj[k] !== null
+                                && Object.getPrototypeOf( obj[k]) === Object.prototype
+                            )
                             {
+                                // Nested plain form object — append under a numeric key
+                                // (e.g. items[name]=first&items=second → { name, 0: second }).
+                                // Class instances (UploadedFile, …) array-coerce like scalars.
                                 const nested = obj[k];
                                 obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
                             }
@@ -90,11 +107,17 @@ const Query = new Proxy( Object, {
     }
 });
 
+/** Empty form bag with the same `assign` semantics as urlencoded query parsing. */
+export function createFormBag(): FormBag
+{
+    return new ( Query as any )() as FormBag;
+}
+
 export class QueryParser
 {
     public static parse<T>( querystring: string ): T
     {
-        const data = new ( Query as any )();
+        const data = createFormBag();
         let value, pair, last_pair = 0;
         const sep = '&', eq = '=';
 

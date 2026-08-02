@@ -2,8 +2,8 @@ import ts from 'typescript';
 
 /**
  * Everything the AOT pass learns about a program: which classes exist and where, the
- * endpoints found on them, and the validator expressions to emit. One registry is shared
- * across the whole program so a validator is built once and reused by every file.
+ * endpoints found on them, and the validator/parser/serializer expressions to emit. One
+ * registry is shared across the whole program so each expression is built once and reused.
  */
 export interface ProjectRegistry {
     controllers       : Map<string, { path : string, injections : Map<string, string> }>
@@ -13,6 +13,8 @@ export interface ProjectRegistry {
     interceptors      : Map<string, { path : string }>
     endpoints         : any[]
     validators        : Map<string, ts.Expression>
+    parsers           : Map<string, ts.Expression>
+    serializers       : Map<string, ts.Expression>
     externalManifests : Set<string>
 }
 
@@ -26,6 +28,8 @@ export function createRegistry(): ProjectRegistry
         interceptors      : new Map(),
         endpoints         : [],
         validators        : new Map(),
+        parsers           : new Map(),
+        serializers       : new Map(),
         externalManifests : new Set()
     };
 }

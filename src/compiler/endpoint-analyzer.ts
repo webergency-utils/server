@@ -1,14 +1,20 @@
 import ts from 'typescript';
-import { buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
+import { buildValidator, buildSerializer, generateHash } from '@webergency-utils/typechecker/transformer';
+import type { ValidationMode } from '@webergency-utils/typechecker';
+
 import { ProjectRegistry } from './registry.js';
 import {
     HTTP_METHOD_DECORATORS,
     extractCorsConfig,
     extractSecurityConfig,
+    extractFileConfig,
     extractResponseMode,
     hasPublicDecorator,
+    hasSeoDecorator,
+    hasInternalDecorator,
     parseExpression
 } from './decorator-config.js';
+import { mergeFileConfigs } from '../helpers/file-upload.js';
 import { unwrapSsePayloadType } from './sse-types.js';
 import { findConstructorDeps, resolvePropertyDeps } from './di-resolution.js';
 import { MetadataCollector, applyDirectives, byName, guardName } from './metadata-collector.js';
@@ -58,6 +64,39 @@ function isVoidType( type: ts.Type, checker: ts.TypeChecker ): boolean
     const asString = checker.typeToString( type );
 
     return asString === 'void' || asString === 'undefined' || ( type.flags & ts.TypeFlags.Void ) !== 0 || ( type.flags & ts.TypeFlags.Undefined ) !== 0;
+}
+
+/** True when a type is (structurally or by name) a valid `@Seo` return: void | SeoForward | unions thereof. */
+function isSeoCompatibleReturnType( type: ts.Type, checker: ts.TypeChecker ): boolean
+{
+    if( isVoidType( type, checker )){ return true }
+
+    if( type.isUnion())
+    {
+        return type.types.every( t => isSeoCompatibleReturnType( t, checker ));
+    }
+
+    const name = type.aliasSymbol?.escapedName?.toString() || type.symbol?.name;
+
+    if( name === 'SeoForward' ){ return true }
+
+    const method = checker.getPropertyOfType( type, 'method' );
+    const pathProp = checker.getPropertyOfType( type, 'path' );
+
+    if( !method || !pathProp ){ return false }
+
+    const methodDecl = method.valueDeclaration || method.declarations?.[0];
+    const pathDecl = pathProp.valueDeclaration || pathProp.declarations?.[0];
+
+    if( !methodDecl || !pathDecl ){ return false }
+
+    const methodType = checker.getTypeOfSymbolAtLocation( method, methodDecl );
+    const pathType = checker.getTypeOfSymbolAtLocation( pathProp, pathDecl );
+    const methodStr = checker.typeToString( methodType );
+    const pathStr = checker.typeToString( pathType );
+
+    return (( methodType.flags & ts.TypeFlags.StringLike ) !== 0 || methodStr === 'string' )
+        && (( pathType.flags & ts.TypeFlags.StringLike ) !== 0 || pathStr === 'string' );
 }
 
 /** How an HTTP method decorator maps onto the runtime endpoint shape. */
@@ -156,6 +195,8 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
 
                         const prefix = ( controllerDec.expression as ts.CallExpression ).arguments[0] as ts.StringLiteral;
                         const classPublic = hasPublicDecorator( decorators );
+                        const classSeo = hasSeoDecorator( decorators );
+                        const classInternal = hasInternalDecorator( decorators );
                         const classMeta = collector.collectClassMetadata( statement );
 
                         // Nearest declaration wins for each of these, parent first.
@@ -164,6 +205,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                             : undefined;
                         const classCors = mergeConfigs( classMeta.corsConfigs );
                         const classSecurity = mergeConfigs( classMeta.securityConfigs );
+                        const classFiles = mergeFileConfigs( classMeta.fileConfigs );
 
                         // Scan for property injections AFTER decorators have registered their classes
                         collector.scanInjections( statement, controllerName );
@@ -188,12 +230,28 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     const fullPath = ( prefix?.text || '' ) + ( pathArg?.text || '' );
 
                                     const methodPublic = hasPublicDecorator( mDecs );
+                                    const methodSeo = hasSeoDecorator( mDecs );
+                                    const methodInternal = hasInternalDecorator( mDecs );
+                                    const isSeo = methodSeo || classSeo;
+                                    const isInternal = methodInternal || classInternal;
+
+                                    if( isSeo && isInternal )
+                                    {
+                                        diagnostics.error(
+                                            member,
+                                            DiagnosticCode.DECORATOR_MISUSE,
+                                            `Method "${member.name.getText()}" cannot be both @Seo and @Internal`
+                                        );
+                                    }
 
                                     const methodCors = extractCorsConfig( mDecs, sourceFile );
                                     const activeCors = methodCors !== undefined ? methodCors : classCors;
 
                                     const methodSecurity = extractSecurityConfig( mDecs, sourceFile );
                                     const activeSecurity = methodSecurity !== undefined ? methodSecurity : classSecurity;
+
+                                    const methodFiles = extractFileConfig( mDecs, sourceFile );
+                                    const activeFiles = mergeFileConfigs([ classFiles, methodFiles ]);
 
                                     const methodResponseMode = extractResponseMode( mDecs );
                                     const activeResponseMode = methodResponseMode !== undefined ? methodResponseMode : classResponseMode;
@@ -235,6 +293,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     }
 
                                     let returnTypeValidatorHash = '';
+                                    let returnTypeSerializerHash = '';
                                     const returned = unwrapReturnType( member, checker );
 
                                     if( returned ) 
@@ -243,36 +302,48 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                         const returnTypeStr = checker.typeToString( returnType );
                                         const isVoid = isVoidType( returnType, checker );
                                         const isResponse = returnTypeStr === 'Response' || returnType.symbol?.name === 'Response';
-                                        const isAnyOrUnknown = returnTypeStr === 'any' || returnTypeStr === 'unknown' || returnTypeStr === 'never';
+                                        const isNever = returnTypeStr === 'never';
 
-                                        if( !isVoid && !isResponse && !isAnyOrUnknown && !isWs )
+                                        if( isSeo )
+                                        {
+                                            if( !isSeoCompatibleReturnType( returnType, checker ))
+                                            {
+                                                diagnostics.error(
+                                                    member,
+                                                    DiagnosticCode.INVALID_SIGNATURE,
+                                                    `Method "${member.name.getText()}" decorated with @Seo must return SeoForward | void`
+                                                    + `${returned.isPromise ? ' (or Promise of that)' : ''}. Found: `
+                                                    + `${returned.isPromise ? 'Promise<' + returnTypeStr + '>' : returnTypeStr}`
+                                                );
+                                            }
+                                        }
+                                        else if( !isVoid && !isResponse && !isNever && !isWs )
                                         {
                                             let typeForValidator: ts.Type | undefined = returnType;
 
                                             if( isSse )
                                             {
                                                 typeForValidator = unwrapSsePayloadType( returnType, checker );
-
-                                                if( typeForValidator )
-                                                {
-                                                    const payloadStr = checker.typeToString( typeForValidator );
-
-                                                    if( payloadStr === 'any' || payloadStr === 'unknown' || payloadStr === 'never' )
-                                                    {
-                                                        typeForValidator = undefined;
-                                                    }
-                                                }
                                             }
 
                                             if( typeForValidator )
                                             {
-                                                const hash = generateHash( typeForValidator, checker );
+                                                const mode = ( activeResponseMode || 'strip' ) as ValidationMode;
+                                                const typeHash = generateHash( typeForValidator, checker );
 
-                                                if( !registry.validators.has( hash ))
+                                                if( !registry.validators.has( typeHash ))
                                                 {
                                                     buildValidator( typeForValidator, checker, registry.validators );
                                                 }
-                                                returnTypeValidatorHash = hash;
+                                                returnTypeValidatorHash = typeHash;
+
+                                                const serKey = `${typeHash}_${mode}_json`;
+
+                                                if( !registry.serializers.has( serKey ))
+                                                {
+                                                    buildSerializer( typeForValidator, checker, registry.serializers, typeHash, { mode, format : 'json' });
+                                                }
+                                                returnTypeSerializerHash = serKey;
                                             }
                                         }
                                     }
@@ -298,6 +369,12 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     {
                                         endpoint.returnTypeValidator = returnTypeValidatorHash;
                                     }
+
+                                    if( returnTypeSerializerHash ) 
+                                    {
+                                        endpoint.returnTypeSerializer = returnTypeSerializerHash;
+                                    }
+
 
                                     if( isSse ) 
                                     {
@@ -333,6 +410,22 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     {
                                         endpoint.security = activeSecurity;
                                     }
+
+                                    if( activeFiles !== undefined )
+                                    {
+                                        endpoint.files = activeFiles;
+                                    }
+
+                                    if( isSeo )
+                                    {
+                                        endpoint.seo = true;
+                                    }
+
+                                    if( isInternal )
+                                    {
+                                        endpoint.internal = true;
+                                    }
+
                                     registry.endpoints.push( endpoint );
                                 }
                             }

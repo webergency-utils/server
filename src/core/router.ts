@@ -274,6 +274,24 @@ export class Router
     }
 
     /**
+     * Every route that matches `method`+`path`, most-specific first (then registration order).
+     * Used by the SEO group so a void return can fall through to the next match.
+     */
+    public matchAll( method: string, path: string ): RouteMatch[]
+    {
+        this.compile();
+
+        const matches = this.collectMatches( method, path );
+
+        if( matches.length === 0 && method === 'HEAD' )
+        {
+            return this.collectMatches( 'GET', path );
+        }
+
+        return matches;
+    }
+
+    /**
      * HTTP methods registered for `path`, for `Allow` on OPTIONS and 405 responses.
      * OPTIONS is always supported, and HEAD is implied by GET.
      */
@@ -314,23 +332,38 @@ export class Router
 
     private matchMethod( method: string, path: string ): RouteMatch | null
     {
+        const matches = this.collectMatches( method, path );
+
+        return matches[0] ?? null;
+    }
+
+    private collectMatches( method: string, path: string ): RouteMatch[]
+    {
+        const out: RouteMatch[] = [];
+
         // `pathMatcher` accepts an optional trailing slash, so the map lookup must too.
         const exact = this.staticRoutes.get( `${method} ${path}` )
             ?? ( path.endsWith( '/' ) ? this.staticRoutes.get( `${method} ${path.slice( 0, -1 )}` ) : undefined );
 
-        if( exact ){ return { metadata : exact.metadata, params : Object.create( null ) } }
+        if( exact )
+        {
+            out.push({ metadata : exact.metadata, params : Object.create( null ) });
+        }
 
         const bucket = this.dynamicRoutes.get( method );
 
-        if( !bucket ){ return null }
+        if( !bucket ){ return out }
 
         for( const { route } of bucket )
         {
             const match = route.matchFn( path );
 
-            if( match ){ return { metadata : route.metadata, params : match.params } }
+            if( match )
+            {
+                out.push({ metadata : route.metadata, params : match.params });
+            }
         }
 
-        return null;
+        return out;
     }
 }

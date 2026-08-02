@@ -29,10 +29,12 @@ describe( 'SwaggerSpecGenerator unit', () =>
             export interface Nested { id: string }
             export interface QueryShape { a: string; b?: number }
             export interface TreeNode { value: string; child?: TreeNode }
+            export class MultipartPayload {}
 
             export class DocController {
                 getOne( id: number, q: QueryShape ) { return { id, q } }
                 upload( body: ArrayBuffer ): Promise<{ ok: boolean }> { return Promise.resolve({ ok: true }) }
+                bag( data: MultipartPayload ) { return data }
                 nested(): Nested { return { id: '1' } }
                 tree( body: TreeNode ): TreeNode { return body }
             }
@@ -89,6 +91,24 @@ describe( 'SwaggerSpecGenerator unit', () =>
                 path       : '/docs/ws',
                 params     : [],
                 guards : [], interceptors : [], meta : {}
+            },
+            {
+                controller : 'DocController',
+                methodName : 'upload',
+                httpMethod : 'POST',
+                path       : '/docs/file',
+                params     : [{ source : 'File', name : 'avatar' }],
+                files      : { fields : { avatar : { dest : '/tmp' }, note : {} } },
+                guards : [], interceptors : [], meta : {}
+            },
+            {
+                controller : 'DocController',
+                methodName : 'bag',
+                httpMethod : 'POST',
+                path       : '/docs/multipart',
+                params     : [{ source : 'Body' }],
+                files      : { fields : { photo : {} } },
+                guards : [], interceptors : [], meta : {}
             }
         );
 
@@ -102,6 +122,11 @@ describe( 'SwaggerSpecGenerator unit', () =>
         expect( spec.paths['/docs/{id}'].get.parameters.some(( p: any ) => p.in === 'path' && p.name === 'id' )).toBe( true );
         expect( spec.paths['/docs/{id}'].get.parameters.some(( p: any ) => p.in === 'query' && p.name === 'a' )).toBe( true );
         expect( spec.paths['/docs/upload'].post.requestBody.content['application/octet-stream']).toBeDefined();
+        expect( spec.paths['/docs/file'].post.requestBody.content['multipart/form-data'].schema.properties.avatar ).toEqual({
+            type   : 'string',
+            format : 'binary'
+        });
+        expect( spec.paths['/docs/multipart'].post.requestBody.content['multipart/form-data']).toBeDefined();
         expect( spec.paths['/docs/ws']).toBeUndefined();
         expect( Object.keys( spec.components.schemas ).length ).toBeGreaterThan( 0 );
         expect( JSON.stringify( spec )).toContain( '#/components/schemas/' );

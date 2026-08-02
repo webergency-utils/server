@@ -52,8 +52,7 @@ describe( 'Actual AOT Integration Test', () =>
         const data = await res.json();
         expect( data.errors[0]).toEqual({
             path  : 'body',
-            error : 'PropertyNotAllowed<unknown>',
-            value : 'prop'
+            error : 'PropertyNotAllowed<unknown>'
         });
     });
 
@@ -238,8 +237,7 @@ describe( 'Actual AOT Integration Test', () =>
         const data1 = await res1.json();
         expect( data1.errors[0]).toEqual({
             path  : 'body.age',
-            error : 'Type<number>',
-            value : '30'
+            error : 'Type<number>'
         });
 
         const res2 = await server.fetch( new Request( 'http://localhost/type-safety/mixed-array', {
@@ -251,8 +249,7 @@ describe( 'Actual AOT Integration Test', () =>
         const data2 = await res2.json();
         expect( data2.errors[0]).toEqual({
             path  : 'body',
-            error : 'Type<Array>',
-            value : 'a'
+            error : 'Type<Array>'
         });
     });
 
@@ -949,14 +946,55 @@ describe( 'Actual AOT Integration Test', () =>
         {
             const res = await server.fetch( new Request( 'http://localhost/class-public/test' ));
             expect( res.status ).toBe( 200 );
-            expect( await res.text() ).toBe( 'ok' );
+            expect( await res.text() ).toBe( '"ok"' );
         });
 
         it( 'should bypass all class and method guards if method has @Public', async () => 
         {
             const res = await server.fetch( new Request( 'http://localhost/method-public/test' ));
             expect( res.status ).toBe( 200 );
-            expect( await res.text() ).toBe( 'ok' );
+            expect( await res.text() ).toBe( '"ok"' );
+        });
+    });
+
+    describe( 'SEO / Internal AOT emit', () =>
+    {
+        it( 'emits seo and internal flags on endpoint meta', () =>
+        {
+            const SeoEmitController = aotHosts.controllers.find( c => c.name === 'SeoEmitController' )!;
+            const InternalEmitController = aotHosts.controllers.find( c => c.name === 'InternalEmitController' )!;
+            const SeoToInternalController = aotHosts.controllers.find( c => c.name === 'SeoToInternalController' )!;
+
+            const seoMeta = getControllerMeta( SeoEmitController )!;
+            const seoEp = seoMeta.endpoints.find(( e: any ) => e.methodName === 'blog' )!;
+            expect( seoEp.seo ).toBe( true );
+            expect( seoEp.internal ).toBeUndefined();
+
+            const internalMeta = getControllerMeta( InternalEmitController )!;
+            const internalEp = internalMeta.endpoints.find(( e: any ) => e.methodName === 'secret' )!;
+            expect( internalEp.internal ).toBe( true );
+            expect( internalEp.seo ).toBeUndefined();
+
+            const bridgeMeta = getControllerMeta( SeoToInternalController )!;
+            expect( bridgeMeta.endpoints[0].seo ).toBe( true );
+        });
+
+        it( 'forwards SEO routes and hides Internal from direct HTTP', async () =>
+        {
+            const pretty = await server.fetch( new Request( 'http://localhost/seo/pretty' ));
+            expect( pretty.status ).toBe( 200 );
+            expect( await pretty.json()).toEqual({ secret : true });
+            expect( pretty.headers.get( 'Location' )).toBeNull();
+
+            const direct = await server.fetch( new Request( 'http://localhost/_internal/seo-secret' ));
+            expect( direct.status ).toBe( 404 );
+
+            const blog = await server.fetch( new Request( 'http://localhost/seo/blog/42' ));
+            expect( blog.status ).toBe( 200 );
+            expect( await blog.json()).toEqual({ id : '42' });
+
+            const miss = await server.fetch( new Request( 'http://localhost/seo/blog/miss' ));
+            expect( miss.status ).toBe( 404 );
         });
     });
 
@@ -1007,6 +1045,56 @@ describe( 'Actual AOT Integration Test', () =>
                 if( fs.existsSync( tempFilePath )) 
                 {
                     fs.unlinkSync( tempFilePath );
+                }
+            }
+        });
+
+        it( 'should throw compile error if @Seo method returns a non-SeoForward type', async () =>
+        {
+            const { transformer, createRegistry } = await import( '../../compiler/transformer.js' );
+            const ts = ( await import( '../../compiler/ts.js' )).default;
+            const fsMod = await import( 'fs' );
+            const pathMod = await import( 'path' );
+
+            const tempFilePath = pathMod.resolve( __dirname, 'temp-seo-return-error.ts' );
+            const sourceCode = `
+                import { Controller, Get, Seo } from '../../index.js';
+                @Controller()
+                @Seo
+                class BadSeo {
+                    @Get('/x')
+                    go(): string { return 'nope'; }
+                }
+            `;
+
+            fsMod.writeFileSync( tempFilePath, sourceCode );
+
+            const serverRoot = pathMod.resolve( __dirname, '../../index.ts' );
+            const registry = createRegistry();
+            const program = ts.createProgram([ serverRoot, tempFilePath ], {
+                experimentalDecorators : true,
+                target                 : ts.ScriptTarget.ES2022,
+                module                 : ts.ModuleKind.NodeNext,
+                moduleResolution       : ts.ModuleResolutionKind.NodeNext,
+                skipLibCheck           : true
+            });
+
+            const sourceFile = program.getSourceFile( tempFilePath );
+            const runTransform = () =>
+            {
+                const compileTransformer = transformer( program, registry )({} as any );
+                compileTransformer( sourceFile! );
+            };
+
+            try
+            {
+                expect( runTransform ).toThrow( /@Seo must return SeoForward \| void/ );
+            }
+            finally
+            {
+                if( fsMod.existsSync( tempFilePath ))
+                {
+                    fsMod.unlinkSync( tempFilePath );
                 }
             }
         });

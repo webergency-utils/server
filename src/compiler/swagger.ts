@@ -139,15 +139,43 @@ export class SwaggerSpecGenerator
                 }
                 else if( paramMeta.source === 'Body' ) 
                 {
-                    const schema = registerSchema( buildJsonSchema( type, checker ));
-                    requestBody = {
-            required : true,
-            content  : {
-                'application/json' : {
-                    schema
-                }
-            }
-          };
+                    const typeText = paramDecl.type ? paramDecl.type.getText( sourceFile ) : '';
+                    const isMultipartBag = /\b(MultipartPayload|UploadedFile)\b/.test( typeText )
+                        || !!( ep.files && typeof ep.files === 'object' );
+
+                    if( isMultipartBag )
+                    {
+                        const properties = requestBody?.content?.['multipart/form-data']?.schema?.properties
+                            ? { ...requestBody.content['multipart/form-data'].schema.properties }
+                            : {};
+
+                        requestBody = {
+                            required : true,
+                            content  : {
+                                'multipart/form-data' : {
+                                    schema : {
+                                        type                 : 'object',
+                                        properties           : Object.keys( properties ).length
+                                            ? properties
+                                            : { file : { type : 'string', format : 'binary' } },
+                                        additionalProperties : true
+                                    }
+                                }
+                            }
+                        };
+                    }
+                    else
+                    {
+                        const schema = registerSchema( buildJsonSchema( type, checker ));
+                        requestBody = {
+                            required : true,
+                            content  : {
+                                'application/json' : {
+                                    schema
+                                }
+                            }
+                        };
+                    }
                 }
                 else if( paramMeta.source === 'RawBody' )
                 {
@@ -159,6 +187,87 @@ export class SwaggerSpecGenerator
                 }
             }
           };
+                }
+                else if( paramMeta.source === 'File' && paramMeta.name )
+                {
+                    const properties = requestBody?.content?.['multipart/form-data']?.schema?.properties
+                        ? { ...requestBody.content['multipart/form-data'].schema.properties }
+                        : {};
+                    properties[paramMeta.name] = { type : 'string', format : 'binary' };
+                    requestBody = {
+                        required : true,
+                        content  : {
+                            'multipart/form-data' : {
+                                schema : {
+                                    type : 'object',
+                                    properties
+                                }
+                            }
+                        }
+                    };
+                }
+                else if( paramMeta.source === 'Files' )
+                {
+                    const properties = requestBody?.content?.['multipart/form-data']?.schema?.properties
+                        ? { ...requestBody.content['multipart/form-data'].schema.properties }
+                        : {};
+
+                    if( paramMeta.name )
+                    {
+                        properties[paramMeta.name] = {
+                            type  : 'array',
+                            items : { type : 'string', format : 'binary' }
+                        };
+                    }
+
+                    requestBody = {
+                        required : true,
+                        content  : {
+                            'multipart/form-data' : {
+                                schema : {
+                                    type : 'object',
+                                    properties : Object.keys( properties ).length
+                                        ? properties
+                                        : { file : { type : 'string', format : 'binary' } }
+                                }
+                            }
+                        }
+                    };
+                }
+            }
+
+            // Hierarchical `@File({ fields })` without param decorators still documents multipart.
+            if( ep.files && typeof ep.files === 'object' )
+            {
+                const fieldNames = ep.files.fields && typeof ep.files.fields === 'object'
+                    ? Object.keys( ep.files.fields )
+                    : [];
+                const existing = requestBody?.content?.['multipart/form-data']?.schema?.properties || {};
+                const properties = { ...existing };
+
+                for( const name of fieldNames )
+                {
+                    if( !properties[name])
+                    {
+                        properties[name] = { type : 'string', format : 'binary' };
+                    }
+                }
+
+                if( Object.keys( properties ).length > 0 || !requestBody )
+                {
+                    requestBody = {
+                        required : true,
+                        content  : {
+                            'multipart/form-data' : {
+                                schema : {
+                                    type       : 'object',
+                                    properties : Object.keys( properties ).length
+                                        ? properties
+                                        : { file : { type : 'string', format : 'binary' } }
+                                }
+                            }
+                        }
+                    };
                 }
             }
 
