@@ -27,6 +27,66 @@ export function getBaseClass( classDecl: ts.ClassDeclaration, checker: ts.TypeCh
     return null;
 }
 
+/** Resolves a parameter or property type symbol/AST node to a non-primitive DI token name. Handles default imports & aliased symbols. */
+export function resolveTokenFromType( typeNode: ts.TypeNode | undefined, type: ts.Type, checker: ts.TypeChecker ): string | null
+{
+    let symbol = type.getSymbol() || type.aliasSymbol;
+
+    if( !symbol && typeNode ) 
+    {
+        symbol = checker.getSymbolAtLocation( typeNode );
+    }
+
+    let name: string | undefined;
+
+    if( symbol ) 
+    {
+        let targetSymbol = symbol;
+
+        if( targetSymbol.flags & ts.SymbolFlags.Alias ) 
+        {
+            try 
+            {
+                const aliased = checker.getAliasedSymbol( targetSymbol );
+
+                if( aliased ) { targetSymbol = aliased }
+            }
+            catch {}
+        }
+
+        name = targetSymbol.getName();
+
+        if( name === 'default' ) 
+        {
+            const decl = targetSymbol.valueDeclaration || targetSymbol.declarations?.[0] || symbol.valueDeclaration || symbol.declarations?.[0];
+
+            if( decl && ts.isClassDeclaration( decl ) && decl.name ) 
+            {
+                name = decl.name.text;
+            }
+        }
+    }
+
+    if(( !name || name === 'default' ) && typeNode && ts.isTypeReferenceNode( typeNode )) 
+    {
+        const typeNameText = typeNode.typeName.getText();
+
+        if( typeNameText && typeNameText !== 'default' ) 
+        {
+            name = typeNameText;
+        }
+    }
+
+    const primitives = ['Object', 'Function', 'String', 'Number', 'Boolean', 'any', 'unknown', 'never', 'default'];
+
+    if( name && !primitives.includes( name )) 
+    {
+        return name;
+    }
+
+    return null;
+}
+
 /** `@Inject( 'Token' )` wins; otherwise the parameter type name is the token. */
 function resolveParamInjectionToken( param: ts.ParameterDeclaration, checker: ts.TypeChecker ): string 
 {
@@ -59,18 +119,9 @@ function resolveParamInjectionToken( param: ts.ParameterDeclaration, checker: ts
     if( param.type ) 
     {
         const type = checker.getTypeAtLocation( param );
-        const symbol = type.getSymbol() || type.aliasSymbol;
+        const token = resolveTokenFromType( param.type, type, checker );
 
-        if( symbol ) 
-        {
-            const name = symbol.getName();
-            const primitives = ['Object', 'Function', 'String', 'Number', 'Boolean', 'any', 'unknown', 'never'];
-
-            if( !primitives.includes( name )) 
-            {
-                return name;
-            }
-        }
+        if( token ) { return token }
     }
 
     return 'any';
@@ -134,12 +185,9 @@ export function resolvePropertyDeps( classDecl: ts.ClassDeclaration, checker: ts
                         if( !token && member.type ) 
                         {
                             const type = checker.getTypeAtLocation( member );
-                            const symbol = type.getSymbol() || type.aliasSymbol;
+                            const resolved = resolveTokenFromType( member.type, type, checker );
 
-                            if( symbol ) 
-                            {
-                                token = symbol.getName();
-                            }
+                            if( resolved ) { token = resolved }
                         }
 
                         if( token ) 

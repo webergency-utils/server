@@ -117,6 +117,32 @@ describe( 'path match helpers', () =>
             expect( match( '/files/a/b' )).toBeTruthy();
             expect(() => match( '/files/ok/%ZZ' )).toThrow( BadRequestError );
         });
+
+        it( 'should correctly match path parameters containing equal signs = (e.g. Base64 values)', () =>
+        {
+            // Arrange
+            const matchParams = pathMatcher( '/param/:base64/param2/:test' );
+            const matchLiteralEqual = pathMatcher( '/param/base64=/:param2/test' );
+
+            // Act
+            const res1 = matchParams( '/param/base64=/param2/test' );
+            const res2 = matchParams( '/param/aGVsbG8==/param2/test' );
+            const res3 = matchLiteralEqual( '/param/base64=/param2/test' );
+
+            // Assert
+            expect( res1 ).toEqual({
+                path   : '/param/base64=/param2/test',
+                params : { base64 : 'base64=', test : 'test' }
+            });
+            expect( res2 ).toEqual({
+                path   : '/param/aGVsbG8==/param2/test',
+                params : { base64 : 'aGVsbG8==', test : 'test' }
+            });
+            expect( res3 ).toEqual({
+                path   : '/param/base64=/param2/test',
+                params : { param2 : 'param2' }
+            });
+        });
     });
 
     describe( 'pathCompiler', () =>

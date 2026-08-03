@@ -2876,6 +2876,425 @@
           }
         }
       }
+    },
+    "/scalar-wire/param/{id}": {
+      "get": {
+        "summary": "ScalarWireController.paramId",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "number"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bigint"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        },
+                        {
+                          "type": "string",
+                          "const": "symbol"
+                        },
+                        {
+                          "type": "string",
+                          "const": "undefined"
+                        },
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "function"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "type"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/scalar-wire/param-num/{n}": {
+      "get": {
+        "summary": "ScalarWireController.paramNum",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "number"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "number"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bigint"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        },
+                        {
+                          "type": "string",
+                          "const": "symbol"
+                        },
+                        {
+                          "type": "string",
+                          "const": "undefined"
+                        },
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "function"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "n",
+                    "type"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "n",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ]
+      }
+    },
+    "/scalar-wire/header": {
+      "get": {
+        "summary": "ScalarWireController.headerToken",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "number"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bigint"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        },
+                        {
+                          "type": "string",
+                          "const": "symbol"
+                        },
+                        {
+                          "type": "string",
+                          "const": "undefined"
+                        },
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "function"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "token",
+                    "type"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scalar-wire/cookie": {
+      "get": {
+        "summary": "ScalarWireController.cookieSession",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "number"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bigint"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        },
+                        {
+                          "type": "string",
+                          "const": "symbol"
+                        },
+                        {
+                          "type": "string",
+                          "const": "undefined"
+                        },
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "function"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "session",
+                    "type"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scalar-wire/combo/{attachmentId}": {
+      "get": {
+        "summary": "ScalarWireController.combo",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attachmentId": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "flag": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "attachmentId",
+                    "token",
+                    "flag"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/scalar-wire/form": {
+      "post": {
+        "summary": "ScalarWireController.form",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "age": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "age"
+                      ]
+                    },
+                    "ageType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "number"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bigint"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        },
+                        {
+                          "type": "string",
+                          "const": "symbol"
+                        },
+                        {
+                          "type": "string",
+                          "const": "undefined"
+                        },
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "function"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "success",
+                    "data",
+                    "ageType"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "age": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "age"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

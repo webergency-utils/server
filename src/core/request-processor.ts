@@ -10,6 +10,7 @@ import { resolveClientIp } from '../helpers/client-ip.js';
 import { invokeGuards } from './guard-runner.js';
 import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
 import { isBinaryOrStreamBody, toStreamOrBinaryBody } from '../helpers/response-body.js';
+import { QueryParser } from '../helpers/parsers.js';
 
 function resolveModuleFileOptions( moduleInstance: any ): FileOptions | undefined
 {
@@ -171,11 +172,30 @@ export class RequestProcessor
                     // Validated below via assert-style validator with from: 'query'.
                     val = payload.toObject();
                 }
+                else if( p.parserQuery )
+                {
+                    // Typed urlencoded: raw text → one parse(text, { from: 'query' }).
+                    // With forwardBody, structurally parse once, merge, then coerce/validate.
+                    const text = await RequestReader.tryGetUrlEncodedText( req, securityConfig );
+
+                    if( text !== undefined )
+                    {
+                        val = req.forwardBody
+                            ? { ...QueryParser.parse( text ), ...req.forwardBody }
+                            : text;
+                    }
+                    else
+                    {
+                        val = await RequestReader.getBody( req, securityConfig );
+                    }
+                }
                 else
                 {
                     val = await RequestReader.getBody( req, securityConfig );
                 }
 
+                // Object bags (JSON / multipart / merged urlencoded): apply forwardBody before validate.
+                // Raw urlencoded text (no forwardBody) stays a string for parserQuery.
                 if( req.forwardBody && val && typeof val === 'object' && !Array.isArray( val ))
                 {
                     val = { ...val, ...req.forwardBody };
@@ -256,6 +276,12 @@ export class RequestProcessor
                 try
                 {
                     val = parserFn( val, p.name || p.source.toLowerCase());
+
+                    // Cache validated urlencoded body so a later getBody does not re-parse.
+                    if( bodyIsUrlencoded && !( '_json' in req ))
+                    {
+                        req._json = val;
+                    }
                 }
                 catch( e: any )
                 {
@@ -281,8 +307,11 @@ export class RequestProcessor
 
             if( p.mode ){ ctx.mode = p.mode }
 
-            if( p.source === 'Query' || p.source === 'Param' || p.source === 'Cookie'
-                || p.source === 'Header' || p.source === 'Headers' || p.source === 'Cookies' )
+            if( p.source === 'Param' || p.source === 'Cookie' || p.source === 'Header' )
+            {
+                ctx.from = 'string';
+            }
+            else if( p.source === 'Query' || p.source === 'Headers' || p.source === 'Cookies' )
             {
                 ctx.from = 'query';
             }

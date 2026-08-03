@@ -3,6 +3,7 @@ import { Server, ConsoleLogger } from '../server.js';
 import { Scope, Meta, SetMetadata } from '../decorators.js';
 import { Reflector } from '../core/reflector.js';
 import { seedInstanceController, runWithRegistry, ApplicationRegistry, defineController, setModuleMeta } from '../testing.js';
+import { expectString } from '@webergency-utils/typechecker/runtime';
 
 function setupServer( port: number, setup: ( registry: ApplicationRegistry ) => void, options: Record<string, any> = {}): Server
 {
@@ -461,6 +462,113 @@ describe( 'Server & Metadata', () =>
 
             expect( res.status ).toBe( 400 );
             expect( handled ).toBe( 0 );
+        });
+
+        it( 'should correctly parse path parameters containing equal signs (e.g. /param/base64=/param2/test)', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', {
+                    testParams : ( b64: string, p2: string ) => ({ b64, p2 })
+                });
+                registry.registerEndpoint({
+                    ...endpoint( 'testParams', 'GET', '/param/:base64/param2/:param2' ),
+                    params : [
+                        { source : 'Param', name : 'base64', validator : ( v: any, p: string ) => expectString( v, p ) },
+                        { source : 'Param', name : 'param2', validator : ( v: any, p: string ) => expectString( v, p ) }
+                    ]
+                });
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/param/base64=/param2/test' ));
+            const body = await res.json();
+
+            expect( res.status ).toBe( 200 );
+            expect( body ).toEqual({ b64 : 'base64=', p2 : 'test' });
+        });
+
+        it( 'should accept path/header/cookie scalars with =%& via from:string-style parsers', async () =>
+        {
+            // Mirrors typechecker from:'string' — coerce/validate only, never parseQueryString.
+            const asString = ( v: any, path: string ) => expectString( v, path );
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', {
+                    echo : ( id: string, token: string, flag: string ) => ({ id, token, flag })
+                });
+                registry.registerEndpoint({
+                    ...endpoint( 'echo', 'GET', '/echo/:id' ),
+                    params : [
+                        { source : 'Param', name : 'id', parser : asString },
+                        { source : 'Header', name : 'x-token', parser : asString },
+                        { source : 'Cookie', name : 'flag', parser : asString }
+                    ]
+                });
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/echo/jpUllytbmQ=', {
+                headers : {
+                    'x-token' : '100%',
+                    cookie    : 'flag=a&b=c'
+                }
+            }));
+            const body = await res.json();
+
+            expect( res.status ).toBe( 200 );
+            expect( body ).toEqual({ id : 'jpUllytbmQ=', token : '100%', flag : 'a&b=c' });
+        });
+
+        it( 'should correctly parse complex base64 attachmentId with trailing = in nexus mail webhook URL with typechecking validator', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', {
+                    getAttachment : ( id: string, attachmentId: string, emailAddress: string ) => ({ id, attachmentId, emailAddress })
+                });
+                registry.registerEndpoint({
+                    ...endpoint( 'getAttachment', 'GET', '/webhooks/mail/:id/attachments/:attachmentId/emailAddress/:emailAddress' ),
+                    params : [
+                        { source : 'Param', name : 'id', validator : ( v: any, p: string ) => expectString( v, p ) },
+                        { source : 'Param', name : 'attachmentId', validator : ( v: any, p: string ) => expectString( v, p ) },
+                        { source : 'Param', name : 'emailAddress', validator : ( v: any, p: string ) => expectString( v, p ) }
+                    ]
+                });
+            });
+
+            const targetUrl = 'http://localhost/webhooks/mail/6a706ab6a21043e5a87b3832/attachments/AAMkAGYxZjRlMzA2LWI1NmEtNGU2Mi1iNzRmLTE1NmRlNDgwY2RjYwBGAAAAAACL_78JZwTXQ5GR_qVV6miEBwBLN00naEE7SqVBTiX0KJ7bAAAAAAEMAABLN00naEE7SqVBTiX0KJ7bAASBNx7AAAABEgAQANPhTTfLqw9EmPhhIbKrjDI=/emailAddress/john.doe@acme.com';
+            const res = await server.fetch( new Request( targetUrl ));
+            const body = await res.json();
+
+            expect( res.status ).toBe( 200 );
+            expect( body.id ).toBe( '6a706ab6a21043e5a87b3832' );
+            expect( body.attachmentId ).toBe( 'AAMkAGYxZjRlMzA2LWI1NmEtNGU2Mi1iNzRmLTE1NmRlNDgwY2RjYwBGAAAAAACL_78JZwTXQ5GR_qVV6miEBwBLN00naEE7SqVBTiX0KJ7bAAAAAAEMAABLN00naEE7SqVBTiX0KJ7bAASBNx7AAAABEgAQANPhTTfLqw9EmPhhIbKrjDI=' );
+            expect( body.emailAddress ).toBe( 'john.doe@acme.com' );
+        });
+
+        it( 'should handle extremely long path parameters (e.g. 5,000+ chars attachmentId) with typechecking validator', async () =>
+        {
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'C', {
+                    getAttachment : ( id: string, attachmentId: string, emailAddress: string ) => ({ id, attachmentId, emailAddress })
+                });
+                registry.registerEndpoint({
+                    ...endpoint( 'getAttachment', 'GET', '/webhooks/mail/:id/attachments/:attachmentId/emailAddress/:emailAddress' ),
+                    params : [
+                        { source : 'Param', name : 'id', validator : ( v: any, p: string ) => expectString( v, p ) },
+                        { source : 'Param', name : 'attachmentId', validator : ( v: any, p: string ) => expectString( v, p ) },
+                        { source : 'Param', name : 'emailAddress', validator : ( v: any, p: string ) => expectString( v, p ) }
+                    ]
+                });
+            });
+
+            const longAttachmentId = 'A'.repeat( 5000 ) + '=';
+            const targetUrl = `http://localhost/webhooks/mail/6a706ab6a21043e5a87b3832/attachments/${longAttachmentId}/emailAddress/john.doe@acme.com`;
+            const res = await server.fetch( new Request( targetUrl ));
+            const body = await res.json();
+
+            expect( res.status ).toBe( 200 );
+            expect( body.attachmentId ).toBe( longAttachmentId );
         });
     });
 

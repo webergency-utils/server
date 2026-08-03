@@ -121,10 +121,16 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( compiled ).toContain( 'path: "/users/:id"' );
         expect( compiled ).toContain( 'httpMethod: "POST"' );
         expect( compiled ).toContain( 'path: "/users"' );
-        expect( compiled ).toContain( 'parser: __parse_' );
-        expect( compiled ).toContain( 'parserQuery: __parse_' );
+        expect( compiled ).toMatch( /parser:\s*__parse_[0-9a-f]+_strip_string/ );
+        expect( compiled ).toMatch( /parser:\s*__parse_[0-9a-f]+_strip_json/ );
+        expect( compiled ).toMatch( /parserQuery:\s*__parse_[0-9a-f]+_strip_query/ );
         expect( compiled ).toContain( 'kind: "controller"' );
         expect( compiled ).not.toContain( 'MetadataStore' );
+
+        const paramBlock = compiled.match( /source:\s*"Param"[\s\S]{0,200}?parser:\s*(__parse_[0-9a-f]+_[a-z]+_[a-z]+)/ );
+        expect( paramBlock?.[1]).toMatch( /_string$/ );
+        const paramFn = compiled.match( new RegExp( `const ${paramBlock![1]} = ([\\s\\S]*?);\\n` ));
+        expect( paramFn?.[1]).not.toContain( 'parseQueryString' );
     });
 
     it( 'should transform CORS decorators at class and method level', () =>
@@ -591,5 +597,35 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( diagnostics[0].file?.fileName ).toContain( 'temp_test_controller.ts' );
         expect( ts.flattenDiagnosticMessageText( diagnostics[1].messageText, '\n' ))
             .toMatch( /must return void or Promise<void>/ );
+    });
+
+    it( 'should resolve constructor and property injection tokens for default-imported services', () =>
+    {
+        const output = compileFiles({
+            'temp_default_svc.ts' : `
+        import { Injectable } from '../decorators.js';
+
+        @Injectable()
+        export default class MyDefaultService {
+          getValue() { return 42; }
+        }
+      `,
+            'temp_default_consumer.ts' : `
+        import { Controller, Injectable, Inject } from '../decorators.js';
+        import MyDefaultService from './temp_default_svc.js';
+
+        @Controller('/default-test')
+        export class DefaultTestController {
+          @Inject
+          propSvc!: MyDefaultService;
+
+          constructor( public ctorSvc: MyDefaultService ) {}
+        }
+      `
+        });
+
+        expect( output['temp_default_consumer.ts']).toContain( 'constructorDeps: ["MyDefaultService"]' );
+        expect( output['temp_default_consumer.ts']).toContain( 'propertyDeps: {\n            propSvc: "MyDefaultService"\n        }' );
+        expect( output['temp_default_consumer.ts']).not.toContain( '"default"' );
     });
 });

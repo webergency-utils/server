@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware, Seo, Internal, SeoForward } from '../../index.js';
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Guard, Ws, Sse, ServerWebSocket, Param, Header, Cookie, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, EndpointRequest, EndpointResponse, Public, Middleware, Seo, Internal, SeoForward } from '../../index.js';
 
 import { constraint, format, tag } from '@webergency-utils/typechecker';
 
@@ -897,5 +897,53 @@ export class SeoToInternalController
     go(): SeoForward
     {
         return { method : 'GET', path : '/_internal/seo-secret' };
+    }
+}
+
+/**
+ * Exercises AOT `from: 'string'` parsers for Param / Header / Cookie
+ * (no parseQueryString) and typed urlencoded Body via `parserQuery`.
+ */
+@Controller( '/scalar-wire' )
+export class ScalarWireController
+{
+    @Get( '/param/:id' )
+    paramId( @Param( 'id' ) id: string )
+    {
+        return { id, type : typeof id };
+    }
+
+    @Get( '/param-num/:n' )
+    paramNum( @Param( 'n' ) n: number )
+    {
+        return { n, type : typeof n };
+    }
+
+    @Get( '/header' )
+    headerToken( @Header( 'x-token' ) token: string )
+    {
+        return { token, type : typeof token };
+    }
+
+    @Get( '/cookie' )
+    cookieSession( @Cookie( 'session' ) session: string )
+    {
+        return { session, type : typeof session };
+    }
+
+    @Get( '/combo/:attachmentId' )
+    combo(
+        @Param( 'attachmentId' ) attachmentId: string,
+        @Header( 'x-token' ) token: string,
+        @Cookie( 'flag' ) flag: string
+    )
+    {
+        return { attachmentId, token, flag };
+    }
+
+    @Post( '/form' )
+    form( @Body() data: User )
+    {
+        return { success : true, data, ageType : typeof data.age };
     }
 }

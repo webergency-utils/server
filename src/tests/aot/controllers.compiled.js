@@ -561,6 +561,80 @@ const __val_10fc726648976d5a = ((keys, props) => (v, path, ctx) => {
 })(new Set(["secret"]), [
     ["secret", false, __val_ced862ef1505bc73]
 ]);
+const __val_1cf64ebdd7fe6766 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ id: string; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["id", "type"]), [
+    ["id", false, __val_473287f8298dba71],
+    ["type", false, __val_1e1a258db2184d0e]
+]);
+const __val_ad7cc50180a59d88 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ n: number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["n", "type"]), [
+    ["n", false, __val_12886f9d00055adf],
+    ["type", false, __val_1e1a258db2184d0e]
+]);
+const __val_592aa28226ef808b = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ token: string; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["token", "type"]), [
+    ["token", false, __val_473287f8298dba71],
+    ["type", false, __val_1e1a258db2184d0e]
+]);
+const __val_c73a5cfb4b62c0e6 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ session: string; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["session", "type"]), [
+    ["session", false, __val_473287f8298dba71],
+    ["type", false, __val_1e1a258db2184d0e]
+]);
+const __val_f0f7a2626b66a4d9 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ attachmentId: string; token: string; flag: string; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["attachmentId", "token", "flag"]), [
+    ["attachmentId", false, __val_473287f8298dba71],
+    ["token", false, __val_473287f8298dba71],
+    ["flag", false, __val_473287f8298dba71]
+]);
+const __val_4b3ffd86cc4f9e24 = ((keys, props) => (v, path, ctx) => {
+    const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: User; ageType: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
+    if (obj === false)
+        return v;
+    const data = validators.objectShell(obj, ctx, true);
+    validators.props(obj, data, path, ctx, props);
+    validators.stripExtras(data, ctx, keys);
+    return data;
+})(new Set(["success", "data", "ageType"]), [
+    ["success", false, __val_ced862ef1505bc73],
+    ["data", false, __val_04c78f82f98a8cf4],
+    ["ageType", false, __val_1e1a258db2184d0e]
+]);
 const __parse_04c78f82f98a8cf4_strict_json = (function (input, path = "") { let obj; if (typeof input === "string") {
     const t = input.trim();
     if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
@@ -853,6 +927,7 @@ else {
     obj = input;
 } return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectNumber(item, itemP); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "json"); return __v; })(obj, path, obj); });
 const __parse_e932e0ca2e5a5a04_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.coerceNumber(item, itemP)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_473287f8298dba71_strip_string = (function (input, path = "") { return __tcRuntime.expectString(input, path); });
 const __parse_473287f8298dba71_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.expectString(rawQuery, path); });
 const __parse_0b6ca95199f89861_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
     const t = input.trim();
@@ -889,6 +964,7 @@ const __parse_473287f8298dba71_strip_json = (function (input, path = "") { let o
 else {
     obj = input;
 } return __tcRuntime.expectString(obj, path); });
+const __parse_12886f9d00055adf_strip_string = (function (input, path = "") { return __tcRuntime.coerceNumber(input, path); });
 const __ser_c67915707769fcf5_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
 } let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
@@ -1015,7 +1091,27 @@ const __ser_3854fe5bb34caec3_strip_json = (function (input) { return (function (
 const __ser_10fc726648976d5a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
 } let parts = []; parts.push("\"secret\":" + (typeof obj.secret === "boolean" ? (obj.secret ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("secret", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public, Seo, Internal } from '../../index.js';
+const __ser_1cf64ebdd7fe6766_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"id\":" + __tcRuntime.serializeString(obj.id, "id")); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_ad7cc50180a59d88_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"n\":" + (typeof obj.n === "number" && !Number.isNaN(obj.n) ? String(obj.n) : (function () { throw new __tcRuntime.SerializationError("n", "Type<number>"); })())); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_592aa28226ef808b_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"token\":" + __tcRuntime.serializeString(obj.token, "token")); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_c73a5cfb4b62c0e6_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"session\":" + __tcRuntime.serializeString(obj.session, "session")); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_f0f7a2626b66a4d9_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"attachmentId\":" + __tcRuntime.serializeString(obj.attachmentId, "attachmentId")); parts.push("\"token\":" + __tcRuntime.serializeString(obj.token, "token")); parts.push("\"flag\":" + __tcRuntime.serializeString(obj.flag, "flag")); return "{" + parts.join(",") + "}"; })(input); });
+const __ser_4b3ffd86cc4f9e24_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("", "Type<Object>");
+} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new __tcRuntime.SerializationError("data", "Type<Object>");
+} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "data.name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("data.age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); parts.push("\"ageType\":" + __tcRuntime.serializeUnion(obj.ageType, "ageType", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, Header, Cookie, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public, Seo, Internal } from '../../index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
 export class GlobalErrorSanitizer {
     static __injections__ = {
@@ -2139,6 +2235,64 @@ SeoToInternalController = __decorate([
     Seo
 ], SeoToInternalController);
 export { SeoToInternalController };
+/**
+ * Exercises AOT `from: 'string'` parsers for Param / Header / Cookie
+ * (no parseQueryString) and typed urlencoded Body via `parserQuery`.
+ */
+let ScalarWireController = class ScalarWireController {
+    static __injections__ = {
+        constructorDeps: [],
+        propertyDeps: {}
+    };
+    paramId(id) {
+        return { id, type: typeof id };
+    }
+    paramNum(n) {
+        return { n, type: typeof n };
+    }
+    headerToken(token) {
+        return { token, type: typeof token };
+    }
+    cookieSession(session) {
+        return { session, type: typeof session };
+    }
+    combo(attachmentId, token, flag) {
+        return { attachmentId, token, flag };
+    }
+    form(data) {
+        return { success: true, data, ageType: typeof data.age };
+    }
+};
+__decorate([
+    Get('/param/:id'),
+    __param(0, Param('id'))
+], ScalarWireController.prototype, "paramId", null);
+__decorate([
+    Get('/param-num/:n'),
+    __param(0, Param('n'))
+], ScalarWireController.prototype, "paramNum", null);
+__decorate([
+    Get('/header'),
+    __param(0, Header('x-token'))
+], ScalarWireController.prototype, "headerToken", null);
+__decorate([
+    Get('/cookie'),
+    __param(0, Cookie('session'))
+], ScalarWireController.prototype, "cookieSession", null);
+__decorate([
+    Get('/combo/:attachmentId'),
+    __param(0, Param('attachmentId')),
+    __param(1, Header('x-token')),
+    __param(2, Cookie('flag'))
+], ScalarWireController.prototype, "combo", null);
+__decorate([
+    Post('/form'),
+    __param(0, Body())
+], ScalarWireController.prototype, "form", null);
+ScalarWireController = __decorate([
+    Controller('/scalar-wire')
+], ScalarWireController);
+export { ScalarWireController };
 DiGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "DiGuard"
@@ -2926,7 +3080,7 @@ RealtimeController[Symbol.for("webergency.server.controller")] = {
                 }, {
                     source: "Param",
                     name: "room",
-                    parser: __parse_473287f8298dba71_strip_query,
+                    parser: __parse_473287f8298dba71_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
@@ -3655,7 +3809,7 @@ SeoEmitController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Param",
                     name: "slug",
-                    parser: __parse_473287f8298dba71_strip_query,
+                    parser: __parse_473287f8298dba71_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -3680,7 +3834,7 @@ SeoTargetController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Param",
                     name: "id",
-                    parser: __parse_473287f8298dba71_strip_query,
+                    parser: __parse_473287f8298dba71_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -3737,4 +3891,132 @@ SeoToInternalController[Symbol.for("webergency.server.controller")] = {
 SeoToInternalController[Symbol.for("webergency.server.injectable")] = {
     kind: "controller",
     token: "SeoToInternalController"
+};
+ScalarWireController[Symbol.for("webergency.server.controller")] = {
+    endpoints: [
+        {
+            controller: "ScalarWireController",
+            methodName: "paramId",
+            httpMethod: "GET",
+            path: "/scalar-wire/param/:id",
+            params: [{
+                    source: "Param",
+                    name: "id",
+                    parser: __parse_473287f8298dba71_strip_string,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_1cf64ebdd7fe6766,
+            returnTypeSerializer: __ser_1cf64ebdd7fe6766_strip_json
+        },
+        {
+            controller: "ScalarWireController",
+            methodName: "paramNum",
+            httpMethod: "GET",
+            path: "/scalar-wire/param-num/:n",
+            params: [{
+                    source: "Param",
+                    name: "n",
+                    parser: __parse_12886f9d00055adf_strip_string,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_ad7cc50180a59d88,
+            returnTypeSerializer: __ser_ad7cc50180a59d88_strip_json
+        },
+        {
+            controller: "ScalarWireController",
+            methodName: "headerToken",
+            httpMethod: "GET",
+            path: "/scalar-wire/header",
+            params: [{
+                    source: "Header",
+                    name: "x-token",
+                    parser: __parse_473287f8298dba71_strip_string,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_592aa28226ef808b,
+            returnTypeSerializer: __ser_592aa28226ef808b_strip_json
+        },
+        {
+            controller: "ScalarWireController",
+            methodName: "cookieSession",
+            httpMethod: "GET",
+            path: "/scalar-wire/cookie",
+            params: [{
+                    source: "Cookie",
+                    name: "session",
+                    parser: __parse_473287f8298dba71_strip_string,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_c73a5cfb4b62c0e6,
+            returnTypeSerializer: __ser_c73a5cfb4b62c0e6_strip_json
+        },
+        {
+            controller: "ScalarWireController",
+            methodName: "combo",
+            httpMethod: "GET",
+            path: "/scalar-wire/combo/:attachmentId",
+            params: [{
+                    source: "Param",
+                    name: "attachmentId",
+                    parser: __parse_473287f8298dba71_strip_string,
+                    mode: undefined
+                }, {
+                    source: "Header",
+                    name: "x-token",
+                    parser: __parse_473287f8298dba71_strip_string,
+                    mode: undefined
+                }, {
+                    source: "Cookie",
+                    name: "flag",
+                    parser: __parse_473287f8298dba71_strip_string,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_f0f7a2626b66a4d9,
+            returnTypeSerializer: __ser_f0f7a2626b66a4d9_strip_json
+        },
+        {
+            controller: "ScalarWireController",
+            methodName: "form",
+            httpMethod: "POST",
+            path: "/scalar-wire/form",
+            params: [{
+                    source: "Body",
+                    name: "",
+                    parser: __parse_04c78f82f98a8cf4_strip_json,
+                    parserQuery: __parse_04c78f82f98a8cf4_strip_query,
+                    validator: __val_04c78f82f98a8cf4,
+                    mode: undefined
+                }],
+            guards: [],
+            interceptors: [],
+            middlewares: [],
+            meta: {},
+            returnTypeValidator: __val_4b3ffd86cc4f9e24,
+            returnTypeSerializer: __ser_4b3ffd86cc4f9e24_strip_json
+        }
+    ]
+};
+ScalarWireController[Symbol.for("webergency.server.injectable")] = {
+    kind: "controller",
+    token: "ScalarWireController"
 };

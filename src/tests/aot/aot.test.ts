@@ -1099,4 +1099,126 @@ describe( 'Actual AOT Integration Test', () =>
             }
         });
     });
+
+    describe( 'from:string scalar wire (Param / Header / Cookie)', () =>
+    {
+        it( 'keeps path params with = % & as strings (AOT from:string parser)', async () =>
+        {
+            // Arrange / Act — values that the old query-parser heuristic would mis-parse
+            const eq = await server.fetch( new Request( 'http://localhost/scalar-wire/param/jpUllytbmQ=' ));
+            const pct = await server.fetch( new Request( 'http://localhost/scalar-wire/param/100%25' ));
+            const amp = await server.fetch( new Request( 'http://localhost/scalar-wire/param/a%26b' ));
+
+            // Assert
+            expect( eq.status ).toBe( 200 );
+            expect( await eq.json()).toEqual({ id : 'jpUllytbmQ=', type : 'string' });
+
+            expect( pct.status ).toBe( 200 );
+            expect( await pct.json()).toEqual({ id : '100%', type : 'string' });
+
+            expect( amp.status ).toBe( 200 );
+            expect( await amp.json()).toEqual({ id : 'a&b', type : 'string' });
+        });
+
+        it( 'still coerces numeric path params via from:string', async () =>
+        {
+            // Arrange / Act
+            const res = await server.fetch( new Request( 'http://localhost/scalar-wire/param-num/42' ));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            expect( await res.json()).toEqual({ n : 42, type : 'number' });
+        });
+
+        it( 'keeps header values with = % & as strings', async () =>
+        {
+            // Arrange / Act
+            const res = await server.fetch( new Request( 'http://localhost/scalar-wire/header', {
+                headers : { 'x-token' : 'jpUllytbmQ=100%&x' }
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            expect( await res.json()).toEqual({ token : 'jpUllytbmQ=100%&x', type : 'string' });
+        });
+
+        it( 'keeps cookie values with trailing = as strings', async () =>
+        {
+            // Arrange / Act
+            const res = await server.fetch( new Request( 'http://localhost/scalar-wire/cookie', {
+                headers : { cookie : 'session=AAMkAGYxZjRlMzA2DI=' }
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            expect( await res.json()).toEqual({
+                session : 'AAMkAGYxZjRlMzA2DI=',
+                type    : 'string'
+            });
+        });
+
+        it( 'accepts base64 attachmentId path + token header + flag cookie together', async () =>
+        {
+            // Arrange
+            const attachmentId = 'AAMkAGYxZjRlMzA2LWI1NmEtNGU2Mi1iNzRmLTE1NmRlNDgwY2RjYwBGAAAAAACL_78JZwTXQ5GR_qVV6miEBwBLN00naEE7SqVBTiX0KJ7bAAAAAAEMAABLN00naEE7SqVBTiX0KJ7bAASBNx7AAAABEgAQANPhTTfLqw9EmPhhIbKrjDI=';
+
+            // Act
+            const res = await server.fetch( new Request(
+                `http://localhost/scalar-wire/combo/${encodeURIComponent( attachmentId )}`,
+                {
+                    headers : {
+                        'x-token' : '100%',
+                        cookie    : 'flag=a=b&c'
+                    }
+                }
+            ));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            expect( await res.json()).toEqual({
+                attachmentId,
+                token : '100%',
+                flag  : 'a=b&c'
+            });
+        });
+
+        it( 'parses typed urlencoded Body in one pass including values with =', async () =>
+        {
+            // Arrange / Act
+            const res = await server.fetch( new Request( 'http://localhost/scalar-wire/form', {
+                method  : 'POST',
+                headers : { 'Content-Type' : 'application/x-www-form-urlencoded' },
+                body    : 'name=Ada%20Lovelace&age=36'
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+            const body = await res.json();
+            expect( body ).toEqual({
+                success : true,
+                data    : { name : 'Ada Lovelace', age : 36 },
+                ageType : 'number'
+            });
+        });
+
+        it( 'emits _string parsers for Param/Header/Cookie without parseQueryString', () =>
+        {
+            // Arrange — fixture written by runAot() in beforeAll
+            const compiled = fs.readFileSync( path.resolve( __dirname, 'controllers.compiled.js' ), 'utf8' );
+            const stringParser = compiled.match(
+                /source:\s*"Param"[\s\S]{0,160}?parser:\s*(__parse_[0-9a-f]+_strip_string)/
+            )?.[1];
+
+            // Assert
+            expect( stringParser ).toBeTruthy();
+            expect( compiled ).toMatch( /source:\s*"Header"[\s\S]{0,160}?parser:\s*__parse_[0-9a-f]+_strip_string/ );
+            expect( compiled ).toMatch( /source:\s*"Cookie"[\s\S]{0,160}?parser:\s*__parse_[0-9a-f]+_strip_string/ );
+            expect( compiled ).toMatch( /parserQuery:\s*__parse_[0-9a-f]+_strip_query/ );
+
+            const fn = compiled.match( new RegExp( `const ${stringParser} = ([\\s\\S]*?);\\n` ))?.[1];
+            expect( fn ).toBeTruthy();
+            expect( fn ).toContain( 'expectString' );
+            expect( fn ).not.toContain( 'parseQueryString' );
+        });
+    });
 });

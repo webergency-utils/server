@@ -3,6 +3,7 @@ import { buildParser, buildValidator, generateHash } from '@webergency-utils/typ
 import { ProjectRegistry } from './registry.js';
 import { PARAM_DECORATORS, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig } from './decorator-config.js';
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
+import { resolveTokenFromType } from './di-resolution.js';
 
 /**
  * What a decorator list says about one merge dimension (guards, interceptors, middlewares):
@@ -159,27 +160,22 @@ export class MetadataCollector
             if( isInject && !injectToken && p.type ) 
             {
                 const type = checker.getTypeAtLocation( p );
-                const symbol = type.getSymbol() || type.aliasSymbol;
+                const resolved = resolveTokenFromType( p.type, type, checker );
 
-                if( symbol ) 
+                if( resolved ) 
                 {
-                    injectToken = symbol.getName();
+                    injectToken = resolved;
                 }
             }
             else if( !isInject && p.type ) 
             {
                 const type = checker.getTypeAtLocation( p );
-                const symbol = type.getSymbol() || type.aliasSymbol;
+                const typeName = resolveTokenFromType( p.type, type, checker );
 
-                if( symbol ) 
+                if( typeName && registry.providers.has( typeName )) 
                 {
-                    const typeName = symbol.getName();
-
-                    if( registry.providers.has( typeName )) 
-                    {
-                        isInject = true;
-                        injectToken = typeName;
-                    }
+                    isInject = true;
+                    injectToken = typeName;
                 }
             }
 
@@ -285,13 +281,25 @@ export class MetadataCollector
                             mode        : vMode
                         });
                     }
-                    else 
+                    else if( dName === 'Query' || dName === 'Headers' || dName === 'Cookies' )
                     {
+                        // URL query bags + header/cookie maps: already structured (or raw query text).
                         buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
                         metadata.push({
                             source : dName,
                             name   : pName,
                             parser : `${typeHash}_${mode}_query`,
+                            mode   : vMode
+                        });
+                    }
+                    else 
+                    {
+                        // Param / Cookie / Header: single already-decoded scalars — never parseQueryString.
+                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'string' });
+                        metadata.push({
+                            source : dName,
+                            name   : pName,
+                            parser : `${typeHash}_${mode}_string`,
                             mode   : vMode
                         });
                     }
@@ -432,12 +440,10 @@ export class MetadataCollector
             if( propDecl && ( ts.isPropertyDeclaration( propDecl ) || ts.isPropertySignature( propDecl ))) 
             {
                 const propType = this.checker.getTypeAtLocation( propDecl );
-                const typeSymbol = propType.getSymbol() || propType.aliasSymbol;
+                const typeName = resolveTokenFromType( propDecl.type, propType, this.checker );
 
-                if( typeSymbol ) 
+                if( typeName ) 
                 {
-                    const typeName = typeSymbol.getName();
-
                     // Check if type matches a registered singleton
                     if( registry.guards.has( typeName ) || registry.interceptors.has( typeName ) || registry.controllers.has( typeName )) 
                     {

@@ -130,7 +130,7 @@ describe( 'RequestProcessor.resolveParam', () =>
             ctx
         );
 
-        expect( fromValues ).toEqual([ 'query', 'query', 'query', 'query', 'query' ]);
+        expect( fromValues ).toEqual([ 'string', 'string', 'string', 'query', 'query' ]);
         expect( ctx.from ).toBeUndefined();
     });
 
@@ -376,8 +376,9 @@ describe( 'RequestProcessor.resolveParam', () =>
         );
 
         expect( result ).toEqual({ via : 'query' });
-        expect( parserQuery ).toHaveBeenCalled();
+        expect( parserQuery ).toHaveBeenCalledWith( 'age=30', 'body' );
         expect( parser ).not.toHaveBeenCalled();
+        expect( ( req as any )._json ).toEqual({ via : 'query' });
     });
 
     it( 'should use parser for JSON Body', async () =>

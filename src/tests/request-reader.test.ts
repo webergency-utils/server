@@ -439,6 +439,29 @@ describe( 'RequestReader.getBody', () =>
         expect( body ).toEqual({ age : '25', tags : ['a', 'b'] });
     });
 
+    it( 'tryGetUrlEncodedText returns wire text without QueryParser', async () =>
+    {
+        const req = createRequest({
+            body    : 'age=30&token=jpUllytbmQ=',
+            headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+        });
+
+        const text = await RequestReader.tryGetUrlEncodedText( req );
+
+        expect( text ).toBe( 'age=30&token=jpUllytbmQ=' );
+        expect( '_json' in req ).toBe( false );
+    });
+
+    it( 'tryGetUrlEncodedText returns undefined for JSON bodies', async () =>
+    {
+        const req = createRequest({
+            body    : JSON.stringify({ age : 30 }),
+            headers : { 'Content-Type' : 'application/json' }
+        });
+
+        expect( await RequestReader.tryGetUrlEncodedText( req )).toBeUndefined();
+    });
+
     it( 'should treat urlencoded content-type with charset as form data', async () =>
     {
         // Arrange

@@ -252,6 +252,63 @@ async function readStreamWithLimit( body: ReadableStream<Uint8Array>, limit: num
 
 export class RequestReader 
 {
+    /**
+     * When the body is (or sniffs as) urlencoded, return decoded wire text without
+     * `QueryParser` — for a single `parse(text, { from: 'query' })` pass.
+     * Sets `req._bodyContentType` when sniffing. Returns `undefined` when not urlencoded
+     * (caller should use {@link getBody}).
+     */
+    public static async tryGetUrlEncodedText(
+        req            : AugmentedRequest,
+        securityConfig?: SecurityOptions
+    ): Promise<string | undefined>
+    {
+        if( '_json' in req )
+        {
+            // Already consumed as a structured body — cannot recover wire text.
+            return undefined;
+        }
+
+        const declared = getContentType( req );
+        const raw = await this.getRawBody( req, securityConfig );
+
+        if( !raw.byteLength ){ return undefined }
+
+        if( declared === 'application/x-www-form-urlencoded' )
+        {
+            return decodeBodyText( raw );
+        }
+
+        if( declared )
+        {
+            return undefined;
+        }
+
+        // Sniff like getBody, but keep urlencoded as text for the typed parser path.
+        const text = decodeBodyText( raw );
+
+        try
+        {
+            JSON.parse( text );
+            req._bodyContentType = 'application/json';
+
+            return undefined;
+        }
+        catch
+        {
+            // fall through
+        }
+
+        if( looksLikeUrlEncoded( text ))
+        {
+            req._bodyContentType = 'application/x-www-form-urlencoded';
+
+            return text;
+        }
+
+        return undefined;
+    }
+
     public static async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
     {
         if( '_json' in req ) { return req._json }
