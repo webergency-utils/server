@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "src/tests/**/*", "src/fuzz-runtime.ts"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests/**/*", "fuzz/**/*"],
+  "compilerOptions": {
+    "rootDir": "./src"
+  }
 }

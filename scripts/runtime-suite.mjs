@@ -12,7 +12,7 @@
  * Coverage: wrap with c8 (Node) or deno --coverage; source maps remap dist → src for Codecov.
  */
 import { Server } from '../dist/index.js';
-import { seedInstanceController } from '../dist/testing.js';
+import { seedInstanceController } from './seed-controller.mjs';
 import { validators } from '@webergency-utils/typechecker';
 
 function detectRuntime()

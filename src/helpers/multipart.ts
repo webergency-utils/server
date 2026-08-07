@@ -40,14 +40,25 @@ export function nestFieldName( prefix: string, name: string ): string
 
     if( !name ){ return prefix }
 
-    const match = /^([^\[\]]+)(.*)$/.exec( name );
+    // Linear scan — avoid `/^([^\[\]]+)(.*)$/` polynomial-ReDoS on adversarial names.
+    let i = 0;
+    const n = name.length;
 
-    if( match )
+    while( i < n )
     {
-        return `${prefix}[${match[1]}]${match[2]}`;
+        const c = name.charCodeAt( i );
+
+        if( c === 0x5b /* [ */ || c === 0x5d /* ] */ ){ break }
+
+        i++;
     }
 
-    return `${prefix}[${name}]`;
+    if( i === 0 )
+    {
+        return `${prefix}[${name}]`;
+    }
+
+    return `${prefix}[${name.slice( 0, i )}]${name.slice( i )}`;
 }
 
 function isMultipartMime( contentType: string | undefined ): boolean

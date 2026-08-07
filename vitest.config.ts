@@ -20,17 +20,16 @@ export default defineConfig({
     },
     test : {
         environment : 'node',
-        include     : ['src/tests/**/*.test.ts'],
+        include     : ['tests/**/*.test.ts'],
         coverage    : {
             provider : 'v8',
             reporter : ['text', 'json', 'html', 'lcov'],
             include  : ['src/**/*.ts'],
             exclude  : [
-                'src/**/*.test.ts',
-                'src/tests/**',
+                '**/*.test.ts',
+                'tests/**',
                 'src/cli.ts',
                 'src/transformer.ts',
-                'src/fuzz-runtime.ts',
                 // Build / load-time hosts — not part of the runtime library surface
                 'src/compiler/cli.ts',
                 'src/compiler/register.ts',

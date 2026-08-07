@@ -13,12 +13,12 @@
     "sourceMap": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": false,
-    "rootDir": "./src",
+    "ignoreDeprecations": "6.0",
     "types": ["node"],
     "paths": {
       "typescript": ["./node_modules/@typescript/typescript6/lib/typescript.d.ts"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/fuzz-runtime.ts"]
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "dist", "fuzz/**/*"]
 }

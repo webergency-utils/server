@@ -1,0 +1,6 @@
+name: Server CodeQL config
+
+# Tests intentionally exercise adversarial inputs (ReDoS rejection paths, etc.).
+paths-ignore:
+  - 'tests/**'
+  - 'src/tests/**'

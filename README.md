@@ -98,7 +98,6 @@ Entry points:
 | `@webergency-utils/server` | Runtime API |
 | `@webergency-utils/server/transformer` | AOT compiler plugin |
 | `@webergency-utils/server/register` | Optional load-time AOT host |
-| `@webergency-utils/server/testing` | Test-only helpers for attaching AOT-shaped meta without the compiler |
 
 ## Architecture & Internals
 
@@ -114,7 +113,7 @@ Entry points:
 10. **Health** — Optional `health` probes answer before routing: liveness while the process can answer, readiness only when bootstrapped, listening, and not shutting down. OpenTelemetry is left to consumer interceptors / `Server` events — see `docs/adr/0005-observability.md`.
 11. **ServerRequest / ServerResponse** — Sealed facades injected by `@Request` / `@Response` (and middleware). Not Fetch types. Buffered uploads via `req.formData()` / `req.file()`; streaming multipart via `@File` / `req.multipart()` / `req.upload()` (MultiBuffer parser). See `docs/adr/0006-server-request-response.md` and `docs/adr/0007-file-uploads-multipart.md`.
 
-**Dependencies:** `@webergency-utils/typechecker` supplies runtime validators referenced by AOT-emitted code. Peer `typescript` (`^5 || ^6`) is required for `webergency-tsc`, the transformer plugin, and `register`. Package type is ESM (`"type": "module"`).
+**Dependencies:** `@webergency-utils/typechecker` supplies runtime validators referenced by AOT-emitted code. Peer `typescript` (`^5 || ^6`) is required for `webergency-tsc`, the transformer plugin, and `register`. Dual package: ESM (`.js`) and CommonJS (`.cjs`) via conditional `exports`.
 
 ## Glossary
 
@@ -248,6 +247,7 @@ await ms.shutdown();
 
 ### Dependency injection notes
 
+* **Full catalog:** see [INSTANTIATION.md](./INSTANTIATION.md) for every provider shape (`useValue` / `useClass` / `useFactory`, injecting instances, scopes, injection sites) and a ranked list of recommended approaches.
 * **Tokens are module-scoped.** A provider is reachable from another module only if the owning module exports it. Two modules claiming the same token is a bootstrap error, as is two module classes sharing a name (modules are identified by class name).
 * **Resolution is memoized.** Each `(token, module)` pair caches its provider, declaring module, dependency list, and resolved scope, and instances are keyed by `(token, module)` so same-named tokens in different modules cannot collide. Registering a provider invalidates the cache, so late registration still works.
 * **Scope is inherited.** A provider becomes request-scoped as soon as anything it depends on is.

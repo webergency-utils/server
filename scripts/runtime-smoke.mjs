@@ -8,7 +8,7 @@
  *   deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-smoke.mjs
  */
 import { Server } from '../dist/index.js';
-import { seedInstanceController } from '../dist/testing.js';
+import { seedInstanceController } from './seed-controller.mjs';
 
 function detectRuntime()
 {

@@ -1,27 +1,53 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "license": "MIT",
   "type": "module",
   "author": "radixxko",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "webergency-tsc": "./dist/compiler/cli.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./transformer": "./dist/compiler/transformer.js",
-    "./register": "./dist/compiler/register.js",
-    "./testing": "./dist/testing.js"
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./transformer": {
+      "import": {
+        "types": "./dist/compiler/transformer.d.ts",
+        "default": "./dist/compiler/transformer.js"
+      },
+      "require": {
+        "types": "./dist/compiler/transformer.d.cts",
+        "default": "./dist/compiler/transformer.cjs"
+      }
+    },
+    "./register": {
+      "import": {
+        "types": "./dist/compiler/register.d.ts",
+        "default": "./dist/compiler/register.js"
+      },
+      "require": {
+        "types": "./dist/compiler/register.d.cts",
+        "default": "./dist/compiler/register.cjs"
+      }
+    }
   },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
     "lint": "eslint .",
@@ -31,15 +57,15 @@
     "test:runtime:smoke": "node scripts/runtime-smoke.mjs",
     "test:bun": "bun --bun ./node_modules/vitest/vitest.mjs run && bun scripts/runtime-suite.mjs",
     "test:deno": "deno run --allow-net --allow-env --allow-read --node-modules-dir=manual --min-dep-age=0 scripts/runtime-suite.mjs",
-    "fuzz": "npm run build:fuzz && jazzer fuzz_server.cjs",
+    "fuzz": "npm run build:fuzz && jazzer fuzz/server.cjs",
     "coverage": "vitest run --coverage",
     "coverage:bun": "bun --bun ./node_modules/vitest/vitest.mjs run --coverage --coverage.provider=istanbul",
-    "coverage:runtime:node": "c8 --reporter=lcov --reporter=json --report-dir=coverage/runtime-node --include=dist/adapters/node-adapter.js node scripts/runtime-suite.mjs",
+    "coverage:runtime:node": "c8 --reporter=lcov --reporter=json --report-dir=coverage/runtime-node --include=dist/index.js node scripts/runtime-suite.mjs",
     "coverage:runtime:deno": "mkdir -p coverage/runtime-deno && rm -rf coverage/deno-profile && deno run --allow-net --allow-env --allow-read --allow-write --node-modules-dir=manual --min-dep-age=0 --coverage=coverage/deno-profile scripts/runtime-suite.mjs && deno coverage coverage/deno-profile --lcov --output=coverage/runtime-deno/lcov.info && node scripts/filter-lcov.mjs coverage/runtime-deno/lcov.info src/adapters/deno-adapter.ts",
     "clean": "rm -rf ./dist ./dist-fuzz",
     "reset": "npm run clean && rm -rf node_modules package-lock.json && npm i",
-    "build": "npm run clean && tsc -p tsconfig.build.json && node update_imports.js",
-    "build:fuzz": "esbuild src/fuzz-runtime.ts --bundle --platform=node --format=cjs --outfile=dist-fuzz/runtime.cjs",
+    "build": "npm run clean && tsup",
+    "build:fuzz": "esbuild fuzz/runtime.ts --bundle --platform=node --format=cjs --outfile=dist-fuzz/runtime.cjs",
     "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\"",
     "version": "npm run build && npm publish --access public && npm run commit && git push"
   },
@@ -52,13 +78,20 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.5.3"
+    "@webergency-utils/typechecker": "^0.6.1"
   },
   "peerDependencies": {
     "typescript": "^5 || ^6"
   },
   "engines": {
     "node": ">=22"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.9",
+    "minimatch@9": {
+      "brace-expansion": "2.1.4"
+    },
+    "esbuild": "^0.28.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -72,6 +105,7 @@
     "esbuild": "^0.28.1",
     "eslint": "^10.4.1",
     "tinybench": "^6.1.2",
+    "tsup": "^8.5.1",
     "tsx": "^4.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
