@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "license": "MIT",
   "type": "module",
