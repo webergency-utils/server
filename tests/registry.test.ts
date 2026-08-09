@@ -36,7 +36,7 @@ describe( 'ApplicationRegistry', () =>
 
         runWithRegistry( registry, () =>
         {
-            expect( registry.getResolvedScope( 'Svc' )).toBe( Scope.DEFAULT );
+            expect( registry.getResolvedScope( 'Svc' )).toBe( Scope.SINGLETON );
         });
 
         registry.clear();
@@ -47,7 +47,7 @@ describe( 'ApplicationRegistry', () =>
         expect( registry.getDefaultResponseMode()).toBe( 'strip' );
     });
 
-    it( 'should resolve guards and interceptors from providers when not cached', () =>
+    it( 'should resolve guards and interceptors from providers when not cached', async () =>
     {
         // Arrange
         class Guard { canActivate(){ return true } }
@@ -57,10 +57,10 @@ describe( 'ApplicationRegistry', () =>
         registry.registerInterceptor( 'Interceptor', Interceptor );
 
         // Act / Assert
-        runWithRegistry( registry, () =>
+        await runWithRegistry( registry, async () =>
         {
-            expect( registry.getGuard( 'Guard' )).toBeInstanceOf( Guard );
-            expect( registry.getInterceptor( 'Interceptor' )).toBeInstanceOf( Interceptor );
+            expect( await registry.getGuard( 'Guard' )).toBeInstanceOf( Guard );
+            expect( await registry.getInterceptor( 'Interceptor' )).toBeInstanceOf( Interceptor );
         });
     });
 

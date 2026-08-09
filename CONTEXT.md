@@ -23,7 +23,7 @@ A class or value token registered for dependency injection inside a **Module**.
 _Avoid_: Service (too vague), injectable (the decorator name, not the concept)
 
 **Scope**:
-The lifetime of a **Provider** instance: process-wide (`DEFAULT`), per-resolution (`TRANSIENT`), or per-request (`REQUEST`).
+The lifetime of a **Provider** instance: process-wide (`SINGLETON`), per-resolution (`TRANSIENT`), or per-request (`REQUEST`).
 
 ### Request pipeline
 

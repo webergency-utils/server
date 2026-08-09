@@ -73,7 +73,7 @@ describe( 'Server & Metadata', () =>
 
     describe( 'ApplicationRegistry', () =>
     {
-        it( 'should register and retrieve controllers, guards, and interceptors', () =>
+        it( 'should register and retrieve controllers, guards, and interceptors', async () =>
         {
             const registry = new ApplicationRegistry();
             const ctrl = { hello : () => 'world' };
@@ -82,9 +82,9 @@ describe( 'Server & Metadata', () =>
             registry.registerController( 'TestCtrl', ctrl );
             registry.registerGuard( 'TestGuard', guard );
             registry.registerInterceptor( 'TestInt', interceptor );
-            expect( registry.getController( 'TestCtrl' )).toBe( ctrl );
-            expect( registry.getGuard( 'TestGuard' )).toBe( guard );
-            expect( registry.getInterceptor( 'TestInt' )).toBe( interceptor );
+            expect( await registry.getController( 'TestCtrl' )).toBe( ctrl );
+            expect( await registry.getGuard( 'TestGuard' )).toBe( guard );
+            expect( await registry.getInterceptor( 'TestInt' )).toBe( interceptor );
         });
         it( 'should register endpoints', () =>
         {
@@ -1639,7 +1639,7 @@ describe( 'Server & Metadata', () =>
             const upgrade = vi.fn().mockResolvedValue( upgradeRes );
             const server = setupServer( 3000, ( registry ) =>
             {
-                registry.registerProvider( 'Tok', { useValue : 'injected' });
+                registry.registerProvider( 'Tok', { value : 'injected' });
                 registry.registerGuard( 'WsGuard', guard );
                 registry.registerController( 'WsCtrl', { ws : () => {} });
                 registry.registerEndpoint({
@@ -1964,12 +1964,12 @@ describe( 'Server & Metadata', () =>
 
             const server = setupServer( 3006, () => {}, {module : RootModule, logger, logs : false});
 
-            server.ensureReady();
+            await server.ensureReady();
 
-            runWithRegistry( server.registry, () =>
+            await runWithRegistry( server.registry, async () =>
             {
-                const parentInst = server.registry.getController( 'ParentController' );
-                const childInst = server.registry.getController( 'ChildController' );
+                const parentInst = await server.registry.getController( 'ParentController' );
+                const childInst = await server.registry.getController( 'ChildController' );
                 expect( parentInst ).toBeDefined();
                 expect( parentInst.c.getValue()).toBe( 'C' );
 
@@ -2017,10 +2017,10 @@ describe( 'Server & Metadata', () =>
 
             const server = setupServer( 3007, () => {}, {module : RootModule});
 
-            server.ensureReady();
-            runWithRegistry( server.registry, () =>
+            await server.ensureReady();
+            await runWithRegistry( server.registry, async () =>
             {
-                const ctrl = server.registry.getController( 'DynamicController' );
+                const ctrl = await server.registry.getController( 'DynamicController' );
                 expect( ctrl ).toBeDefined();
                 expect( ctrl.config.get()).toBe( 'dynamic-config' );
             });
@@ -2036,7 +2036,7 @@ describe( 'Server & Metadata', () =>
             setModuleMeta( ModuleA, { imports : [ModuleB] });
 
             const server = new Server({ port : 3008, module : ModuleA });
-            expect(() => server.ensureReady()).not.toThrow();
+            await expect( server.ensureReady()).resolves.toBeUndefined();
         });
 
         it( 'should support multiple root modules', async () => 
@@ -2096,7 +2096,7 @@ describe( 'Server & Metadata', () =>
             const RootModule = legacyModule({ imports : [ModuleA], controllers : [ConsumerController] });
 
             const server = setupServer( 3010, () => {}, {module : RootModule});
-            expect(() => server.ensureReady()).toThrow(
+            await expect( server.ensureReady()).rejects.toThrow(
                 /No provider registered for token: HiddenService in module/
             );
         });
@@ -2161,9 +2161,9 @@ describe( 'Server & Metadata', () =>
             const res = await server.fetch( new Request( 'http://localhost/circ' ));
             expect( await res.text()).toBe( 'AB' );
 
-            runWithRegistry( server.registry, () =>
+            await runWithRegistry( server.registry, async () =>
             {
-                const ctrl = server.registry.getController( 'CircularController' );
+                const ctrl = await server.registry.getController( 'CircularController' );
                 expect( ctrl.a.b.hello()).toBe( 'BA' );
             });
         });
@@ -2197,7 +2197,7 @@ describe( 'Server & Metadata', () =>
     describe( 'Injection Scopes', () => 
     {
 
-        it( 'should resolve TRANSIENT provider with new instance every time', () => 
+        it( 'should resolve TRANSIENT provider with new instance every time', async () => 
         {
             let instanceCount = 0;
             class TransientService 
@@ -2212,8 +2212,8 @@ describe( 'Server & Metadata', () =>
             }
             const registry = new ApplicationRegistry();
             registry.registerProvider( 'TransientService', TransientService );
-            const inst1 = runWithRegistry( registry, () => registry.resolve( 'TransientService' ));
-            const inst2 = runWithRegistry( registry, () => registry.resolve( 'TransientService' ));
+            const inst1 = await runWithRegistry( registry, () => registry.resolve( 'TransientService' ));
+            const inst2 = await runWithRegistry( registry, () => registry.resolve( 'TransientService' ));
             expect( inst1 ).toBeInstanceOf( TransientService );
             expect( inst2 ).toBeInstanceOf( TransientService );
             expect( inst1.id ).toBe( 1 );
@@ -2262,10 +2262,10 @@ describe( 'Server & Metadata', () =>
             });
 
             const server = setupServer( 3014, () => {}, {module : ScopeModule});
-            server.ensureReady();
+            await server.ensureReady();
 
-            expect(() => runWithRegistry( server.registry, () => server.registry.resolve( 'RequestService' )))
-                .toThrow( /Cannot resolve request-scoped provider/ );
+            await expect( runWithRegistry( server.registry, () => server.registry.resolve( 'RequestService' )))
+                .rejects.toThrow( /Cannot resolve request-scoped provider/ );
             // Fetch request 1
             const res1 = await server.fetch( new Request( 'http://localhost/scope-test' ));
             const data1 = ( await res1.json()) as any;
@@ -2281,79 +2281,43 @@ describe( 'Server & Metadata', () =>
     describe( 'Lifecycle Hooks', () => 
     {
 
-        it( 'should call all lifecycle hooks in sequence during start and shutdown', async () => 
+        it( 'should call onInit during start and onDestroy during shutdown', async () => 
         {
             const sequence: string[] = [];
 
             class HookService 
             {
-                async onModuleInit() 
+                async onInit() 
                 {
-                    sequence.push( 'provider:onModuleInit' );
+                    sequence.push( 'provider:onInit' );
                 }
-                async onApplicationBootstrap() 
+                async onDestroy() 
                 {
-                    sequence.push( 'provider:onApplicationBootstrap' );
-                }
-                async onModuleDestroy() 
-                {
-                    sequence.push( 'provider:onModuleDestroy' );
-                }
-                async beforeApplicationShutdown( signal?: string ) 
-                {
-                    sequence.push( `provider:beforeApplicationShutdown:${signal}` );
-                }
-                async onApplicationShutdown( signal?: string ) 
-                {
-                    sequence.push( `provider:onApplicationShutdown:${signal}` );
+                    sequence.push( 'provider:onDestroy' );
                 }
             }
 
             class HookController 
             {
-                async onModuleInit() 
+                async onInit() 
                 {
-                    sequence.push( 'controller:onModuleInit' );
+                    sequence.push( 'controller:onInit' );
                 }
-                async onApplicationBootstrap() 
+                async onDestroy() 
                 {
-                    sequence.push( 'controller:onApplicationBootstrap' );
-                }
-                async onModuleDestroy() 
-                {
-                    sequence.push( 'controller:onModuleDestroy' );
-                }
-                async beforeApplicationShutdown( signal?: string ) 
-                {
-                    sequence.push( `controller:beforeApplicationShutdown:${signal}` );
-                }
-                async onApplicationShutdown( signal?: string ) 
-                {
-                    sequence.push( `controller:onApplicationShutdown:${signal}` );
+                    sequence.push( 'controller:onDestroy' );
                 }
             }
 
             class HookModule
             {
-                async onModuleInit()
+                async onInit()
                 {
-                    sequence.push( 'module:onModuleInit' );
+                    sequence.push( 'module:onInit' );
                 }
-                async onApplicationBootstrap()
+                async onDestroy()
                 {
-                    sequence.push( 'module:onApplicationBootstrap' );
-                }
-                async onModuleDestroy()
-                {
-                    sequence.push( 'module:onModuleDestroy' );
-                }
-                async beforeApplicationShutdown( signal?: string )
-                {
-                    sequence.push( `module:beforeApplicationShutdown:${signal}` );
-                }
-                async onApplicationShutdown( signal?: string )
-                {
-                    sequence.push( `module:onApplicationShutdown:${signal}` );
+                    sequence.push( 'module:onDestroy' );
                 }
             }
 
@@ -2365,28 +2329,19 @@ describe( 'Server & Metadata', () =>
 
             const server = new Server({ port : 3015, module : HookModule });
 
-            // Start the server
-            await server.start();
+            // onInit runs during ensureReady / resolveAll (no listen needed)
+            await server.ensureReady();
 
-            expect( sequence ).toContain( 'provider:onModuleInit' );
-            expect( sequence ).toContain( 'controller:onModuleInit' );
-            expect( sequence ).toContain( 'module:onModuleInit' );
-            expect( sequence ).toContain( 'provider:onApplicationBootstrap' );
-            expect( sequence ).toContain( 'controller:onApplicationBootstrap' );
-            expect( sequence ).toContain( 'module:onApplicationBootstrap' );
+            expect( sequence ).toContain( 'provider:onInit' );
+            expect( sequence ).toContain( 'controller:onInit' );
+            expect( sequence ).toContain( 'module:onInit' );
 
-            // Shutdown the server
+            // Shutdown — onDestroy runs via destroyAll after drain
             await server.shutdown( 'SIGINT' );
 
-            expect( sequence ).toContain( 'provider:onModuleDestroy' );
-            expect( sequence ).toContain( 'controller:onModuleDestroy' );
-            expect( sequence ).toContain( 'module:onModuleDestroy' );
-            expect( sequence ).toContain( 'provider:beforeApplicationShutdown:SIGINT' );
-            expect( sequence ).toContain( 'controller:beforeApplicationShutdown:SIGINT' );
-            expect( sequence ).toContain( 'module:beforeApplicationShutdown:SIGINT' );
-            expect( sequence ).toContain( 'provider:onApplicationShutdown:SIGINT' );
-            expect( sequence ).toContain( 'controller:onApplicationShutdown:SIGINT' );
-            expect( sequence ).toContain( 'module:onApplicationShutdown:SIGINT' );
+            expect( sequence ).toContain( 'provider:onDestroy' );
+            expect( sequence ).toContain( 'controller:onDestroy' );
+            expect( sequence ).toContain( 'module:onDestroy' );
         });
     });
 

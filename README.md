@@ -243,16 +243,16 @@ await ms.shutdown();
 * `@Internal` — Paren-free; forward-only (not externally routable).
 * `@Meta(...)` / `@SetMetadata(key, value)` — Arbitrary metadata for `Reflector`.
 * `@Injectable(options?)` / `@Inject(token?)` / `@Module(metadata)` / `@Global()` — DI.
-* Lifecycle interfaces: `OnModuleInit`, `OnApplicationBootstrap`, `OnModuleDestroy`, `BeforeApplicationShutdown`, `OnApplicationShutdown`.
+* Lifecycle interfaces: `OnInit`, `OnDestroy`.
 
 ### Dependency injection notes
 
-* **Full catalog:** see [INSTANTIATION.md](./INSTANTIATION.md) for every provider shape (`useValue` / `useClass` / `useFactory`, injecting instances, scopes, injection sites) and a ranked list of recommended approaches.
+* **Full catalog:** see [INSTANTIATION.md](./INSTANTIATION.md) for every provider shape (`value` / `class` / `factory`, injecting instances, scopes, injection sites) and a ranked list of recommended approaches.
 * **Tokens are module-scoped.** A provider is reachable from another module only if the owning module exports it. Two modules claiming the same token is a bootstrap error, as is two module classes sharing a name (modules are identified by class name).
 * **Resolution is memoized.** Each `(token, module)` pair caches its provider, declaring module, dependency list, and resolved scope, and instances are keyed by `(token, module)` so same-named tokens in different modules cannot collide. Registering a provider invalidates the cache, so late registration still works.
 * **Scope is inherited.** A provider becomes request-scoped as soon as anything it depends on is.
 * **Circular dependencies** resolve through a lazy proxy and are logged at bootstrap as `A -> B -> A`. A request scope declared inside a cycle cannot be detected, which is why the cycle is reported.
-* **Lifecycle order.** `onModuleInit` / `onApplicationBootstrap` run dependency-first; `onModuleDestroy`, `beforeApplicationShutdown`, and `onApplicationShutdown` run in reverse, so a provider is torn down before the things it depends on.
+* **Lifecycle order.** `onInit` runs automatically during `resolve` / `resolveAll` (dependency-first, awaited). `onDestroy` runs for every instance: request-scoped and in-request transients at request end; singletons and out-of-request transients via `registry.destroyAll()` on shutdown (dependents first).
 
 ### Parameter decorators
 
@@ -335,7 +335,7 @@ Coercion via `from`:
 * `ServerRequest` / `ServerResponse` / `EndpointRequest` / `EndpointResponse` / `ResponseBag` (alias) / `CookieOptions` / `Middleware` / `MiddlewareClass`
 * `ServerWebSocket`, `PeerCert`, `PeerCertSubject`, `TlsOptions`
 * `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
-* `Scope` (`DEFAULT` | `TRANSIENT` | `REQUEST`)
+* `Scope` (`SINGLETON` | `TRANSIENT` | `REQUEST`)
 * `ConsoleLogger` / `NoOpLogger`
 * `ApplicationRegistry`, `getRegistry`, `tryGetRegistry`, `runWithRegistry`
 * `Router`, `Reflector`, `RequestContext` / `RequestContextStore`

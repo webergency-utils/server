@@ -174,11 +174,11 @@ export class Server extends EventEmitter
      * Lazy walk of module/controller Symbol meta + route wiring.
      * Safe to call multiple times; runs once per Server instance.
      */
-    public ensureReady()
+    public async ensureReady()
     {
         if( this.bootstrapped ){ return }
 
-        runWithRegistry( this.registry, () =>
+        await runWithRegistry( this.registry, async () =>
         {
             bootstrapRegistry( this.registry, {
                 module       : this.options.module,
@@ -189,7 +189,7 @@ export class Server extends EventEmitter
                 responseMode : this.options.responseMode
             });
 
-            this.registry.resolveAll();
+            await this.registry.resolveAll();
 
             const publicKeys = new Set<string>();
             const internalKeys = new Set<string>();
@@ -288,9 +288,9 @@ export class Server extends EventEmitter
     }
 
     /** @deprecated Use ensureReady() — kept for tests that called init(). */
-    private init()
+    private async init()
     {
-        this.ensureReady();
+        await this.ensureReady();
     }
 
     public on<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]) 
@@ -339,19 +339,13 @@ export class Server extends EventEmitter
         }
     }
 
-    public async shutdown( signal?: string ) 
+    public async shutdown( _signal?: string ) 
     {
         if( this._isShuttingDown ) { return }
         this._isShuttingDown = true;
         this.listening = false;
 
         this.internalEmit( 'beforeShutdown' );
-
-        await runWithRegistry( this.registry, async () =>
-        {
-            await this.registry.invokeHook( 'onModuleDestroy' );
-            await this.registry.invokeHook( 'beforeApplicationShutdown', signal );
-        });
 
         if( this.serverAdapter ) 
         {
@@ -397,7 +391,7 @@ export class Server extends EventEmitter
 
         await runWithRegistry( this.registry, async () =>
         {
-            await this.registry.invokeHook( 'onApplicationShutdown', signal );
+            await this.registry.destroyAll();
         });
 
         if( this.options.logs ) 
@@ -431,12 +425,7 @@ export class Server extends EventEmitter
 
     public async start() 
     {
-        this.ensureReady();
-
-        await runWithRegistry( this.registry, async () =>
-        {
-            await this.registry.invokeHook( 'onModuleInit' );
-        });
+        await this.ensureReady();
 
         const { port } = this.options;
         const runtime = this.detectRuntime();
@@ -472,10 +461,6 @@ export class Server extends EventEmitter
             });
         }
 
-        await runWithRegistry( this.registry, async () =>
-        {
-            await this.registry.invokeHook( 'onApplicationBootstrap' );
-        });
         this.internalEmit( 'start', port );
     }
 
@@ -662,11 +647,11 @@ export class Server extends EventEmitter
 
     public fetch = async ( request: Request ): Promise<Response> => 
     {
-        const probe = this.answerHealthProbe( request );
+        const probe = await this.answerHealthProbe( request );
 
         if( probe ) { return probe }
 
-        this.ensureReady();
+        await this.ensureReady();
 
         return runWithRegistry( this.registry, () => this.handleFetch( request ));
     };
@@ -676,7 +661,7 @@ export class Server extends EventEmitter
      * graph cannot take the probes down. Returns null when health is disabled or the
      * path is not a probe.
      */
-    private answerHealthProbe( request: Request ): Response | null
+    private async answerHealthProbe( request: Request ): Promise<Response | null>
     {
         if( !this.options.health || request.method !== 'GET' ) { return null }
 
@@ -703,7 +688,7 @@ export class Server extends EventEmitter
         {
             try
             {
-                this.ensureReady();
+                await this.ensureReady();
             }
             catch
             {
@@ -951,7 +936,7 @@ export class Server extends EventEmitter
                 // Enforce guards before upgrading
                 const registry = getRegistry();
                 const controllerModule = registry.getTokenModule( finalMatch.metadata.controller );
-                const controller = registry.getController( finalMatch.metadata.controller, controllerModule );
+                const controller = await registry.getController( finalMatch.metadata.controller, controllerModule );
 
                 if( !controller ) { throw new Error( `Controller ${finalMatch.metadata.controller} not registered` ) }
 

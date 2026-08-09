@@ -84,4 +84,49 @@ describe( 'http-header-parse', () =>
             expect( Date.now() - started ).toBeLessThan( 500 );
         }
     });
+
+    it( 'unescapes quoted values and skips empty/trailing parts', () =>
+    {
+        expect( parseHeaderValue( 'form-data; name="a\\"b"' )).toEqual([
+            'form-data',
+            { name : 'a"b' }
+        ]);
+        expect( parseHeaderValue( '  ;  ; token  ' )).toEqual([ 'token' ]);
+        expect( parseHeaderValueParameter( undefined, 'name' )).toBeUndefined();
+        expect( parseHeaderValueParameter( 'form-data', 'missing' )).toBeUndefined();
+    });
+
+    it( 'parseContentDisposition skips non-object tokens and undefined input', () =>
+    {
+        expect( parseContentDisposition( undefined )).toEqual({});
+        expect( parseContentDisposition( 'inline' )).toEqual({});
+        expect( parseContentDisposition( 'form-data; filename="a"; name="b"; filename="c"' ))
+            .toEqual({ name : 'b', filename : 'a' });
+    });
+
+    it( 'extractMultipartBoundary rejects non-multipart and empty boundary', () =>
+    {
+        expect( extractMultipartBoundary( null )).toBeUndefined();
+        expect( extractMultipartBoundary( undefined )).toBeUndefined();
+        expect( extractMultipartBoundary( 'no-slash' )).toBeUndefined();
+        expect( extractMultipartBoundary( 'text/plain' )).toBeUndefined();
+        expect( extractMultipartBoundary( 'multi/form-data; boundary=x' )).toBeUndefined();
+        expect( extractMultipartBoundary( 'multipart/form-data' )).toBeUndefined();
+        expect( extractMultipartBoundary( 'multipart/form-data; boundary=' )).toBeUndefined();
+        expect( extractMultipartBoundary( 'multipart/form-data; boundary=ab; charset=utf-8' ))
+            .toBe( 'ab' );
+        expect( extractMultipartBoundary( 'multipart/form-data; boundary=ab\tdef' )).toBe( 'ab' );
+        expect( extractMultipartBoundary( 'Multipart/mixed; boundary="q bound"' )).toBe( 'q bound' );
+    });
+
+    it( 'covers splitParameter empty key/value and escaped keys', () =>
+    {
+        // Arrange / Act / Assert
+        expect( parseHeaderValue( 'form-data;   ' )).toEqual([ 'form-data' ]);
+        expect( parseHeaderValueParameter( 'form-data; name=', 'name' )).toBeUndefined();
+        expect( parseHeaderValueParameter( 'form-data; =value', 'name' )).toBeUndefined();
+        expect( parseHeaderValueParameter( 'form-data; name=   ', 'name' )).toBeUndefined();
+        expect( parseHeaderValueParameter( 'form-data; name = x', 'name' )).toBe( 'x' );
+        expect( parseHeaderValueParameter( 'form-data; "k\\"ey"="v\\"al"', 'k"ey' )).toBe( 'v"al' );
+    });
 });

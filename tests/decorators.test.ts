@@ -27,6 +27,8 @@ import {
     Peer,
     Cookies,
     Cookie,
+    File,
+    Files,
     Inject,
     Injectable,
     Module,
@@ -66,6 +68,10 @@ describe( 'Decorators', () =>
         Peer({}, 'test', 0 );
         Cookies({}, 'test', 0 );
         Cookie( 'c' )({}, 'test', 0 );
+        Files()({}, 'test', 0 );
+        File( 'avatar' )({}, 'test', 0 );
+        File({ dest : '/tmp' })({}, 'test', {});
+        File();
 
         // Direct decorator usage (paren-free)
         Inject({}, 'test', 0 );

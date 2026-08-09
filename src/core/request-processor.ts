@@ -1,5 +1,6 @@
 import { Context } from './context.js';
 import { MetadataStore } from './metadata.js';
+import { DIContainer } from './container.js';
 import { RequestReader, getEffectiveBodyContentType, isMultipartContentType } from '../helpers/request-reader.js';
 import { EndpointMetadata, ParamMetadata, AugmentedRequest, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
 import { ServerRequest, parseCookieHeader, resolveRequestFileOptions } from './server-request.js';
@@ -218,7 +219,7 @@ export class RequestProcessor
             case 'Hostname': val = new URL( req.url ).hostname; break;
             case 'Path': val = new URL( req.url ).pathname; break;
             case 'Context': val = Context.get(); break;
-            case 'Inject': val = MetadataStore.getInjectable( p.name!, contextModule ); break;
+            case 'Inject': val = await MetadataStore.getInjectable( p.name!, contextModule ); break;
             case 'WebSocket': val = ws; break;
             case 'Peer': {
                 val = ( req as any ).clientCert;
@@ -343,7 +344,7 @@ export class RequestProcessor
         }, async () => 
         {
             const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-            const controller = MetadataStore.getController( metadata.controller, controllerModule );
+            const controller = await MetadataStore.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
@@ -553,7 +554,7 @@ export class RequestProcessor
 
             for( const iName of [...metadata.interceptors].reverse()) 
             {
-                const interceptor = MetadataStore.getInterceptor( iName );
+                const interceptor = await MetadataStore.getInterceptor( iName );
                 const next = chain;
                 chain = () => interceptor.intercept( req, next );
             }
@@ -569,7 +570,7 @@ export class RequestProcessor
                     {
                         this.throwIfAborted( req );
 
-                        const middlewareInstance = MetadataStore.getInjectable( mName, controllerModule );
+                        const middlewareInstance = await MetadataStore.getInjectable( mName, controllerModule );
 
                         if( !middlewareInstance ) 
                         {
@@ -648,6 +649,11 @@ export class RequestProcessor
 
                 return middlewareResponse.applyTo( response );
             }
+            finally
+            {
+                await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
+                Context.get()?.requestInstances?.clear();
+            }
         });
     }
 
@@ -685,7 +691,7 @@ export class RequestProcessor
         }, async () => 
         {
             const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-            const controller = MetadataStore.getController( metadata.controller, controllerModule );
+            const controller = await MetadataStore.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
@@ -722,6 +728,11 @@ export class RequestProcessor
                     // ignore secondary close failures
                 }
             }
+            finally
+            {
+                await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
+                Context.get()?.requestInstances?.clear();
+            }
         });
     }
 
@@ -746,8 +757,10 @@ export class RequestProcessor
             requestInstances : new Map<string, any>()
         }, async () => 
         {
+            try
+            {
             const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-            const controller = MetadataStore.getController( metadata.controller, controllerModule );
+            const controller = await MetadataStore.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
@@ -795,12 +808,18 @@ export class RequestProcessor
 
             for( const iName of [...metadata.interceptors].reverse()) 
             {
-                const interceptor = MetadataStore.getInterceptor( iName );
+                const interceptor = await MetadataStore.getInterceptor( iName );
                 const next = chain;
                 chain = () => interceptor.intercept( req, next );
             }
 
             return await chain();
+            }
+            finally
+            {
+                await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
+                Context.get()?.requestInstances?.clear();
+            }
         });
     }
 }

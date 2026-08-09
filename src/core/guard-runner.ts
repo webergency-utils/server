@@ -50,7 +50,7 @@ export async function invokeGuards(
         options.beforeEach?.();
 
         const guardModule = g.type === 'class' ? registry.getTokenModule( g.name ) : options.controllerModule;
-        const guardInstance = g.type === 'class' ? registry.getGuard( g.name, guardModule ) : options.controller;
+        const guardInstance = g.type === 'class' ? await registry.getGuard( g.name, guardModule ) : options.controller;
         const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
 
         const args: any[] = [];

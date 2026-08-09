@@ -5,7 +5,7 @@ import { createBench, report } from './support.js';
 
 class Config
 {
-    static __scope__ = Scope.DEFAULT;
+    static __scope__ = Scope.SINGLETON;
     static __injections__ = { constructorDeps : [], propertyDeps : {} };
     retries = 3;
 }
@@ -13,7 +13,7 @@ class Config
 /** All three hosts share one dependency shape so the numbers only differ by scope. */
 class DefaultService
 {
-    static __scope__ = Scope.DEFAULT;
+    static __scope__ = Scope.SINGLETON;
     static __injections__ = { constructorDeps : [ 'Config' ], propertyDeps : {} };
     config : Config;
     constructor( config: Config ){ this.config = config }
@@ -54,14 +54,20 @@ export async function diSuite(): Promise<void>
     const bench = createBench();
 
     bench
-        .add( 'resolve default-scoped', () => registry.resolve( 'DefaultService' ))
-        .add( 'resolve transient-scoped', () => registry.resolve( 'TransientService' ))
-        .add( 'resolve request-scoped', () =>
+        .add( 'resolve default-scoped', async () =>
+        {
+            await registry.resolve( 'DefaultService' );
+        })
+        .add( 'resolve transient-scoped', async () =>
+        {
+            await registry.resolve( 'TransientService' );
+        })
+        .add( 'resolve request-scoped', async () =>
         {
             // A request resolves each token once, so dropping the cache keeps construction on the measured path.
             requestInstances.clear();
 
-            return registry.resolve( 'RequestService' );
+            await registry.resolve( 'RequestService' );
         });
 
     await runWithRegistry( registry, () =>

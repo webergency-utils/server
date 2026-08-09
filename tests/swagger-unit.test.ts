@@ -109,6 +109,22 @@ describe( 'SwaggerSpecGenerator unit', () =>
                 params     : [{ source : 'Body' }],
                 files      : { fields : { photo : {} } },
                 guards : [], interceptors : [], meta : {}
+            },
+            {
+                controller : 'DocController',
+                methodName : 'upload',
+                httpMethod : 'POST',
+                path       : '/docs/files',
+                params     : [{ source : 'Files', name : 'docs' }],
+                guards : [], interceptors : [], meta : {}
+            },
+            {
+                controller : 'DocController',
+                methodName : 'upload',
+                httpMethod : 'POST',
+                path       : '/docs/files-all',
+                params     : [{ source : 'Files' }],
+                guards : [], interceptors : [], meta : {}
             }
         );
 
@@ -123,6 +139,14 @@ describe( 'SwaggerSpecGenerator unit', () =>
         expect( spec.paths['/docs/{id}'].get.parameters.some(( p: any ) => p.in === 'query' && p.name === 'a' )).toBe( true );
         expect( spec.paths['/docs/upload'].post.requestBody.content['application/octet-stream']).toBeDefined();
         expect( spec.paths['/docs/file'].post.requestBody.content['multipart/form-data'].schema.properties.avatar ).toEqual({
+            type   : 'string',
+            format : 'binary'
+        });
+        expect( spec.paths['/docs/files'].post.requestBody.content['multipart/form-data'].schema.properties.docs ).toEqual({
+            type  : 'array',
+            items : { type : 'string', format : 'binary' }
+        });
+        expect( spec.paths['/docs/files-all'].post.requestBody.content['multipart/form-data'].schema.properties.file ).toEqual({
             type   : 'string',
             format : 'binary'
         });

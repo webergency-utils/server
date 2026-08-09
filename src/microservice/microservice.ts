@@ -15,26 +15,21 @@ export class Microservice
         private options: MicroserviceOptions = {}
     ) {}
 
-    public ensureReady()
+    public async ensureReady()
     {
         if( this.bootstrapped ){ return }
 
-        runWithRegistry( this.registry, () =>
+        await runWithRegistry( this.registry, async () =>
         {
             bootstrapRegistry( this.registry, this.options );
-            this.registry.resolveAll();
+            await this.registry.resolveAll();
         });
         this.bootstrapped = true;
     }
 
     async start(): Promise<void> 
     {
-        this.ensureReady();
-
-        await runWithRegistry( this.registry, async () =>
-        {
-            await this.registry.invokeHook( 'onModuleInit' );
-        });
+        await this.ensureReady();
 
         await this.adapter.listen( async ( pattern, payload ) => 
         {
@@ -78,24 +73,14 @@ export class Microservice
                 }
             });
         });
-
-        await runWithRegistry( this.registry, async () =>
-        {
-            await this.registry.invokeHook( 'onApplicationBootstrap' );
-        });
     }
 
     async shutdown(): Promise<void> 
     {
-        await runWithRegistry( this.registry, async () =>
-        {
-            await this.registry.invokeHook( 'onModuleDestroy' );
-            await this.registry.invokeHook( 'beforeApplicationShutdown' );
-        });
         await this.adapter.close();
         await runWithRegistry( this.registry, async () =>
         {
-            await this.registry.invokeHook( 'onApplicationShutdown' );
+            await this.registry.destroyAll();
         });
     }
 }

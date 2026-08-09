@@ -126,13 +126,13 @@ describe( 'bootstrapRegistry', () =>
         expect( registry.getEndpoints()[0].controller ).toBe( 'Ctrl' );
     });
 
-    it( 'should register provider token objects with provide / useClass', () =>
+    it( 'should register provider token objects with token / class', () =>
     {
         // Arrange
         class Impl {}
         class AppMod {}
         setModuleMeta( AppMod, {
-            providers : [{ provide : 'TOKEN', useClass : Impl }]
+            providers : [{ token : 'TOKEN', class : Impl }]
         });
         const registry = new ApplicationRegistry();
 
@@ -140,7 +140,7 @@ describe( 'bootstrapRegistry', () =>
         bootstrapRegistry( registry, { module : AppMod });
 
         // Assert
-        expect( registry.getProvider( 'TOKEN' )).toEqual({ provide : 'TOKEN', useClass : Impl });
+        expect( registry.getProvider( 'TOKEN' )).toEqual({ token : 'TOKEN', class : Impl });
     });
 
     it( 'should attach injectable meta for bare guard and interceptor under a module', () =>

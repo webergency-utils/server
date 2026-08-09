@@ -205,9 +205,9 @@ function collectModule(
 
 function resolveProviderToken( provider: any ): { token: string, actual: any }
 {
-    if( provider && typeof provider === 'object' && 'provide' in provider )
+    if( provider && typeof provider === 'object' && 'token' in provider )
     {
-        const token = typeof provider.provide === 'string' ? provider.provide : provider.provide?.name;
+        const token = typeof provider.token === 'string' ? provider.token : provider.token?.name;
 
         return { token, actual : provider };
     }

@@ -36,9 +36,9 @@ describe( 'Microservice Integration Tests', () =>
         }
     });
 
-    beforeEach(() =>
+    beforeEach( async () =>
     {
-        const ctrl = microservice.registry.getController( 'MathMicroserviceController' );
+        const ctrl = await microservice.registry.getController( 'MathMicroserviceController' );
         ctrl.lastNotify = undefined;
     });
 
@@ -140,7 +140,7 @@ describe( 'Microservice Integration Tests', () =>
         {
             await client.emit( 'logs.notify', 'hello-event' );
             await new Promise( r => setTimeout( r, 80 ));
-            const ctrl = microservice.registry.getController( 'MathMicroserviceController' );
+            const ctrl = await microservice.registry.getController( 'MathMicroserviceController' );
             expect( ctrl.lastNotify ).toBe( 'hello-event' );
             expect( replies.join( '' )).toBe( '' );
         }
@@ -168,13 +168,13 @@ describe( 'Microservice Integration Tests', () =>
             client.on( 'data', () => { gotData = true });
             client.on( 'error', reject );
 
-            setTimeout(() =>
+            setTimeout( async () =>
             {
                 client.end();
                 try
                 {
                     expect( gotData ).toBe( false );
-                    const ctrl = microservice.registry.getController( 'MathMicroserviceController' );
+                    const ctrl = await microservice.registry.getController( 'MathMicroserviceController' );
                     expect( ctrl.lastNotify ).toBe( 'with-id' );
                     resolve();
                 }

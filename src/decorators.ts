@@ -91,7 +91,7 @@ export function Internal( target: any, key: string | symbol, descriptor: any ): 
 export function Internal( arg1: any, arg2?: any, arg3?: any ): void {}
 
 export enum Scope {
-    DEFAULT = 0,
+    SINGLETON = 0,
     TRANSIENT = 1,
     REQUEST = 2
 }
@@ -415,26 +415,15 @@ export function Global(): ClassDecorator
 }
 
 /**
- * Lifecycle Hook Interfaces
+ * Instance lifecycle hooks — called for every constructed provider instance.
+ * App/process events stay on Server; injectables only see their own lifetime.
  */
-export interface OnModuleInit {
-    onModuleInit(): void | Promise<void>
+export interface OnInit {
+    onInit(): void | Promise<void>
 }
 
-export interface OnApplicationBootstrap {
-    onApplicationBootstrap(): void | Promise<void>
-}
-
-export interface OnModuleDestroy {
-    onModuleDestroy(): void | Promise<void>
-}
-
-export interface BeforeApplicationShutdown {
-    beforeApplicationShutdown( signal?: string ): void | Promise<void>
-}
-
-export interface OnApplicationShutdown {
-    onApplicationShutdown( signal?: string ): void | Promise<void>
+export interface OnDestroy {
+    onDestroy(): void | Promise<void>
 }
 
 

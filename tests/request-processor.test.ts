@@ -807,7 +807,7 @@ describe( 'RequestProcessor.execute middleware and guards', () =>
         // Arrange
         const registry = new ApplicationRegistry();
         registry.registerController( 'MwCtrl', { ok : () => 'ok' });
-        registry.registerProvider( 'MissingMw', { useValue : null });
+        registry.registerProvider( 'MissingMw', { value : null });
         const meta = createEndpoint({
             controller  : 'MwCtrl',
             methodName  : 'ok',
@@ -1226,6 +1226,210 @@ describe( 'RequestProcessor.executeRpc', () =>
             expect( num.headers.get( 'content-type' )).toBe( 'application/json' );
             expect( await text.text()).toBe( '"hello"' );
             expect( await bag.text()).toBe( '{"keep":true,"n":1}' );
+        });
+    });
+
+    it( 'should fail non-SSE returnTypeValidator and pass binary validated bodies', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'ValCtrl', {
+            bad : () => ({ x : 1 }),
+            bin : () => new Uint8Array([ 1, 2, 3 ])
+        });
+
+        // Act / Assert
+        await runWithRegistry( registry, async () =>
+        {
+            const failed = await RequestProcessor.execute(
+                createEndpoint({
+                    controller          : 'ValCtrl',
+                    methodName          : 'bad',
+                    returnTypeMode      : 'strict',
+                    returnTypeValidator : ( _v, _p, ctx: { success: boolean, errors: unknown[] }) =>
+                    {
+                        ctx.success = false;
+                        ctx.errors.push({ message : 'nope' });
+
+                        return _v;
+                    }
+                }),
+                createRequest({})
+            );
+
+            expect( failed.status ).toBe( 500 );
+            expect( await failed.json()).toMatchObject({
+                error : expect.stringMatching( /Response validation failed/ )
+            });
+
+            const res = await RequestProcessor.execute(
+                createEndpoint({
+                    controller          : 'ValCtrl',
+                    methodName          : 'bin',
+                    returnTypeValidator : ( v ) => v
+                }),
+                createRequest({})
+            );
+
+            expect( new Uint8Array( await res.arrayBuffer())).toEqual( new Uint8Array([ 1, 2, 3 ]));
+        });
+    });
+
+    it( 'should format SSE object chunks with id/retry and fail invalid data', async () =>
+    {
+        // Arrange — serializer would skip validation; use validator-only path
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'SseObjCtrl', {
+            stream : async function *()
+            {
+                yield { event : 'ping', id : '1', retry : 1000, data : { ok : true } };
+                yield { data : { ok : false } };
+            }
+        });
+        const meta = createEndpoint({
+            controller          : 'SseObjCtrl',
+            methodName          : 'stream',
+            meta                : { sse : true },
+            returnTypeValidator : ( v: any, _path: string, ctx: { success: boolean, errors: unknown[] }) =>
+            {
+                if( v?.ok === false )
+                {
+                    ctx.success = false;
+                    ctx.errors.push({ message : 'bad data' });
+                }
+
+                return v;
+            }
+        });
+
+        // Act
+        const res = await runWithRegistry( registry, () =>
+            RequestProcessor.execute( meta, createRequest({})));
+
+        // Assert
+        expect( res.headers.get( 'Content-Type' )).toBe( 'text/event-stream' );
+        await expect( res.text()).rejects.toThrow( /Response validation failed/ );
+    });
+
+    it( 'should resolve Files params and map unprefixed ParseError messages', async () =>
+    {
+        // Arrange
+        const { ParseError } = await import( '@webergency-utils/typechecker/runtime' );
+        const boundary = 'fp';
+        const body = [
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="docs"; filename="a.txt"',
+            'Content-Type: text/plain',
+            '',
+            'A',
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="docs"; filename="b.txt"',
+            'Content-Type: text/plain',
+            '',
+            'B',
+            `--${boundary}--`,
+            ''
+        ].join( '\r\n' );
+        const req = createRequest({
+            body,
+            headers : { 'content-type' : `multipart/form-data; boundary=${boundary}` }
+        });
+        ( req as any ).body = new ReadableStream({
+            start( c )
+            {
+                c.enqueue( new TextEncoder().encode( body ));
+                c.close();
+            }
+        });
+        const ctx = { success : true, errors : [] as any[], mode : 'strict' };
+
+        // Act
+        const files = await RequestProcessor.resolveParam(
+            { source : 'Files', name : 'docs' },
+            req,
+            ctx,
+            { maxBodySize : '1mb' }
+        );
+
+        // Assert
+        expect( files ).toHaveLength( 2 );
+
+        const parseCtx = { success : true, errors : [] as any[], mode : 'strict' };
+        const parser = () =>
+        {
+            const err = new ParseError( 'q', 'ignored' );
+            err.message = 'raw-parse-code';
+
+            throw err;
+        };
+
+        await RequestProcessor.resolveParam(
+            { source : 'Query', name : 'q', parser },
+            createRequest({ query : { q : '1' } }),
+            parseCtx
+        );
+
+        expect( parseCtx.errors[0].error ).toBe( 'raw-parse-code' );
+    });
+
+    it( 'should reject forward after streamed body or redirect', async () =>
+    {
+        // Arrange
+        const { ServerResponse } = await import( '../src/core/types.js' );
+        const registry = new ApplicationRegistry();
+        registry.registerController( 'FwdCtrl', {
+            stream : ( res: InstanceType<typeof ServerResponse> ) =>
+            {
+                res.stream( new ReadableStream({
+                    start( c )
+                    {
+                        c.enqueue( new TextEncoder().encode( 'x' ));
+                        c.close();
+                    }
+                }));
+                res.forward({ method : 'GET', path : '/next' });
+
+                return res;
+            },
+            redirect : ( res: InstanceType<typeof ServerResponse> ) =>
+            {
+                // Forward on the injected bag; return a different bag that redirects
+                res.forward({ method : 'GET', path : '/next' });
+                const other = new ServerResponse();
+                other.redirect( 302, '/elsewhere' );
+
+                return other;
+            }
+        });
+
+        // Act / Assert
+        await runWithRegistry( registry, async () =>
+        {
+            const streamed = await RequestProcessor.execute(
+                createEndpoint({
+                    controller : 'FwdCtrl',
+                    methodName : 'stream',
+                    params     : [{ source : 'Response' }]
+                }),
+                createRequest({})
+            );
+            expect( streamed.status ).toBe( 500 );
+            expect( await streamed.json()).toMatchObject({
+                error : expect.stringMatching( /Cannot forward after streaming/ )
+            });
+
+            const redirected = await RequestProcessor.execute(
+                createEndpoint({
+                    controller : 'FwdCtrl',
+                    methodName : 'redirect',
+                    params     : [{ source : 'Response' }]
+                }),
+                createRequest({})
+            );
+            expect( redirected.status ).toBe( 500 );
+            expect( await redirected.json()).toMatchObject({
+                error : expect.stringMatching( /Cannot combine redirect and forward/ )
+            });
         });
     });
 });

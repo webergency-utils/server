@@ -3,8 +3,8 @@ import { EndpointMetadata } from './types.js';
 import { Scope } from '../decorators.js';
 import { DIContainer, Binding } from './container.js';
 
-/** Hooks that tear down: dependents run before the providers they depend on. */
-const REVERSE_ORDER_HOOKS = new Set([ 'onModuleDestroy', 'beforeApplicationShutdown', 'onApplicationShutdown' ]);
+/** Tear-down runs dependents before the providers they depend on. */
+const REVERSE_ORDER_HOOKS = new Set([ 'onDestroy' ]);
 
 export class ApplicationRegistry
 {
@@ -16,6 +16,13 @@ export class ApplicationRegistry
     modules            = new Map<string, any>();
     instances          = new Map<string, any>();
     resolving          = new Set<string>();
+    /** In-flight onInit gates keyed like instances (`token::module`). */
+    initPromises       = new Map<string, Promise<void>>();
+    /**
+     * TRANSIENT (and similar) instances created outside a request — destroyed on
+     * `destroyAll()` / app shutdown.
+     */
+    ephemeralInstances = new Set<any>();
     controllerClasses  = new Set<string>();
     guardClasses       = new Set<string>();
     interceptorClasses = new Set<string>();
@@ -173,11 +180,11 @@ export class ApplicationRegistry
         }
     }
 
-    getController( name: string, contextModule?: any ): any
+    getController( name: string, contextModule?: any ): Promise<any>
     {
         if( this.controllers.has( name ))
         {
-            return this.controllers.get( name );
+            return Promise.resolve( this.controllers.get( name ));
         }
         const actualContext = contextModule || this.tokenToModuleMap.get( name );
 
@@ -197,11 +204,11 @@ export class ApplicationRegistry
         }
     }
 
-    getGuard( name: string, contextModule?: any ): any
+    getGuard( name: string, contextModule?: any ): Promise<any>
     {
         if( this.guards.has( name ))
         {
-            return this.guards.get( name );
+            return Promise.resolve( this.guards.get( name ));
         }
         const actualContext = contextModule || this.tokenToModuleMap.get( name );
 
@@ -221,25 +228,25 @@ export class ApplicationRegistry
         }
     }
 
-    getInterceptor( name: string, contextModule?: any ): any
+    getInterceptor( name: string, contextModule?: any ): Promise<any>
     {
         if( this.interceptors.has( name ))
         {
-            return this.interceptors.get( name );
+            return Promise.resolve( this.interceptors.get( name ));
         }
         const actualContext = contextModule || this.tokenToModuleMap.get( name );
 
         return DIContainer.resolve( name, actualContext );
     }
 
-    getInjectable( name: string, contextModule?: any ): any
+    getInjectable( name: string, contextModule?: any ): Promise<any>
     {
         return DIContainer.resolve( name, contextModule );
     }
 
-    resolveAll()
+    async resolveAll(): Promise<void>
     {
-        DIContainer.resolveAll();
+        await DIContainer.resolveAll();
     }
 
     clear()
@@ -252,6 +259,8 @@ export class ApplicationRegistry
         this.modules.clear();
         this.instances.clear();
         this.resolving.clear();
+        this.initPromises.clear();
+        this.ephemeralInstances.clear();
         this.controllerClasses.clear();
         this.guardClasses.clear();
         this.interceptorClasses.clear();
@@ -267,7 +276,7 @@ export class ApplicationRegistry
         this.defaultResponseMode = undefined;
     }
 
-    resolve( token: string, contextModule?: any ): any
+    resolve( token: string, contextModule?: any ): Promise<any>
     {
         return DIContainer.resolve( token, contextModule );
     }
@@ -426,6 +435,14 @@ export class ApplicationRegistry
                 await instance[hookName]( ...args );
             }
         }
+    }
+
+    /** Call onDestroy on all long-lived and process-owned ephemeral instances (dependents first). */
+    async destroyAll(): Promise<void>
+    {
+        await this.invokeHook( 'onDestroy' );
+        await DIContainer.destroyInstances( this.ephemeralInstances );
+        this.ephemeralInstances.clear();
     }
 
     setDefaultResponseMode( mode: 'strict' | 'relaxed' | 'strip' )

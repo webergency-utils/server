@@ -1,5 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RequestReader, getContentType, requestLikelyHasBody, DEFAULT_MAX_BODY_SIZE } from '../src/helpers/request-reader.js';
+import
+{
+    RequestReader,
+    getContentType,
+    getContentTypeCharset,
+    isJsonContentType,
+    isMultipartContentType,
+    requestLikelyHasBody,
+    DEFAULT_MAX_BODY_SIZE
+}
+from '../src/helpers/request-reader.js';
 import { mergeSecurityConfigs, parseSize } from '../src/helpers/security.js';
 import type { AugmentedRequest } from '../src/core/types.js';
 
@@ -462,6 +472,28 @@ describe( 'RequestReader.getBody', () =>
         expect( await RequestReader.tryGetUrlEncodedText( req )).toBeUndefined();
     });
 
+    it( 'tryGetUrlEncodedText sniffs urlencoded when Content-Type is missing', async () =>
+    {
+        const req = createRequest({ body : 'a=1&b=2' });
+
+        expect( await RequestReader.tryGetUrlEncodedText( req )).toBe( 'a=1&b=2' );
+        expect( req._bodyContentType ).toBe( 'application/x-www-form-urlencoded' );
+    });
+
+    it( 'tryGetUrlEncodedText sniffs JSON without Content-Type and returns undefined', async () =>
+    {
+        const req = createRequest({ body : '{"a":1}' });
+
+        expect( await RequestReader.tryGetUrlEncodedText( req )).toBeUndefined();
+        expect( req._bodyContentType ).toBe( 'application/json' );
+    });
+
+    it( 'tryGetUrlEncodedText returns undefined for empty and non-form sniff bodies', async () =>
+    {
+        expect( await RequestReader.tryGetUrlEncodedText( createRequest({ body : '' }))).toBeUndefined();
+        expect( await RequestReader.tryGetUrlEncodedText( createRequest({ body : 'not-form' }))).toBeUndefined();
+    });
+
     it( 'should treat urlencoded content-type with charset as form data', async () =>
     {
         // Arrange
@@ -590,5 +622,81 @@ describe( 'RequestReader.getBody', () =>
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 413 });
+    });
+
+    it( 'should classify content types and charset helpers', () =>
+    {
+        // Assert
+        expect( isJsonContentType( null )).toBe( false );
+        expect( isJsonContentType( undefined )).toBe( false );
+        expect( isJsonContentType( 'application/json' )).toBe( true );
+        expect( isJsonContentType( 'application/vnd.api+json' )).toBe( true );
+        expect( isMultipartContentType( 'multipart/form-data' )).toBe( true );
+        expect( isMultipartContentType( 'application/json' )).toBe( false );
+        expect( getContentTypeCharset( null )).toBeUndefined();
+        expect( getContentTypeCharset( 'text/plain; charset=utf-8' )).toBe( 'utf-8' );
+        expect( getContentType( createRequest({ headers : { 'Content-Type' : ';' } }))).toBeNull();
+    });
+
+    it( 'tryGetUrlEncodedText sniffs when Content-Type is missing', async () =>
+    {
+        // Arrange
+        const jsonReq = createRequest({ body : '{"a":1}' });
+        const formReq = createRequest({ body : 'a=1&b=2' });
+        const plainReq = createRequest({ body : 'just-text' });
+        const emptyReq = createRequest({ body : '' });
+        const already = createRequest({ withJsonKey : true, _json : { x : 1 } });
+        const declared = createRequest({
+            body    : 'a=1',
+            headers : { 'Content-Type' : 'text/plain' }
+        });
+
+        // Act / Assert
+        expect( await RequestReader.tryGetUrlEncodedText( jsonReq )).toBeUndefined();
+        expect( jsonReq._bodyContentType ).toBe( 'application/json' );
+
+        expect( await RequestReader.tryGetUrlEncodedText( formReq )).toBe( 'a=1&b=2' );
+        expect( formReq._bodyContentType ).toBe( 'application/x-www-form-urlencoded' );
+
+        expect( await RequestReader.tryGetUrlEncodedText( plainReq )).toBeUndefined();
+        expect( await RequestReader.tryGetUrlEncodedText( emptyReq )).toBeUndefined();
+        expect( await RequestReader.tryGetUrlEncodedText( already )).toBeUndefined();
+        expect( await RequestReader.tryGetUrlEncodedText( declared )).toBeUndefined();
+    });
+
+    it( 'should skip empty stream chunks and 413 when streaming exceeds maxBodySize', async () =>
+    {
+        // Arrange
+        const emptyChunkStream = new ReadableStream<Uint8Array>({
+            start( controller )
+            {
+                controller.enqueue( new Uint8Array( 0 ));
+                controller.enqueue( new TextEncoder().encode( '{"ok":true}' ));
+                controller.close();
+            }
+        });
+        const okReq = createRequest({
+            streamBody : emptyChunkStream,
+            headers    : { 'Content-Type' : 'application/json' }
+        });
+
+        // Act / Assert
+        expect( await RequestReader.getBody( okReq )).toEqual({ ok : true });
+
+        const big = new ReadableStream<Uint8Array>({
+            start( controller )
+            {
+                controller.enqueue( new TextEncoder().encode( 'abcdefghij' ));
+                controller.close();
+            }
+        });
+        const bigReq = createRequest({
+            streamBody : big,
+            headers    : { 'Content-Type' : 'application/json' }
+        });
+
+        await expect( RequestReader.getRawBody( bigReq, { maxBodySize : 4 })).rejects.toMatchObject({
+            status : 413
+        });
     });
 });

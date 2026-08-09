@@ -106,31 +106,36 @@ export class DIContainer
         return false;
     }
 
-    public static instantiateProvider( token: string, provider: any, contextModule: any ): any 
+    public static async instantiateProvider( token: string, provider: any, contextModule: any ): Promise<any>
     {
-        if( typeof provider === 'function' ) 
+        if( typeof provider === 'function' )
         {
             return this.construct( provider, contextModule );
         }
 
-        if( provider && typeof provider === 'object' ) 
+        if( provider && typeof provider === 'object' )
         {
-            if( 'useValue' in provider ) 
+            if( 'value' in provider )
             {
-                return provider.useValue;
+                return provider.value;
             }
 
-            if( 'useClass' in provider ) 
+            if( 'class' in provider )
             {
-                return this.construct( provider.useClass, contextModule );
+                return this.construct( provider.class, contextModule );
             }
 
-            if( 'useFactory' in provider ) 
+            if( 'factory' in provider )
             {
                 const factoryDeps = provider.inject || [];
-                const args = factoryDeps.map(( depToken: string ) => this.resolve( depToken, contextModule ));
+                const args: any[] = [];
 
-                return provider.useFactory( ...args );
+                for( const depToken of factoryDeps )
+                {
+                    args.push( await this.resolve( depToken, contextModule ));
+                }
+
+                return await provider.factory( ...args );
             }
 
             return provider;
@@ -139,38 +144,111 @@ export class DIContainer
         return provider;
     }
 
-    private static construct( cls: any, contextModule: any ): any
+    /**
+     * Resolve each constructor dep (including its onInit) before `new`, then property deps.
+     * Caller caches the instance then runs onInit.
+     */
+    private static async construct( cls: any, contextModule: any ): Promise<any>
     {
         const injections = cls.__injections__ || {};
         const constructorDeps = injections.constructorDeps || [];
-        const args = constructorDeps.map(( depToken: string ) => 
-        {
-            if( depToken === 'any' ) { return undefined }
+        const args: any[] = [];
 
-            return this.resolve( depToken, contextModule );
-        });
+        for( const depToken of constructorDeps )
+        {
+            if( depToken === 'any' )
+            {
+                args.push( undefined );
+            }
+            else
+            {
+                args.push( await this.resolve( depToken, contextModule ));
+            }
+        }
 
         const instance = new cls( ...args );
 
-        for( const [ propName, depToken ] of Object.entries( this.collectPropertyDeps( cls ))) 
+        for( const [ propName, depToken ] of Object.entries( this.collectPropertyDeps( cls )))
         {
-            instance[propName] = this.resolve( depToken, contextModule );
+            instance[propName] = await this.resolve( depToken as string, contextModule );
         }
 
         return instance;
     }
 
-    public static syncLegacyCompatibility( token: string, instance: any ) 
+    private static async runOnInit( instance: any ): Promise<void>
     {
-        if( store.controllerClasses.has( token )) 
+        if( !instance || typeof instance !== 'object' ){ return }
+
+        if( typeof instance.onInit !== 'function' ){ return }
+
+        if( instance.__webergencyOnInitDone ){ return }
+
+        instance.__webergencyOnInitDone = true;
+        await instance.onInit();
+    }
+
+    public static async destroyInstance( instance: any ): Promise<void>
+    {
+        if( !instance || typeof instance !== 'object' ){ return }
+
+        if( typeof instance.onDestroy !== 'function' ){ return }
+
+        if( instance.__webergencyOnDestroyDone ){ return }
+
+        instance.__webergencyOnDestroyDone = true;
+        await instance.onDestroy();
+    }
+
+    /** Destroy instances in reverse registration order (last created first). */
+    public static async destroyInstances( instances: Iterable<any> ): Promise<void>
+    {
+        const list = Array.from( instances ).reverse();
+
+        for( const instance of list )
+        {
+            try
+            {
+                await this.destroyInstance( instance );
+            }
+            catch ( err )
+            {
+                console.error( '[onDestroy]', err );
+            }
+        }
+    }
+
+    /**
+     * Remember an instance for onDestroy: on the active request if any, otherwise on the
+     * process ephemeral set (app shutdown).
+     */
+    private static trackEphemeral( instance: any, token: string ): void
+    {
+        if( !instance || typeof instance !== 'object' ){ return }
+
+        const ctx = Context.get();
+
+        if( ctx?.requestInstances )
+        {
+            ctx.requestInstances.set( `transient:${token}:${ctx.requestInstances.size}`, instance );
+
+            return;
+        }
+
+        getRegistry().ephemeralInstances.add( instance );
+    }
+
+    public static syncLegacyCompatibility( token: string, instance: any )
+    {
+        if( store.controllerClasses.has( token ))
         {
             store.controllers.set( token, instance );
         }
-        else if( store.guardClasses.has( token )) 
+        else if( store.guardClasses.has( token ))
         {
             store.guards.set( token, instance );
         }
-        else if( store.interceptorClasses.has( token )) 
+        else if( store.interceptorClasses.has( token ))
         {
             store.interceptors.set( token, instance );
         }
@@ -181,7 +259,7 @@ export class DIContainer
     {
         if( typeof provider === 'function' ){ return provider }
 
-        if( provider && typeof provider === 'object' && 'useClass' in provider ){ return provider.useClass }
+        if( provider && typeof provider === 'object' && 'class' in provider ){ return provider.class }
 
         return null;
     }
@@ -221,7 +299,7 @@ export class DIContainer
             const propertyDeps = Object.values( this.collectPropertyDeps( providerClass )) as string[];
             deps = [ ...( injections.constructorDeps || []), ...propertyDeps ];
         }
-        else if( provider && typeof provider === 'object' && 'useFactory' in provider )
+        else if( provider && typeof provider === 'object' && 'factory' in provider )
         {
             deps = provider.inject || [];
         }
@@ -236,7 +314,7 @@ export class DIContainer
         return binding;
     }
 
-    public static getResolvedScope( token: string, contextModule?: any, visited = new Set<string>()): Scope 
+    public static getResolvedScope( token: string, contextModule?: any, visited = new Set<string>()): Scope
     {
         const registry = getRegistry();
         const key = scopedKey( token, contextModule );
@@ -244,20 +322,20 @@ export class DIContainer
 
         if( memoized !== undefined ){ return memoized }
 
-        if( visited.has( key )) 
+        if( visited.has( key ))
         {
             // Circular deps are supported through lazy proxies, so this is reported rather
             // than thrown — but the scope of a cycle member cannot be decided here.
             registry.recordDependencyCycle([ ...visited, key ]);
 
-            return Scope.DEFAULT;
+            return Scope.SINGLETON;
         }
 
         const binding = this.getBinding( token, contextModule );
 
-        if( !binding ) { return Scope.DEFAULT }
+        if( !binding ) { return Scope.SINGLETON }
 
-        if( binding.explicitScope === Scope.REQUEST ) 
+        if( binding.explicitScope === Scope.REQUEST )
         {
             registry.scopes.set( key, Scope.REQUEST );
 
@@ -266,13 +344,13 @@ export class DIContainer
 
         const next = new Set( visited ).add( key );
         const cyclesBefore = registry.dependencyCycles.size;
-        let scope = binding.explicitScope === Scope.TRANSIENT ? Scope.TRANSIENT : Scope.DEFAULT;
+        let scope = binding.explicitScope === Scope.TRANSIENT ? Scope.TRANSIENT : Scope.SINGLETON;
 
-        for( const depToken of binding.deps ) 
+        for( const depToken of binding.deps )
         {
             if( depToken === 'any' ) { continue }
 
-            if( this.getResolvedScope( depToken, binding.declaringModule, next ) === Scope.REQUEST ) 
+            if( this.getResolvedScope( depToken, binding.declaringModule, next ) === Scope.REQUEST )
             {
                 // A provider is request-scoped as soon as anything it depends on is.
                 scope = Scope.REQUEST;
@@ -286,85 +364,120 @@ export class DIContainer
         return scope;
     }
 
-    public static resolveAll() 
+    public static async resolveAll(): Promise<void>
     {
         const modules = Array.from( store.moduleInstances.values());
 
-        if( modules.length > 0 ) 
+        if( modules.length > 0 )
         {
-            for( const m of modules as any[]) 
+            for( const m of modules as any[])
             {
-                if( m.moduleClass && m.moduleClass.name ) 
+                if( m.moduleClass && m.moduleClass.name )
                 {
                     const scope = this.getResolvedScope( m.moduleClass.name, m );
 
-                    if( scope !== Scope.REQUEST ) 
+                    if( scope !== Scope.REQUEST && scope !== Scope.TRANSIENT )
                     {
-                        this.resolve( m.moduleClass.name, m );
+                        await this.resolve( m.moduleClass.name, m );
                     }
                 }
             }
 
-            for( const m of modules as any[]) 
+            for( const m of modules as any[])
             {
-                for( const ctrl of m.controllers.keys()) 
+                for( const ctrl of m.controllers.keys())
                 {
                     const scope = this.getResolvedScope( ctrl, m );
 
-                    if( scope !== Scope.REQUEST ) 
+                    if( scope !== Scope.REQUEST && scope !== Scope.TRANSIENT )
                     {
-                        this.resolve( ctrl, m );
+                        await this.resolve( ctrl, m );
                     }
                 }
 
-                for( const prov of m.providers.keys()) 
+                for( const prov of m.providers.keys())
                 {
-                    if( m.moduleClass && prov === m.moduleClass.name ) 
+                    if( m.moduleClass && prov === m.moduleClass.name )
                     {
                         continue;
                     }
                     const scope = this.getResolvedScope( prov, m );
 
-                    if( scope !== Scope.REQUEST ) 
+                    if( scope !== Scope.REQUEST && scope !== Scope.TRANSIENT )
                     {
-                        this.resolve( prov, m );
+                        await this.resolve( prov, m );
                     }
                 }
             }
         }
-        else 
+        else
         {
-            for( const token of store.providers.keys()) 
+            for( const token of store.providers.keys())
             {
                 const scope = this.getResolvedScope( token );
 
-                if( scope !== Scope.REQUEST ) 
+                if( scope !== Scope.REQUEST && scope !== Scope.TRANSIENT )
                 {
-                    this.resolve( token );
+                    await this.resolve( token );
                 }
             }
         }
     }
 
+    /** Sync cache read for circular lazy proxies (may be pre-onInit). */
+    private static getCached( token: string, contextModule?: any ): any
+    {
+        const registry = getRegistry();
+        let currentContext = contextModule;
+
+        if( !currentContext && registry.tokenToModuleMap.has( token ))
+        {
+            currentContext = registry.tokenToModuleMap.get( token );
+        }
+
+        const scope = this.getResolvedScope( token, currentContext );
+
+        if( scope === Scope.REQUEST )
+        {
+            const ctx = Context.get();
+            const binding = this.getBinding( token, currentContext );
+
+            if( !ctx?.requestInstances || !binding ){ return undefined }
+
+            return ctx.requestInstances.get( scopedKey( token, binding.declaringModule ));
+        }
+
+        const instanceKey = scopedKey( token, currentContext );
+
+        if( currentContext?.instances.has( token ))
+        {
+            return currentContext.instances.get( token );
+        }
+
+        return registry.instances.get( instanceKey );
+    }
+
     /**
      * Stand-in returned while `token` is already being constructed, so two providers may
-     * depend on each other. Every trap re-resolves, by which time the real instance exists.
+     * depend on each other. Traps read the sync cache (filled before onInit completes).
      */
     private static lazyProxy( token: string, contextModule?: any ): any
     {
         return new Proxy({}, {
-            get( _target, prop ) 
+            get( _target, prop )
             {
-                const instance = DIContainer.resolve( token, contextModule );
+                const instance = DIContainer.getCached( token, contextModule );
 
                 if( !instance ) { return undefined }
                 const value = Reflect.get( instance, prop, instance );
 
                 return typeof value === 'function' ? value.bind( instance ) : value;
             },
-            set( _target, prop, value ) 
+            set( _target, prop, value )
             {
-                const instance = DIContainer.resolve( token, contextModule );
+                const instance = DIContainer.getCached( token, contextModule );
+
+                if( !instance ){ return false }
 
                 return Reflect.set( instance, prop, value, instance );
             }
@@ -376,36 +489,48 @@ export class DIContainer
         return new Error( `No provider registered for token: ${token}${contextModule ? ` in module ${contextModule.name}` : ''}` );
     }
 
-    public static resolve( token: string, contextModule?: any ): any 
+    private static async awaitInitIfPending( registry: any, key: string ): Promise<void>
+    {
+        const pending = registry.initPromises.get( key );
+
+        if( pending ){ await pending }
+    }
+
+    public static async resolve( token: string, contextModule?: any ): Promise<any>
     {
         const registry = getRegistry();
         let currentContext = contextModule;
 
-        if( !currentContext && registry.tokenToModuleMap.has( token )) 
+        if( !currentContext && registry.tokenToModuleMap.has( token ))
         {
             currentContext = registry.tokenToModuleMap.get( token );
         }
 
-        // Cache first: singletons are the common case, and the scope walk below is the
-        // expensive part. Only DEFAULT-scoped instances are ever stored in these maps.
         const instanceKey = scopedKey( token, currentContext );
 
         if( currentContext )
         {
-            if( currentContext.instances.has( token )){ return currentContext.instances.get( token ) }
+            if( currentContext.instances.has( token ))
+            {
+                await this.awaitInitIfPending( registry, instanceKey );
+
+                return currentContext.instances.get( token );
+            }
         }
         else if( registry.instances.has( instanceKey ))
         {
+            await this.awaitInitIfPending( registry, instanceKey );
+
             return registry.instances.get( instanceKey );
         }
 
         const scope = this.getResolvedScope( token, currentContext );
 
-        if( scope === Scope.REQUEST ) 
+        if( scope === Scope.REQUEST )
         {
             const ctx = Context.get();
 
-            if( !ctx || !ctx.requestInstances ) 
+            if( !ctx || !ctx.requestInstances )
             {
                 throw new Error( `Cannot resolve request-scoped provider ${token} outside of a request context` );
             }
@@ -416,81 +541,105 @@ export class DIContainer
 
             const cacheKey = scopedKey( token, binding.declaringModule );
 
-            if( ctx.requestInstances.has( cacheKey )) 
+            if( ctx.requestInstances.has( cacheKey ))
             {
+                await this.awaitInitIfPending( registry, cacheKey );
+
                 return ctx.requestInstances.get( cacheKey );
             }
 
-            if( registry.resolving.has( cacheKey )) 
+            if( registry.resolving.has( cacheKey ))
             {
                 return this.lazyProxy( token, currentContext );
             }
 
             registry.resolving.add( cacheKey );
-            try 
+            try
             {
-                const instance = this.instantiateProvider( token, binding.provider, binding.declaringModule );
+                let resolveInit!: () => void;
+                const initGate = new Promise<void>(( r ) => { resolveInit = r });
+                registry.initPromises.set( cacheKey, initGate );
+
+                const instance = await this.instantiateProvider( token, binding.provider, binding.declaringModule );
                 ctx.requestInstances.set( cacheKey, instance );
+                await this.runOnInit( instance );
+                resolveInit();
 
                 return instance;
             }
-            finally 
+            finally
             {
+                registry.initPromises.delete( cacheKey );
                 registry.resolving.delete( cacheKey );
             }
         }
 
         const binding = this.getBinding( token, currentContext );
 
-        if( scope === Scope.TRANSIENT ) 
+        if( scope === Scope.TRANSIENT )
         {
             if( !binding ) { throw this.missingProvider( token, currentContext ) }
 
             const guardKey = scopedKey( token, binding.declaringModule );
 
-            if( registry.resolving.has( guardKey )) 
+            if( registry.resolving.has( guardKey ))
             {
                 return this.lazyProxy( token, currentContext );
             }
 
             registry.resolving.add( guardKey );
-            try 
+            try
             {
-                return this.instantiateProvider( token, binding.provider, binding.declaringModule );
+                const instance = await this.instantiateProvider( token, binding.provider, binding.declaringModule );
+                await this.runOnInit( instance );
+                this.trackEphemeral( instance, token );
+
+                return instance;
             }
-            finally 
+            finally
             {
                 registry.resolving.delete( guardKey );
             }
         }
 
-        if( !binding ) 
+        if( !binding )
         {
             throw this.missingProvider( token, currentContext );
         }
 
-        // Guarded by declaring module, not by consumer, so a cycle reached from two different
-        // modules still resolves to the same in-progress entry.
         const guardKey = scopedKey( token, binding.declaringModule );
 
-        if( registry.resolving.has( guardKey )) 
+        if( registry.resolving.has( guardKey ))
         {
             return this.lazyProxy( token, currentContext );
         }
 
         registry.resolving.add( guardKey );
-        try 
+        try
         {
-            const instance = this.instantiateProvider( token, binding.provider, currentContext ? binding.declaringModule : null );
+            // Cache before onInit so circular proxies can see the instance; waiters on
+            // initPromises still block until onInit completes.
+            let resolveInit!: () => void;
+            const initGate = new Promise<void>(( r ) => { resolveInit = r });
+            registry.initPromises.set( instanceKey, initGate );
+
+            const instance = await this.instantiateProvider(
+                token,
+                binding.provider,
+                currentContext ? binding.declaringModule : null
+            );
 
             if( currentContext ){ currentContext.instances.set( token, instance ) }
             registry.instances.set( instanceKey, instance );
             this.syncLegacyCompatibility( token, instance );
+            await this.runOnInit( instance );
+            resolveInit();
 
             return instance;
         }
-        finally 
+        finally
         {
+            registry.initPromises.delete( instanceKey );
             registry.resolving.delete( guardKey );
         }
     }

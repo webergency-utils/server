@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ResponseBag, ServerResponse } from '../src/core/types.js';
+import { ResponseBag, ServerResponse, isSeoForward, ForwardIntent } from '../src/core/types.js';
 
 describe( 'ResponseBag / ServerResponse', () =>
 {
@@ -72,5 +72,71 @@ describe( 'ResponseBag / ServerResponse', () =>
 
         expect( out.status ).toBe( 451 );
         expect( out.statusText ).toBe( 'Unavailable For Legal Reasons' );
+    });
+
+    it( 'should clear cookies and serialize full cookie option set', () =>
+    {
+        // Arrange
+        const res = new ServerResponse()
+            .cookie( 'gone', null, { path : '/' })
+            .cookie( 'empty', '', { path : '/' })
+            .cookie( 'full', 'v', {
+                maxAge   : 12.9,
+                expires  : new Date( '2030-01-01T00:00:00.000Z' ),
+                path     : '/app',
+                domain   : 'example.com',
+                secure   : true,
+                httpOnly : true,
+                sameSite : 'Strict'
+            });
+
+        // Act
+        const out = res.toResponse();
+        const cookies = out.headers.getSetCookie?.() ?? [ out.headers.get( 'Set-Cookie' )! ];
+
+        // Assert
+        expect( cookies.some( c => c.includes( 'gone=' ) && c.includes( 'Max-Age=0' ))).toBe( true );
+        expect( cookies.some( c => c.includes( 'empty=' ) && c.includes( 'Max-Age=0' ))).toBe( true );
+        expect( cookies.some( c =>
+            c.includes( 'full=v' )
+            && c.includes( 'Max-Age=12' )
+            && c.includes( 'Expires=' )
+            && c.includes( 'Path=/app' )
+            && c.includes( 'Domain=example.com' )
+            && c.includes( 'Secure' )
+            && c.includes( 'HttpOnly' )
+            && c.includes( 'SameSite=Strict' )
+        )).toBe( true );
+    });
+
+    it( 'should finalize null stream body as empty Response', () =>
+    {
+        // Arrange
+        const res = new ServerResponse().status( 204 ).stream( null as unknown as BodyInit );
+
+        // Act
+        const out = res.toResponse();
+
+        // Assert
+        expect( out.status ).toBe( 204 );
+        expect( out.body ).toBeNull();
+    });
+
+    it( 'should serialize a cookie without options and reject invalid SeoForward shapes', () =>
+    {
+        // Arrange / Act
+        const plain = new ServerResponse().cookie( 'a', 'b' ).toResponse();
+        const intent = new ForwardIntent({ method : 'GET', path : '/x' });
+
+        // Assert
+        expect( plain.headers.get( 'Set-Cookie' )).toBe( 'a=b' );
+        expect( intent.name ).toBe( 'ForwardIntent' );
+        expect( isSeoForward( null )).toBe( false );
+        expect( isSeoForward( { method : 'GET' } )).toBe( false );
+        expect( isSeoForward( { method : 'GET', path : '/x', query : [] } )).toBe( false );
+        expect( isSeoForward( { method : 'GET', path : '/x', query : null } )).toBe( false );
+        expect( isSeoForward( { method : 'GET', path : '/x', body : [] } )).toBe( false );
+        expect( isSeoForward( { method : 'GET', path : '/x', body : null } )).toBe( false );
+        expect( isSeoForward( { method : 'GET', path : '/x', query : { a : '1' }, body : { b : 2 } })).toBe( true );
     });
 });

@@ -216,6 +216,18 @@ describe( 'Router', () =>
         // Assert
         expect( instance.lookup( 'GET', '/second' ).match ).not.toBeNull();
     });
+
+    it( 'should describe optional groups and expose find()', () =>
+    {
+        // Arrange
+        const grouped = router( endpoint( 'GET', '/docs{/:slug}' ));
+
+        // Act / Assert
+        expect( grouped.lookup( 'GET', '/docs' ).match ).not.toBeNull();
+        expect( grouped.lookup( 'GET', '/docs/intro' ).match?.params.slug ).toBe( 'intro' );
+        expect( grouped.find( 'GET', '/docs/intro' )?.metadata.path ).toBe( '/docs{/:slug}' );
+        expect( grouped.find( 'POST', '/docs' )).toBeNull();
+    });
 });
 
 describe( 'toAllowList', () =>

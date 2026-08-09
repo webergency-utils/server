@@ -124,9 +124,9 @@ export class MetadataStore
         return getRegistry().getInjectable( name, contextModule );
     }
 
-    public static resolveAll()
+    public static async resolveAll()
     {
-        getRegistry().resolveAll();
+        await getRegistry().resolveAll();
     }
 
     public static clear()

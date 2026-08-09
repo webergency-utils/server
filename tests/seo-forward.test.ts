@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Server } from '../src/server.js';
 import { ServerResponse } from '../src/core/types.js';
 import { seedInstanceController, runWithRegistry, ApplicationRegistry } from './helpers/testing.js';
 import { Router } from '../src/core/router.js';
 
-function setupServer( setup: ( registry: ApplicationRegistry ) => void ): Server
+function setupServer( setup: ( registry: ApplicationRegistry ) => void, options: Record<string, unknown> = {}): Server
 {
-    const server = new Server({ port : 0 });
+    const server = new Server({ port : 0, ...options });
     runWithRegistry( server.registry, () => setup( server.registry ));
 
     return server;
@@ -258,23 +258,49 @@ describe( 'SEO routes + internal forward', () =>
         expect( body.error ).toContain( 'SeoForward' );
     });
 
-    it( 'rejects @Seo + @Internal at boot', () =>
+    it( 'logs 404 after SEO fallthrough with no public match', async () =>
     {
-        expect(() =>
+        // Arrange
+        const logger =
         {
+            info  : vi.fn(),
+            warn  : vi.fn(),
+            error : vi.fn(),
+            debug : vi.fn()
+        };
+        const server = setupServer( registry =>
+        {
+            seedInstanceController( registry, 'SeoC', {
+                resolve : () => undefined
+            }, [ ep( 'resolve', 'GET', '/seo-only', { seo : true }) ]);
+        }, { logs : true, logger });
+
+        // Act
+        const res = await server.fetch( new Request( 'http://localhost/seo-only' ));
+
+        // Assert
+        expect( res.status ).toBe( 404 );
+        expect( logger.info ).toHaveBeenCalledWith(
+            expect.stringContaining( '404 Not Found' ),
+            expect.objectContaining({ type : 'request_end', status : 404 })
+        );
+    });
+
+    it( 'rejects @Seo + @Internal at boot', async () =>
+    {
+        await expect(
             setupServer( registry =>
             {
                 seedInstanceController( registry, 'Bad', {
                     x : () => undefined
                 }, [ ep( 'x', 'GET', '/x', { seo : true, internal : true }) ]);
-            }).ensureReady();
-        }).toThrow( /both @Seo and @Internal/ );
+            }).ensureReady()
+        ).rejects.toThrow( /both @Seo and @Internal/ );
     });
 
-    it( 'rejects public/internal path conflict at boot', () =>
+    it( 'rejects public/internal path conflict at boot', async () =>
     {
-        expect(() =>
-        {
+        await expect(
             setupServer( registry =>
             {
                 seedInstanceController( registry, 'Pub', {
@@ -283,8 +309,8 @@ describe( 'SEO routes + internal forward', () =>
                 seedInstanceController( registry, 'Inn', {
                     b : () => 2
                 }, [ ep( 'b', 'GET', '/same', { internal : true }) ]);
-            }).ensureReady();
-        }).toThrow( /conflicts/ );
+            }).ensureReady()
+        ).rejects.toThrow( /conflicts/ );
     });
 });
 

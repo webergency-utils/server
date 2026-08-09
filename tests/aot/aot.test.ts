@@ -38,7 +38,7 @@ describe( 'Actual AOT Integration Test', () =>
             interceptors : aotHosts.interceptors,
             providers    : aotHosts.providers
         });
-        server.ensureReady();
+        await server.ensureReady();
     });
 
     it( 'should validate User in STRICT mode', async () => 
@@ -436,7 +436,7 @@ describe( 'Actual AOT Integration Test', () =>
                 expect( data.success ).toBe( true );
             });
 
-            it( 'should resolve circular dependency using lazy proxies', () => 
+            it( 'should resolve circular dependency using lazy proxies', async () => 
             {
                 // Register CircA and CircB which depend on each other
                 const CircA = class CircA 
@@ -458,12 +458,12 @@ describe( 'Actual AOT Integration Test', () =>
                     getValue() { return 'B' }
                 };
 
-                runWithRegistry( server.registry, () =>
+                await runWithRegistry( server.registry, async () =>
                 {
                     server.registry.registerProvider( 'CircA', CircA );
                     server.registry.registerProvider( 'CircB', CircB );
 
-                    const circA = server.registry.resolve( 'CircA' );
+                    const circA = await server.registry.resolve( 'CircA' );
                     expect( circA ).toBeDefined();
                     expect( circA.b ).toBeDefined();
                     expect( circA.b.a ).toBeDefined();
@@ -617,10 +617,10 @@ describe( 'Actual AOT Integration Test', () =>
                 expect( data.error ).toContain( 'Response validation failed' );
             });
 
-            it( 'should configure defaultResponseMode when initializing Server', () =>
+            it( 'should configure defaultResponseMode when initializing Server', async () =>
             {
                 const s = new Server({ port : 3999, responseMode : 'strict' });
-                s.ensureReady();
+                await s.ensureReady();
                 expect( s.registry.getDefaultResponseMode()).toBe( 'strict' );
             });
         });

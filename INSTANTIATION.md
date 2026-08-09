@@ -4,7 +4,7 @@ How providers are registered, constructed, and injected in `@webergency-utils/se
 
 Runtime never reflects on types. The AOT transformer emits `static __injections__ = { constructorDeps, propertyDeps }` (and related Symbol meta). `DIContainer` only reads those tables and the provider objects you register.
 
-Tokens are **strings**: a class’s `.name`, or an explicit `provide` string / `provide.name`.
+Tokens are **strings**: a class’s `.name`, or an explicit `token` string / `token.name`.
 
 ---
 
@@ -19,15 +19,17 @@ Tokens are **strings**: a class’s `.name`, or an explicit `provide` string / `
         ▼
   resolve(token) → instantiateProvider
         │
-        ├─ class / useClass  → new cls(...deps) + property inject
-        ├─ useValue          → return value as-is
-        ├─ useFactory        → factory(...resolved inject)
+        ├─ bare class / `class` → new cls(...deps) + property inject
+        ├─ value               → return value as-is
+        ├─ factory             → factory(...resolved inject)
         └─ bare object/primitive → return as-is
 ```
 
 - **Visibility:** a token registered in a module is only reachable from another module if the owner **exports** it (or the owner is `@Global()` and exports it).
-- **Scopes:** `Scope.DEFAULT` (singleton per module), `TRANSIENT` (new each resolve), `REQUEST` (once per request). A provider becomes request-scoped if any dependency is.
+- **Scopes:** `Scope.SINGLETON` (one per module), `TRANSIENT` (new each resolve), `REQUEST` (once per request). A provider becomes request-scoped if any dependency is.
 - **Cycles:** circular constructor deps resolve through a lazy `Proxy` (no `forwardRef` API).
+- **Lifecycle:** `onInit` runs (awaited, dependency-first) during `resolve` / `resolveAll`. `onDestroy` runs for **every** instance — at **request end** (REQUEST + TRANSIENT created in that request) or **app shutdown** (SINGLETON + TRANSIENT created outside a request).
+- **Async:** `DIContainer.resolve`, `registry.resolveAll`, and `server.ensureReady` are async — always `await` them.
 
 ---
 
@@ -61,7 +63,7 @@ export class DatabaseModule {}
 
 ---
 
-### 2. Custom token + `useClass`
+### 2. Custom token + `class`
 
 Token may differ from the implementation class name. Useful for interface ports or stable public tokens.
 
@@ -77,7 +79,7 @@ export class MongoUserRepository implements UserRepository
 
 @Module({
     providers : [
-        { provide : USER_REPO, useClass : MongoUserRepository },
+        { token : USER_REPO, class : MongoUserRepository },
     ],
     exports : [ USER_REPO ],
 })
@@ -88,18 +90,18 @@ Consumers inject with `@Inject(USER_REPO)`, not the interface type alone (interf
 
 ---
 
-### 3. Inject an existing instance — `useValue`
+### 3. Inject an existing instance — `value`
 
-Pass a **pre-built** value. The container does not call `new`; it returns `useValue` as-is.
+Pass a **pre-built** value. The container does not call `new`; it returns `value` as-is.
 
 ```ts
 const db = await client.db();
 
 @Module({
     providers : [
-        { provide : 'MONGO_DB', useValue : db },
-        { provide : 'APP_CONFIG', useValue : { env : 'prod', retries : 3 } },
-        { provide : 'ANSWER', useValue : 42 },
+        { token : 'MONGO_DB', value : db },
+        { token : 'APP_CONFIG', value : { env : 'prod', retries : 3 } },
+        { token : 'ANSWER', value : 42 },
     ],
     exports : [ 'MONGO_DB', 'APP_CONFIG' ],
 })
@@ -121,26 +123,26 @@ export class UserModel
 
 ### 4. Bare object / primitive provider (implicit value)
 
-If the registered provider is a non-function object **without** `useValue` / `useClass` / `useFactory`, or a primitive, the container returns it as-is (same outcome as `useValue`).
+If the registered provider is a non-function object **without** `value` / `class` / `factory`, or a primitive, the container returns it as-is (same outcome as `value`).
 
 ```ts
-// Works today, but prefer explicit useValue for clarity
-{ provide : 'Bare', already : true }
-{ provide : 'Primitive', /* if registered as the number itself */ }
+// Works today, but prefer explicit value for clarity
+{ token : 'Bare', already : true }
+{ token : 'Primitive', /* if registered as the number itself */ }
 ```
 
 From the container’s point of view:
 
 ```ts
-// object with no use* keys → return provider
+// object with no value/class/factory keys → return provider
 // number / string / etc. → return provider
 ```
 
-**Prefer** `{ provide: 'Bare', useValue: { already: true } }` so intent is obvious and you do not collide with `{ provide, useClass, … }` shapes by accident.
+**Prefer** `{ token: 'Bare', value: { already: true } }` so intent is obvious and you do not collide with `{ token, class, … }` shapes by accident.
 
 ---
 
-### 5. `useFactory` (+ `inject`)
+### 5. `factory` (+ `inject`)
 
 Build the value with a function. Dependencies are listed as string tokens in `inject` (order matches factory parameters). Factories may be `async` if your bootstrap awaits them; list tokens explicitly — there is no AOT analysis of factory parameter types.
 
@@ -149,8 +151,8 @@ Build the value with a function. Dependencies are listed as string tokens in `in
     providers : [
         ConfigService,
         {
-            provide    : 'MONGO_DB',
-            useFactory : async ( config: ConfigService ) =>
+            token    : 'MONGO_DB',
+            factory : async ( config: ConfigService ) =>
             {
                 const client = new MongoClient( config.get( 'DB_URL' ));
                 await client.connect();
@@ -159,8 +161,8 @@ Build the value with a function. Dependencies are listed as string tokens in `in
             inject : [ 'ConfigService' ],
         },
         {
-            provide    : 'USER_MODEL',
-            useFactory : ( db: Db ) => new UserModel( db ),
+            token    : 'USER_MODEL',
+            factory : ( db: Db ) => new UserModel( db ),
             inject     : [ 'MONGO_DB' ],
         },
     ],
@@ -185,7 +187,7 @@ export class ConfigModule {}
 {
     module    : DatabaseModule,
     providers : [
-        { provide : 'MONGO_DB', useFactory : connect, inject : [ 'ConfigService' ] },
+        { token : 'MONGO_DB', factory : connect, inject : [ 'ConfigService' ] },
     ],
     exports   : [ 'MONGO_DB' ],
 }
@@ -200,7 +202,7 @@ export class ConfigModule {}
 ```ts
 new Server({
     controllers : [ UsersController ],
-    providers   : [ UsersService, UserModel, { provide : 'MONGO_DB', useValue : db } ],
+    providers   : [ UsersService, UserModel, { token : 'MONGO_DB', value : db } ],
 });
 ```
 
@@ -243,7 +245,7 @@ Exported tokens from a global module are visible to other modules without each o
 ```ts
 @Global()
 @Module({
-    providers : [ { provide : 'MONGO_DB', useValue : db } ],
+    providers : [ { token : 'MONGO_DB', value : db } ],
     exports   : [ 'MONGO_DB' ],
 })
 export class DatabaseModule {}
@@ -265,13 +267,13 @@ export class RequestContextBag {}
 @Module({
     providers : [
         ScratchPad,
-        { provide : 'PerRequest', useClass : RequestContextBag, scope : Scope.REQUEST },
+        { token : 'PerRequest', class : RequestContextBag, scope : Scope.REQUEST },
     ],
 })
 export class AppModule {}
 ```
 
-- `DEFAULT` — one instance per `(token, module)`, cached.
+- `SINGLETON` — one instance per `(token, module)`, cached.
 - `TRANSIENT` — new instance every `resolve`.
 - `REQUEST` — one instance per request; resolving outside a request throws.
 - If any dependency is `REQUEST`, the consumer is treated as `REQUEST` too.
@@ -347,8 +349,8 @@ Resolved per call from the registry. Prefer constructor injection for permanent 
 
 ```ts
 {
-    provide    : 'X',
-    useFactory : ( a: A, b: B ) => makeX( a, b ),
+    token    : 'X',
+    factory : ( a: A, b: B ) => makeX( a, b ),
     inject     : [ 'A', 'B' ],
 }
 ```
@@ -390,8 +392,8 @@ export class UsersController
     providers : [
         ConfigService,
         {
-            provide    : MONGO_DB,
-            useFactory : async ( c: ConfigService ) =>
+            token    : MONGO_DB,
+            factory : async ( c: ConfigService ) =>
             {
                 const client = new MongoClient( c.get( 'DB_URL' ));
                 await client.connect();
@@ -413,10 +415,10 @@ export class DatabaseModule {}
 export class UsersModule {}
 ```
 
-### Already-connected instance (`useValue`)
+### Already-connected instance (`value`)
 
 ```ts
-{ provide : MONGO_DB, useValue : existingDb }
+{ token : MONGO_DB, value : existingDb }
 ```
 
 ### Interface port
@@ -425,9 +427,9 @@ export class UsersModule {}
 export const USER_REPO = 'USER_REPO';
 
 // providers:
-{ provide : USER_REPO, useClass : MongoUserRepository }
+{ token : USER_REPO, class : MongoUserRepository }
 // or
-{ provide : USER_REPO, useFactory : ( db: Db ) => new MongoUserRepository( db ), inject : [ MONGO_DB ] }
+{ token : USER_REPO, factory : ( db: Db ) => new MongoUserRepository( db ), inject : [ MONGO_DB ] }
 
 // consumer:
 constructor( @Inject( USER_REPO ) private users: UserRepository ) {}
@@ -449,7 +451,7 @@ Do not inject the raw driver into controllers.
 |-------------------------|-------------|
 | `useExisting` (alias provider) | Not supported |
 | `@Optional()`, `@Self()`, `@SkipSelf()`, `@Host()` | Not supported |
-| `InjectionToken` / `Symbol` as `provide` | Use **string** tokens (or a class’s `.name`) |
+| `InjectionToken` / `Symbol` as `token` | Use **string** tokens (or a class’s `.name`) |
 | `forwardRef()` | Cycles use a lazy proxy instead |
 | `@InjectRepository()` / `@InjectModel()` sugar | Use `@Inject(token)` + your own token |
 | Untyped / `any` constructor params as “optional” | Become token `'any'` → `undefined`; do not rely on this |
@@ -465,22 +467,22 @@ Sorted for application and database-model code. Prefer higher ranks unless you h
 | Rank | Approach | Use when | Avoid when |
 |------|----------|----------|------------|
 | **1** | **Class provider + typed constructor** | App services, your models/repos that are concrete classes | Dependency is an interface, driver type, or pre-built instance |
-| **2** | **`useFactory` + string token** | Shared infra: DB client, pools, async connect, wrapping libs | Simple class with only class deps (use rank 1) |
-| **3** | **`useValue` (inject instance / constant)** | Already-built `Db`, config objects, test doubles, scalars | You still need the container to construct a class with deps |
-| **4** | **`provide` + `useClass`** | Interface ports, stable public token ≠ class name | Token can just be the class name (rank 1 is enough) |
+| **2** | **`factory` + string token** | Shared infra: DB client, pools, async connect, wrapping libs | Simple class with only class deps (use rank 1) |
+| **3** | **`value` (inject instance / constant)** | Already-built `Db`, config objects, test doubles, scalars | You still need the container to construct a class with deps |
+| **4** | **`token` + `class`** | Interface ports, stable public token ≠ class name | Token can just be the class name (rank 1 is enough) |
 | **5** | **Feature modules + `exports`** | Boundaries between domains; sharing models across features | Single-file apps (optional) |
 | **6** | **Explicit `Scope.REQUEST` / `TRANSIENT`** | Per-request state, or truly ephemeral objects | Default singletons would work |
 | **7** | **Property `@Inject`** | Cross-cutting optional-ish deps (logger) on a base class | Primary collaborators (put those in the constructor) |
 | **8** | **Dynamic module extras** | Configurable packages / `forRoot`-style registration | Static module metadata is enough |
 | **9** | **Flat `Server({ providers })`** | Smoke tests, prototypes, tiny scripts | Anything with module boundaries or reusable libraries |
-| **10** | **Bare object / primitive providers** | — | Prefer explicit `useValue` (rank 3) for the same behaviour |
+| **10** | **Bare object / primitive providers** | — | Prefer explicit `value` (rank 3) for the same behaviour |
 | **11** | **Method-level `@Inject`** | Rare: dep only needed inside one handler/guard method | Permanent collaborators (constructor) |
 
 ### Short defaults
 
 1. Own class → register the class, inject by type.
-2. Mongo/`Db`/pool → `MONGO_DB` token via `useFactory` or `useValue`, inject with `@Inject(MONGO_DB)`.
-3. Interface → string token + `useClass` / `useFactory`, inject with `@Inject(TOKEN)`.
+2. Mongo/`Db`/pool → `MONGO_DB` token via `factory` or `value`, inject with `@Inject(MONGO_DB)`.
+3. Interface → string token + `class` / `factory`, inject with `@Inject(TOKEN)`.
 4. Controller talks to a **service**, service talks to a **model**, model talks to **Db**.
 
 ---
