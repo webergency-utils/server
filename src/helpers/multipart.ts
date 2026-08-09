@@ -93,6 +93,7 @@ export class UploadedFile
     private endWaiters?: Array<() => void>;
     private error?: Error;
     private maxSize?: number;
+    private cleaning?: Promise<void>;
 
     constructor( field: string, filename: string, mime: string, headers: Record<string, string> )
     {
@@ -155,6 +156,12 @@ export class UploadedFile
         this.path = path;
         this.fileMode = 'disk';
         this.writeStream = createWriteStream( path );
+        // Bun (and Node under race) can emit async open/write errors after destroy+unlink;
+        // swallow here so they don't become uncaughtExceptions.
+        this.writeStream.on( 'error', ( err ) =>
+        {
+            if( !this.error ){ this.error = err }
+        });
 
         for( let i = 0; i < this.chunks.length; i++ )
         {
@@ -169,13 +176,7 @@ export class UploadedFile
     {
         this.fileMode = 'skip';
         this.chunks = [];
-
-        if( this.writeStream )
-        {
-            this.writeStream.destroy();
-            this.writeStream = undefined;
-            this.path = undefined;
-        }
+        void this.cleanup();
     }
 
     /**
@@ -261,36 +262,53 @@ export class UploadedFile
     fail( err: Error )
     {
         this.error = err;
-
-        if( this.writeStream )
-        {
-            this.writeStream.destroy( err );
-            this.writeStream = undefined;
-        }
-
+        // Close the stream (await close) then unlink — do not destroy+unlink concurrently
+        // (Bun races that into uncaught ENOENT/EINVAL on the WriteStream).
         void this.cleanup();
     }
 
     /** Remove a disk file written for this part (best-effort). */
     async cleanup()
     {
+        if( this.cleaning ){ return this.cleaning }
+
+        this.cleaning = this.runCleanup();
+
+        try
+        {
+            await this.cleaning;
+        }
+        finally
+        {
+            this.cleaning = undefined;
+        }
+    }
+
+    private async runCleanup()
+    {
         const stream = this.writeStream;
+        const path = this.path;
+        // Clear sync so skip()/fail() callers see discard immediately.
         this.writeStream = undefined;
+        this.path = undefined;
 
         if( stream )
         {
             await new Promise<void>( resolve =>
             {
+                if( stream.destroyed || ( stream as { closed?: boolean }).closed )
+                {
+                    resolve();
+
+                    return;
+                }
+
                 stream.once( 'close', () => resolve());
                 stream.destroy();
             });
         }
 
-        const path = this.path;
-
         if( !path ){ return }
-
-        this.path = undefined;
 
         try
         {

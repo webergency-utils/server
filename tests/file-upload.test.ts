@@ -151,6 +151,7 @@ describe( 'openFileStorage', () =>
             expect( file.path ).toBeDefined();
             expect( file.path!.endsWith( '.gz' )).toBe( false );
             expect( file.path!.startsWith( destReal )).toBe( true );
+            await file.cleanup();
         }
         finally
         {
@@ -174,6 +175,7 @@ describe( 'openFileStorage', () =>
 
             // Assert
             expect( file.path ).toBe( join( await ( await import( 'node:fs/promises' )).realpath( dir ), 'custom-name.bin' ));
+            await file.cleanup();
         }
         finally
         {
@@ -242,6 +244,8 @@ describe( 'openFileStorage', () =>
 
             expect( random.mode ).toBe( 'disk' );
             expect( random.path ).toMatch( /\.png$/ );
+            await random.cleanup();
+            await file.cleanup();
             await rm( join( process.cwd(), '.uploads' ), { recursive : true, force : true });
         }
         finally

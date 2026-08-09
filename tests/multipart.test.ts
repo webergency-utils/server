@@ -953,6 +953,7 @@ describe( 'UploadedFile unit edges', () =>
 
             // Assert
             expect( file.mode ).toBe( 'skip' );
+            await file.cleanup();
             expect( file.path ).toBeUndefined();
             file.write( Buffer.from( 'ignored' ));
             await file.end();
@@ -976,12 +977,10 @@ describe( 'UploadedFile unit edges', () =>
         {
             file.save( path );
             file.write( Buffer.from( 'data' ));
-            const stream = ( file as unknown as { writeStream?: NodeJS.EventEmitter }).writeStream;
-            stream?.on( 'error', () => undefined );
 
             // Act
             file.fail( Object.assign( new Error( 'boom' ), { status : 500 }));
-            await new Promise( resolve => setImmediate( resolve ));
+            await file.cleanup();
 
             // Assert — fail clears writeStream / path via cleanup (unlink is best-effort)
             expect( file.path ).toBeUndefined();
