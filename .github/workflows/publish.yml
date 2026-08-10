@@ -22,11 +22,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
+          # Do not set registry-url: it writes _authToken=${NODE_AUTH_TOKEN}.
+          # With no token secret that line is empty and npm skips OIDC → E404.
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
 
       # Hash-pinned via Corepack (avoids Scorecard npmCommand / npm install -g).
       # Corepack wants semver build metadata: sha512.<hex>, not npm SRI sha512-<base64>.
+      # npm ≥ 11.5.1 required for OIDC trusted publishing.
       - name: Setup npm
         run: |
           corepack enable
@@ -38,10 +40,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      # OIDC only — no NODE_AUTH_TOKEN. --provenance requires a working OIDC publish.
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Attach SLSA provenance to GitHub Release
         env:
