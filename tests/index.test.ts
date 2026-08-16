@@ -15,6 +15,8 @@ describe( 'Exports & Config', () =>
         expect( index.getControllerMeta ).toBeDefined();
         expect( index.getInjectableMeta ).toBeDefined();
         expect( index.getModuleMeta ).toBeDefined();
+        expect( index.getGuardMeta ).toBeDefined();
+        expect( index.WEBERGENCY_GUARD ).toBeDefined();
     });
 
     it( 'should export all main components', () =>

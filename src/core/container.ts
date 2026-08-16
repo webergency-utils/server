@@ -2,6 +2,7 @@ import { store } from './metadata.js';
 import { getRegistry } from './registry.js';
 import { Scope } from '../decorators.js';
 import { Context } from './context.js';
+import { getInjectableMeta } from './symbols.js';
 
 /**
  * Everything about a token that does not depend on the rest of the graph: which provider
@@ -286,11 +287,13 @@ export class DIContainer
 
         if( typeof provider === 'function' )
         {
-            explicitScope = provider.__scope__;
+            explicitScope = provider.__scope__ ?? getInjectableMeta( provider )?.scope;
         }
         else if( provider && typeof provider === 'object' )
         {
-            explicitScope = provider.scope !== undefined ? provider.scope : providerClass?.__scope__;
+            explicitScope = provider.scope !== undefined
+                ? provider.scope
+                : ( providerClass?.__scope__ ?? getInjectableMeta( providerClass )?.scope );
         }
 
         if( providerClass )

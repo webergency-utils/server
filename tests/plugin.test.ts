@@ -628,4 +628,82 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( output['temp_default_consumer.ts']).toContain( 'propertyDeps: {\n            propSvc: "MyDefaultService"\n        }' );
         expect( output['temp_default_consumer.ts']).not.toContain( '"default"' );
     });
+
+    it( 'should emit guard-class AOT and parsers on a guard-only file', () =>
+    {
+        const code = `
+      import { Injectable, Header, Guard } from '../decorators.js';
+
+      @Injectable()
+      export class ApiKeyGuard implements Guard {
+        use(@Header('x-api-key') apiKey?: string) {
+          if (!apiKey) { throw new Error('no key') }
+        }
+      }
+    `;
+
+        const compiled = compileAndTransform( code );
+
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.guard")' );
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.injectable")' );
+        expect( compiled ).toContain( 'source: "Header"' );
+        expect( compiled ).toContain( 'name: "x-api-key"' );
+        expect( compiled ).toContain( 'const __parse_' );
+        expect( compiled ).toContain( 'import * as __tcRuntime from "@webergency-utils/typechecker/runtime"' );
+    });
+
+    it( 'should emit module graph as identifier refs and injectable scope', () =>
+    {
+        const code = `
+      import { Module, Global, Controller, Get, Injectable, Scope } from '../decorators.js';
+
+      @Injectable({ scope: Scope.REQUEST })
+      export class ReqSvc { value = 1 }
+
+      @Controller('/mod')
+      export class ModCtrl {
+        @Get()
+        hi() { return 1 }
+      }
+
+      @Global()
+      @Module({ controllers: [ModCtrl], providers: [ReqSvc] })
+      export class AppModule {}
+    `;
+
+        const compiled = compileAndTransform( code );
+
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.module")' );
+        expect( compiled ).toContain( 'controllers: [ModCtrl]' );
+        expect( compiled ).toContain( 'providers: [ReqSvc]' );
+        expect( compiled ).toContain( 'global: true' );
+        expect( compiled ).not.toContain( '__moduleMetadata__' );
+        expect( compiled ).toMatch( /kind:\s*"provider"[\s\S]*scope:\s*2/ );
+    });
+
+    it( 'should resolve @Protect against a .d.ts class without param decorators', () =>
+    {
+        const output = compileFiles({
+            'temp_lib_guard.d.ts' : `
+        export declare class LibGuard {
+          use(apiKey?: string): void;
+        }
+      `,
+            'temp_lib_app.ts' : `
+        import { Controller, Get, Protect } from '../decorators.js';
+        import { LibGuard } from './temp_lib_guard.js';
+
+        @Controller('/lib')
+        export class LibAppController {
+          @Get()
+          @Protect(LibGuard)
+          hi() { return 1 }
+        }
+      `
+        });
+
+        expect( output['temp_lib_app.ts']).toMatch( /guards\s*:\s*\[[\s\S]*LibGuard/ );
+        expect( output['temp_lib_app.ts']).not.toContain( 'could not be resolved' );
+        expect( output['temp_lib_app.ts']).not.toContain( 'source: "Header"' );
+    });
 });

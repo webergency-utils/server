@@ -1,4 +1,4 @@
-import type { EndpointMetadata } from './types.js';
+import type { EndpointMetadata, ParamMetadata } from './types.js';
 import type { Scope } from '../decorators.js';
 
 /** Well-known Symbol.for keys for AOT metadata attached to classes / methods. */
@@ -6,6 +6,7 @@ export const WEBERGENCY_CONTROLLER = Symbol.for( 'webergency.server.controller' 
 export const WEBERGENCY_MODULE = Symbol.for( 'webergency.server.module' );
 export const WEBERGENCY_INJECTABLE = Symbol.for( 'webergency.server.injectable' );
 export const WEBERGENCY_METADATA = Symbol.for( 'webergency.server.metadata' );
+export const WEBERGENCY_GUARD = Symbol.for( 'webergency.server.guard' );
 
 export type ControllerAotMeta =
 {
@@ -36,6 +37,13 @@ export type InjectableAotMeta =
     kind   : 'provider' | 'guard' | 'interceptor' | 'controller'
     token  : string
     scope? : Scope
+};
+
+/** Param AOT for a published guard `use()` — lives on the guard class, not the consumer controller. */
+export type GuardAotMeta =
+{
+    params   : ParamMetadata[]
+    isAsync? : boolean
 };
 
 export function getControllerMeta( target: any ): ControllerAotMeta | undefined
@@ -69,6 +77,16 @@ export function getInjectableMeta( target: any ): InjectableAotMeta | undefined
 export function setInjectableMeta( target: any, meta: InjectableAotMeta ): void
 {
     target[WEBERGENCY_INJECTABLE] = meta;
+}
+
+export function getGuardMeta( target: any ): GuardAotMeta | undefined
+{
+    return target?.[WEBERGENCY_GUARD];
+}
+
+export function setGuardMeta( target: any, meta: GuardAotMeta ): void
+{
+    target[WEBERGENCY_GUARD] = meta;
 }
 
 export function getCustomMetadataBag( target: any ): Record<string | symbol, any> | undefined

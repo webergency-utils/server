@@ -91,6 +91,10 @@ node --import @webergency-utils/server/register ./src/main.ts
 
 `Server({ module })` / `Server({ controllers, providers, guards, interceptors })` walks the graph on first `start()` or `fetch()` and fails fast if a declared controller host has no AOT meta.
 
+**Library packages:** compile with `webergency-tsc` (or the transformer). Do not re-bundle with tsup/esbuild in a way that strips `Symbol.for(...)` or `__injections__`. Guard `@Header` / `@Request` AOT lives on the guard class (`webergency.server.guard`); apps only need `@Protect(LibGuard)` plus their own webergency-tsc emit. See [ADR 0009](docs/adr/0009-portable-host-aot.md).
+
+This package’s `npm run build` is `webergency-tsc` (ESM + `.d.ts`) then tsup CJS with treeshake/minify off. `prepublishOnly` runs that build before `npm publish`.
+
 Entry points:
 
 | Export | Purpose |

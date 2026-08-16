@@ -4,12 +4,15 @@ import {
     WEBERGENCY_MODULE,
     WEBERGENCY_INJECTABLE,
     WEBERGENCY_METADATA,
+    WEBERGENCY_GUARD,
     getControllerMeta,
     setControllerMeta,
     getModuleMeta,
     setModuleMeta,
     getInjectableMeta,
     setInjectableMeta,
+    getGuardMeta,
+    setGuardMeta,
     getCustomMetadataBag,
     ensureCustomMetadataBag
 } from '../src/core/symbols.js';
@@ -73,6 +76,21 @@ describe( 'AOT Symbol metadata helpers', () =>
         expect(( Host as any ).__metadata__).toBe( bag );
         expect( bag.legacy ).toBe( 1 );
         expect( bag.extra ).toBe( true );
+    });
+
+    it( 'should set and get guard meta on the class', () =>
+    {
+        // Arrange
+        class G {}
+        const meta = { params : [{ source : 'Header' as const, name : 'x-api-key' }], isAsync : false };
+
+        // Act
+        setGuardMeta( G, meta );
+
+        // Assert
+        expect( getGuardMeta( G )).toEqual( meta );
+        expect( G[WEBERGENCY_GUARD]).toEqual( meta );
+        expect( getGuardMeta({})).toBeUndefined();
     });
 
     it( 'should return undefined meta readers for empty targets', () =>

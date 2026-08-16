@@ -1,6 +1,6 @@
 {
   "name": "@webergency-utils/server",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Industrial-grade Zero-Reflection AOT web server engine",
   "license": "MIT",
   "type": "module",
@@ -64,9 +64,12 @@
     "coverage:runtime:deno": "mkdir -p coverage/runtime-deno && rm -rf coverage/deno-profile && deno run --allow-net --allow-env --allow-read --allow-write --node-modules-dir=manual --min-dep-age=0 --coverage=coverage/deno-profile scripts/runtime-suite.mjs && deno coverage coverage/deno-profile --lcov --output=coverage/runtime-deno/lcov.info && node scripts/filter-lcov.mjs coverage/runtime-deno/lcov.info src/adapters/deno-adapter.ts",
     "clean": "rm -rf ./dist ./dist-fuzz",
     "reset": "npm run clean && rm -rf node_modules package-lock.json && npm i",
-    "build": "npm run clean && tsup",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs",
+    "build:esm": "tsx src/compiler/cli.ts -p tsconfig.build.json",
+    "build:cjs": "tsup",
     "build:fuzz": "esbuild fuzz/runtime.ts --bundle --platform=node --format=cjs --outfile=dist-fuzz/runtime.cjs",
-    "commit": "node -e \"const version = require('./package.json').version.trim(); require('child_process').execSync('git add . && git commit -m \\\"Version ' + version + '\\\"');\"",
+    "prepublishOnly": "npm run build",
+    "commit": "node --input-type=module -e \"import { readFileSync } from 'node:fs'; import { execSync } from 'node:child_process'; const version = JSON.parse(readFileSync('./package.json', 'utf8')).version.trim(); execSync('git add . && git commit -m ' + JSON.stringify('Version ' + version), { stdio: 'inherit' });\"",
     "version": "npm run build && npm publish --access public && npm run commit && git push"
   },
   "repository": {

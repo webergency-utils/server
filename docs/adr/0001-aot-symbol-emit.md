@@ -18,7 +18,7 @@ We need startup to stay fast across Node, Bun, and Deno; validators must be type
 
 Decorators are compile-time markers only. The AOT transformer (exposed as `@webergency-utils/server/transformer`, the `webergency-tsc` CLI, and the optional `register` load-time host) analyzes each decorated class and emits:
 
-- `Symbol.for('webergency.server.controller' | '…injectable' | '…module' | '…metadata')` assignments onto the class.
+- `Symbol.for('webergency.server.controller' | '…injectable' | '…module' | '…metadata' | '…guard')` assignments onto the class. Host classes (guards, modules) carry their own decorator AOT so published libraries do not depend on the consumer re-parsing `.d.ts` — see [0009](./0009-portable-host-aot.md).
 - File-local `__val_<hash>` validator functions closed over `@webergency-utils/typechecker/runtime`.
 
 There is no sidecar manifest for normal builds and no process-global metadata store. Bootstrap fails fast if a declared controller host has no Symbol meta. Validators are deduplicated program-wide and emitted only into files that reference them.

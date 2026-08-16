@@ -208,4 +208,35 @@ describe( 'bootstrapRegistry', () =>
         expect( registry.guardClasses.has( 'TopGuard' )).toBe( true );
         expect( registry.interceptorClasses.has( 'TopInterceptor' )).toBe( true );
     });
+
+    it( 'should walk a module Symbol graph without __moduleMetadata__', () =>
+    {
+        // Arrange
+        class HelloCtrl
+        {
+            hi(){ return 'hi' }
+        }
+        setControllerMeta( HelloCtrl, {
+            endpoints : [{
+                methodName   : 'hi',
+                httpMethod   : 'GET',
+                path         : '/hi',
+                params       : [],
+                guards       : [],
+                interceptors : [],
+                meta         : {}
+            }]
+        });
+        class LibModule {}
+        setModuleMeta( LibModule, { controllers : [HelloCtrl], global : true });
+        const registry = new ApplicationRegistry();
+
+        // Act
+        bootstrapRegistry( registry, { module : LibModule });
+
+        // Assert
+        expect(( LibModule as any ).__moduleMetadata__ ).toBeUndefined();
+        expect( registry.getEndpoints()).toHaveLength( 1 );
+        expect( registry.controllerClasses.has( 'HelloCtrl' )).toBe( true );
+    });
 });

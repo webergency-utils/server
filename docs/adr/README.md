@@ -12,3 +12,4 @@ Architecture Decision Records for `@webergency-utils/server`.
 | [0006](./0006-server-request-response.md) | Sealed `ServerRequest` / `ServerResponse` wrappers | Accepted |
 | [0007](./0007-file-uploads-multipart.md) | Hierarchical `@File` uploads with streaming multipart | Accepted |
 | [0008](./0008-seo-internal-dispatch.md) | SEO route groups and internal forward | Accepted |
+| [0009](./0009-portable-host-aot.md) | Portable host-class AOT for published libraries | Accepted |

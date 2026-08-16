@@ -2297,25 +2297,77 @@ DiGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "DiGuard"
 };
+DiGuard[Symbol.for("webergency.server.guard")] = {
+    params: [{
+            source: "Inject",
+            name: "DatabaseService",
+            validator: "",
+            mode: undefined
+        }],
+    isAsync: false
+};
 SimpleGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "SimpleGuard"
+};
+SimpleGuard[Symbol.for("webergency.server.guard")] = {
+    params: [],
+    isAsync: false
 };
 AnotherGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "AnotherGuard"
 };
+AnotherGuard[Symbol.for("webergency.server.guard")] = {
+    params: [],
+    isAsync: false
+};
+SimpleTestMiddleware[Symbol.for("webergency.server.injectable")] = {
+    kind: "guard",
+    token: "SimpleTestMiddleware"
+};
+SimpleTestMiddleware[Symbol.for("webergency.server.guard")] = {
+    params: [{
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }, {
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    isAsync: false
+};
 MiddlewareCheckingGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "MiddlewareCheckingGuard"
+};
+MiddlewareCheckingGuard[Symbol.for("webergency.server.guard")] = {
+    params: [{
+            source: "Request",
+            name: "",
+            validator: "",
+            mode: undefined
+        }],
+    isAsync: false
 };
 FailingGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "FailingGuard"
 };
+FailingGuard[Symbol.for("webergency.server.guard")] = {
+    params: [],
+    isAsync: false
+};
 PublicDenyGuard[Symbol.for("webergency.server.injectable")] = {
     kind: "guard",
     token: "PublicDenyGuard"
+};
+PublicDenyGuard[Symbol.for("webergency.server.guard")] = {
+    params: [],
+    isAsync: false
 };
 GlobalErrorSanitizer[Symbol.for("webergency.server.injectable")] = {
     kind: "interceptor",
@@ -2352,10 +2404,6 @@ BaseService[Symbol.for("webergency.server.injectable")] = {
 ChildService[Symbol.for("webergency.server.injectable")] = {
     kind: "provider",
     token: "ChildService"
-};
-SimpleTestMiddleware[Symbol.for("webergency.server.injectable")] = {
-    kind: "provider",
-    token: "SimpleTestMiddleware"
 };
 CallbackTestMiddleware[Symbol.for("webergency.server.injectable")] = {
     kind: "provider",

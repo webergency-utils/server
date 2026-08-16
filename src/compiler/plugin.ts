@@ -23,11 +23,21 @@ const symbolAssign = ( className: string, symbolKey: string, value: ts.Expressio
         )
     );
 
-const injectableMeta = ( kind: string, token: string ): ts.Expression =>
-    ts.factory.createObjectLiteralExpression([
+const injectableMeta = ( kind: string, token: string, scope?: number ): ts.Expression =>
+{
+    const props: ts.ObjectLiteralElementLike[] =
+    [
         ts.factory.createPropertyAssignment( 'kind', ts.factory.createStringLiteral( kind )),
         ts.factory.createPropertyAssignment( 'token', ts.factory.createStringLiteral( token ))
-    ], true );
+    ];
+
+    if( scope !== undefined )
+    {
+        props.push( ts.factory.createPropertyAssignment( 'scope', ts.factory.createNumericLiteral( String( scope ))));
+    }
+
+    return ts.factory.createObjectLiteralExpression( props, true );
+};
 
 interface NeededEmitLocals {
     validators  : Set<string>
@@ -41,7 +51,7 @@ interface NeededEmitLocals {
  * Nested refs are referenced as `__val_` / `__parse_` / `__ser_<hash>` inside each
  * expression, so the set is closed transitively.
  */
-function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry ): NeededEmitLocals
+function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry, fileName: string ): NeededEmitLocals
 {
     const needed: NeededEmitLocals = {
         validators  : new Set(),
@@ -80,6 +90,13 @@ function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry 
     };
 
     for( const endpoint of endpoints ) { scanMetadata( endpoint ) }
+
+    for( const [ , info ] of registry.guards.entries())
+    {
+        if( info.path !== fileName ){ continue }
+
+        scanMetadata( info.params );
+    }
 
     while( queue.length > 0 )
     {
@@ -205,13 +222,23 @@ function metadataAppends( registry: ProjectRegistry, fileName: string, fileEndpo
     for( const [name, info] of registry.guards.entries())
     {
         if( info.path !== fileName ){ continue }
-        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'guard', name )));
+
+        const scope = registry.providers.get( name )?.scope;
+        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'guard', name, scope )));
+        appends.push( symbolAssign(
+            name,
+            'webergency.server.guard',
+            objectToExpression({
+                params  : info.params || [],
+                isAsync : !!info.isAsync
+            })
+        ));
     }
 
     for( const [name, info] of registry.interceptors.entries())
     {
         if( info.path !== fileName ){ continue }
-        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'interceptor', name )));
+        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'interceptor', name, registry.providers.get( name )?.scope )));
     }
 
     for( const [name, info] of registry.providers.entries())
@@ -222,7 +249,7 @@ function metadataAppends( registry: ProjectRegistry, fileName: string, fileEndpo
         {
             continue;
         }
-        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'provider', name )));
+        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'provider', name, info.scope )));
     }
 
     for( const [name, info] of registry.controllers.entries())
@@ -244,39 +271,40 @@ function metadataAppends( registry: ProjectRegistry, fileName: string, fileEndpo
                 ], true )
             )
         );
-        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'controller', name )));
+        appends.push( symbolAssign( name, 'webergency.server.injectable', injectableMeta( 'controller', name, registry.providers.get( name )?.scope )));
     }
 
-    // Modules: mirror runtime @Module() into Symbol.for so published dist does not rely on decorator side-effects alone
     for( const [name, info] of registry.modules.entries())
     {
         if( info.path !== fileName ){ continue }
-        appends.push(
-            ts.factory.createExpressionStatement(
-                ts.factory.createBinaryExpression(
-                    ts.factory.createElementAccessExpression(
-                        ts.factory.createIdentifier( name ),
-                        ts.factory.createCallExpression(
-                            ts.factory.createPropertyAccessExpression(
-                                ts.factory.createIdentifier( 'Symbol' ),
-                                'for'
-                            ),
-                            undefined,
-                            [ts.factory.createStringLiteral( 'webergency.server.module' )]
-                        )
-                    ),
-                    ts.SyntaxKind.EqualsToken,
-                    ts.factory.createBinaryExpression(
-                        ts.factory.createPropertyAccessExpression(
-                            ts.factory.createIdentifier( name ),
-                            '__moduleMetadata__'
-                        ),
-                        ts.SyntaxKind.BarBarToken,
-                        ts.factory.createObjectLiteralExpression([])
-                    )
+
+        const props: ts.ObjectLiteralElementLike[] = [];
+
+        if( info.global )
+        {
+            props.push( ts.factory.createPropertyAssignment( 'global', ts.factory.createTrue()));
+        }
+
+        for( const key of [ 'controllers', 'providers', 'guards', 'interceptors', 'imports', 'exports' ] as const )
+        {
+            const names = info[key];
+
+            if( !names || names.length === 0 ){ continue }
+
+            props.push(
+                ts.factory.createPropertyAssignment(
+                    key,
+                    ts.factory.createArrayLiteralExpression( names.map( n => ts.factory.createIdentifier( n )))
                 )
-            )
-        );
+            );
+        }
+
+        if( info.files !== undefined )
+        {
+            props.push( ts.factory.createPropertyAssignment( 'files', objectToExpression( info.files )));
+        }
+
+        appends.push( symbolAssign( name, 'webergency.server.module', ts.factory.createObjectLiteralExpression( props, true )));
     }
 
     return appends;
@@ -386,7 +414,7 @@ export default function compilerPlugin( program: ts.Program, pluginConfig?: unkn
             endpointsByFile.set( sourceFile.fileName, fileEndpoints );
 
             // 3. Emit Symbol.for AOT meta on classes (no process-global registry)
-            const needed = neededEmitLocals( fileEndpoints, registry );
+            const needed = neededEmitLocals( fileEndpoints, registry, sourceFile.fileName );
             const prepends = emitLocalPrepends( registry, needed, transformedSourceFile.statements );
             const appends = metadataAppends( registry, sourceFile.fileName, fileEndpoints );
 

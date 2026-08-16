@@ -5,11 +5,24 @@ import ts from 'typescript';
  * endpoints found on them, and the validator/parser/serializer expressions to emit. One
  * registry is shared across the whole program so each expression is built once and reused.
  */
+export type ModuleGraphInfo =
+{
+    path          : string
+    global?       : boolean
+    controllers?  : string[]
+    providers?    : string[]
+    guards?       : string[]
+    interceptors? : string[]
+    imports?      : string[]
+    exports?      : string[]
+    files?        : any
+};
+
 export interface ProjectRegistry {
     controllers       : Map<string, { path : string, injections : Map<string, string> }>
-    providers         : Map<string, { path : string }>
-    modules           : Map<string, { path : string }>
-    guards            : Map<string, { path : string, params? : any[] }>
+    providers         : Map<string, { path : string, scope? : number }>
+    modules           : Map<string, ModuleGraphInfo>
+    guards            : Map<string, { path : string, params? : any[], isAsync? : boolean }>
     interceptors      : Map<string, { path : string }>
     endpoints         : any[]
     validators        : Map<string, ts.Expression>

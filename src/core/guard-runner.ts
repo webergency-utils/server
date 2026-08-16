@@ -1,8 +1,27 @@
-import { EndpointMetadata, AugmentedRequest, ServerResponse } from './types.js';
+import { EndpointMetadata, AugmentedRequest, ServerResponse, ParamMetadata } from './types.js';
 import { ServerRequest } from './server-request.js';
 import { SecurityOptions } from '../decorators.js';
-import { getRegistry } from './registry.js';
+import { ApplicationRegistry, getRegistry } from './registry.js';
 import { RequestProcessor } from './request-processor.js';
+import { getGuardMeta } from './symbols.js';
+
+function guardHostClass( registry: ApplicationRegistry, name: string, instance: any ): any
+{
+    const registered = registry.providers.get( name );
+
+    if( typeof registered === 'function' ){ return registered }
+
+    const ctor = instance?.constructor;
+
+    if( typeof ctor === 'function' && ctor !== Object ){ return ctor }
+
+    return instance;
+}
+
+function classGuardParams( registry: ApplicationRegistry, name: string, instance: any, fallback: ParamMetadata[]): ParamMetadata[]
+{
+    return getGuardMeta( guardHostClass( registry, name, instance ))?.params ?? fallback;
+}
 
 /**
  * Parameter sources a guard may declare. Anything else consumes the next AOT-emitted
@@ -52,11 +71,14 @@ export async function invokeGuards(
         const guardModule = g.type === 'class' ? registry.getTokenModule( g.name ) : options.controllerModule;
         const guardInstance = g.type === 'class' ? await registry.getGuard( g.name, guardModule ) : options.controller;
         const guardMethod = g.type === 'class' ? guardInstance.use : guardInstance[g.name];
+        const params = g.type === 'class'
+            ? classGuardParams( registry, g.name, guardInstance, g.params )
+            : g.params;
 
         const args: any[] = [];
         let resolverIdx = 0;
 
-        for( const p of g.params )
+        for( const p of params )
         {
             if( GUARD_PARAM_SOURCES.has( p.source ))
             {

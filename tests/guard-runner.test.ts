@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { invokeGuards } from '../src/core/guard-runner.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
+import { setGuardMeta } from '../src/core/symbols.js';
 import type { AugmentedRequest, EndpointMetadata, ResponseBag } from '../src/core/types.js';
 
 function createRequest(): AugmentedRequest
@@ -171,6 +172,41 @@ describe( 'invokeGuards', () =>
         }))).rejects.toThrow( 'aborted' );
         expect( calls ).toBe( 2 );
         expect( second ).not.toHaveBeenCalled();
+    });
+
+    it( 'should prefer host-class guard meta over empty endpoint params', async () =>
+    {
+        // Arrange
+        const registry = new ApplicationRegistry();
+        const seen: unknown[] = [];
+
+        class HostGuard
+        {
+            use( ...args: unknown[])
+            {
+                seen.push( ...args );
+            }
+        }
+
+        setGuardMeta( HostGuard, { params : [{ source : 'Header', name : 'x-token' }] });
+        registry.registerGuard( 'HostGuard', HostGuard );
+        const metadata = createEndpoint([{
+            type      : 'class',
+            name      : 'HostGuard',
+            resolvers : [],
+            params    : [],
+            isAsync   : false
+        }]);
+
+        // Act
+        await runWithRegistry( registry, () => invokeGuards( metadata, createRequest(), {
+            ctx              : { success : true, errors : [], mode : 'strict' },
+            controller       : {},
+            controllerModule : undefined
+        }));
+
+        // Assert
+        expect( seen ).toEqual([ 'abc' ]);
     });
 
     it( 'should not touch the registry when there are no guards', async () =>

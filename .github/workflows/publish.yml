@@ -63,8 +63,6 @@ jobs:
 
       # No NODE_AUTH_TOKEN — OIDC trusted publishing only.
       - name: Publish
-        env:
-          NPM_CONFIG_LOGLEVEL: verbose
         run: npm publish --provenance --access public
 
       # Scorecard Signed-Releases: attach npm's SLSA provenance DSSE to the GitHub Release.
@@ -86,7 +84,7 @@ jobs:
               fi
             fi
             rm -f attestations.json
-            sleep 5
+            sleep 10
           done
 
           if [ ! -f attestations.json ]; then

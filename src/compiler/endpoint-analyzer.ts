@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { buildValidator, buildSerializer, generateHash } from '@webergency-utils/typechecker/transformer';
 import type { ValidationMode } from '@webergency-utils/typechecker';
 
-import { ProjectRegistry } from './registry.js';
+import { ProjectRegistry, ModuleGraphInfo } from './registry.js';
 import {
     HTTP_METHOD_DECORATORS,
     extractCorsConfig,
@@ -19,6 +19,114 @@ import { unwrapSsePayloadType } from './sse-types.js';
 import { findConstructorDeps, resolvePropertyDeps } from './di-resolution.js';
 import { MetadataCollector, applyDirectives, byName, guardName } from './metadata-collector.js';
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
+
+const MODULE_GRAPH_KEYS = [ 'controllers', 'providers', 'guards', 'interceptors', 'imports', 'exports' ] as const;
+
+function decoratorIdent( dec: ts.Decorator ): ts.Expression
+{
+    return ts.isCallExpression( dec.expression ) ? dec.expression.expression : dec.expression;
+}
+
+function extractClassIdentifiers( expr: ts.Expression ): string[]
+{
+    if( !ts.isArrayLiteralExpression( expr )){ return [] }
+
+    return expr.elements.filter( ts.isIdentifier ).map( el => el.text );
+}
+
+function extractInjectableScope( injectableDec: ts.Decorator ): number | undefined
+{
+    if( !ts.isCallExpression( injectableDec.expression )){ return undefined }
+
+    const arg = injectableDec.expression.arguments[0];
+
+    if( !arg || !ts.isObjectLiteralExpression( arg )){ return undefined }
+
+    for( const prop of arg.properties )
+    {
+        if( !ts.isPropertyAssignment( prop )){ continue }
+
+        const name = ts.isIdentifier( prop.name ) ? prop.name.text : '';
+
+        if( name !== 'scope' ){ continue }
+
+        if( ts.isPropertyAccessExpression( prop.initializer ))
+        {
+            const member = prop.initializer.name.text;
+
+            if( member === 'SINGLETON' ){ return 0 }
+
+            if( member === 'TRANSIENT' ){ return 1 }
+
+            if( member === 'REQUEST' ){ return 2 }
+        }
+
+        if( ts.isNumericLiteral( prop.initializer ))
+        {
+            return Number( prop.initializer.text );
+        }
+    }
+
+    return undefined;
+}
+
+function collectModuleGraph( statement: ts.ClassDeclaration, sourceFile: ts.SourceFile, registry: ProjectRegistry ): void
+{
+    const decorators = ts.getDecorators( statement );
+
+    if( !decorators || !statement.name ){ return }
+
+    let moduleCall: ts.CallExpression | undefined;
+    let isGlobal = false;
+
+    for( const d of decorators )
+    {
+        const ident = decoratorIdent( d );
+
+        if( !ts.isIdentifier( ident )){ continue }
+
+        if( ident.text === 'Module' && ts.isCallExpression( d.expression ))
+        {
+            moduleCall = d.expression;
+        }
+
+        if( ident.text === 'Global' )
+        {
+            isGlobal = true;
+        }
+    }
+
+    if( !moduleCall ){ return }
+
+    const graph: ModuleGraphInfo = { path : sourceFile.fileName, global : isGlobal };
+    const arg = moduleCall.arguments[0];
+
+    if( arg && ts.isObjectLiteralExpression( arg ))
+    {
+        for( const prop of arg.properties )
+        {
+            if( !ts.isPropertyAssignment( prop ) || !ts.isIdentifier( prop.name )){ continue }
+
+            const key = prop.name.text;
+
+            if(( MODULE_GRAPH_KEYS as readonly string[] ).includes( key ))
+            {
+                ( graph as any )[key] = extractClassIdentifiers( prop.initializer );
+            }
+            else if( key === 'files' )
+            {
+                graph.files = parseExpression( prop.initializer, sourceFile );
+            }
+        }
+    }
+
+    registry.modules.set( statement.name.text, graph );
+}
+
+function isAsyncMethod( method: ts.MethodDeclaration ): boolean
+{
+    return !!method.modifiers?.some( m => m.kind === ts.SyntaxKind.AsyncKeyword );
+}
 
 /** Merge a hierarchy of `@Cors` / `@Security` configs; a non-object entry replaces the merge. */
 function mergeConfigs( configs: any[]): any
@@ -180,12 +288,16 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                     if( injectableDec && statement.name ) 
                     {
                         const providerName = statement.name.text;
+                        const scope = extractInjectableScope( injectableDec );
+                        const existing = registry.providers.get( providerName );
 
-                        if( !registry.providers.has( providerName )) 
-                        {
-                            registry.providers.set( providerName, { path : sourceFile.fileName });
-                        }
+                        registry.providers.set( providerName, {
+                            path  : sourceFile.fileName,
+                            scope : scope ?? existing?.scope
+                        });
                     }
+
+                    collectModuleGraph( statement, sourceFile, registry );
 
                     if( controllerDec ) 
                     {
@@ -433,15 +545,20 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                     }
 
                     const possibleGuardName = statement.name?.text;
+                    const useMethod = statement.members.find( m => ts.isMethodDeclaration( m ) && m.name.getText() === 'use' ) as ts.MethodDeclaration | undefined;
 
-                    if( possibleGuardName && registry.guards.has( possibleGuardName )) 
+                    if( possibleGuardName && useMethod )
                     {
-                        const guardInfo = registry.guards.get( possibleGuardName )!;
-                        const useMethod = statement.members.find( m => ts.isMethodDeclaration( m ) && m.name.getText() === 'use' ) as ts.MethodDeclaration;
+                        const params = collector.resolveParamsMetadata( useMethod.parameters );
+                        const prev = registry.guards.get( possibleGuardName );
 
-                        if( useMethod ) 
+                        if( prev || params.length > 0 )
                         {
-                            guardInfo.params = collector.resolveParamsMetadata( useMethod.parameters );
+                            registry.guards.set( possibleGuardName, {
+                                path    : sourceFile.fileName,
+                                params  : params.length > 0 ? params : ( prev?.params || []),
+                                isAsync : isAsyncMethod( useMethod )
+                            });
                         }
                     }
                 }

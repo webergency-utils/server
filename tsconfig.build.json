@@ -1,8 +1,18 @@
 {
-  "extends": "./tsconfig.json",
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests/**/*", "fuzz/**/*"],
-  "compilerOptions": {
-    "rootDir": "./src"
-  }
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "rootDir": "./src",
+        "outDir": "./dist",
+        "noEmit": false
+    },
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "tests",
+        "fuzz",
+        "bench"
+    ]
 }

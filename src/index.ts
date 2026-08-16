@@ -7,9 +7,11 @@ export {
     WEBERGENCY_MODULE,
     WEBERGENCY_INJECTABLE,
     WEBERGENCY_METADATA,
+    WEBERGENCY_GUARD,
     getControllerMeta,
     getModuleMeta,
-    getInjectableMeta
+    getInjectableMeta,
+    getGuardMeta
 } from './core/symbols.js';
 export { RequestContext, Context as RequestContextStore } from './core/context.js';
 export { Reflector } from './core/reflector.js';

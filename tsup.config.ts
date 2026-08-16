@@ -1,5 +1,10 @@
 import { defineConfig } from 'tsup';
 
+/**
+ * CJS dual-package emit only. ESM + declarations come from `webergency-tsc`
+ * (`npm run build:esm`) so Symbol.for / __injections__ AOT is not stripped.
+ * Do not enable treeshake or minify — both drop host-class AOT assignments.
+ */
 export default defineConfig({
     entry :
     {
@@ -8,10 +13,12 @@ export default defineConfig({
         'compiler/register'    : 'src/compiler/register.ts',
         'compiler/cli'         : 'src/compiler/cli.ts'
     },
-    format    : ['cjs', 'esm'],
+    format    : [ 'cjs' ],
     dts       : true,
     sourcemap : true,
-    clean     : true,
+    clean     : false,
+    minify    : false,
+    treeshake : false,
     shims     : true,
     splitting : false,
     external  : [
