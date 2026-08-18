@@ -294,7 +294,7 @@ function metadataAppends( registry: ProjectRegistry, fileName: string, fileEndpo
             props.push(
                 ts.factory.createPropertyAssignment(
                     key,
-                    ts.factory.createArrayLiteralExpression( names.map( n => ts.factory.createIdentifier( n )))
+                    ts.factory.createArrayLiteralExpression( names, true )
                 )
             );
         }

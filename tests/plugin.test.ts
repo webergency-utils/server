@@ -762,4 +762,92 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( output['temp_lib_app.ts']).not.toContain( 'could not be resolved' );
         expect( output['temp_lib_app.ts']).not.toContain( 'source: "Header"' );
     });
+
+    /** Full JS emit — import aliases must appear in Symbol.for module metadata, not bare names. */
+    function emitFiles( files: Record<string, string>, extraOptions: ts.CompilerOptions = {}): Record<string, string>
+    {
+        const names = Object.keys( files );
+        const written = names.map( name => path.resolve( `./${name}` ));
+        const outDir = path.resolve( './temp_emit_out' );
+
+        for( const [ index, name ] of names.entries())
+        {
+            fs.writeFileSync( written[index], files[name]);
+        }
+
+        try
+        {
+            const options: ts.CompilerOptions =
+            {
+                target                 : ts.ScriptTarget.ES2022,
+                module                 : ts.ModuleKind.CommonJS,
+                moduleResolution       : ts.ModuleResolutionKind.Node10,
+                skipLibCheck           : true,
+                experimentalDecorators : true,
+                outDir,
+                ...extraOptions
+            };
+            const outputs: Record<string, string> = {};
+            const host = ts.createCompilerHost( options );
+            host.writeFile = ( fileName, data ) =>
+            {
+                outputs[path.basename( fileName )] = data;
+            };
+            const program = ts.createProgram( written, options, host );
+            const plugin = compilerPlugin( program );
+            program.emit(
+                undefined,
+                host.writeFile,
+                undefined,
+                undefined,
+                { before : [plugin as unknown as ts.TransformerFactory<ts.SourceFile>] }
+            );
+
+            return outputs;
+        }
+        finally
+        {
+            for( const file of written )
+            {
+                if( fs.existsSync( file )) { fs.unlinkSync( file ) }
+            }
+
+            if( fs.existsSync( outDir ))
+            {
+                for( const entry of fs.readdirSync( outDir ))
+                {
+                    fs.unlinkSync( path.join( outDir, entry ));
+                }
+                fs.rmdirSync( outDir );
+            }
+        }
+    }
+
+    it( 'should emit imported module graph refs with import aliases under full JS emit', () =>
+    {
+        const output = emitFiles({
+            'temp_mail.controller.ts' : `
+        import { Controller, Get } from '../decorators.js';
+
+        @Controller('/mail')
+        export class MailController {
+          @Get()
+          hi() { return 1 }
+        }
+      `,
+            'temp_app.module.ts' : `
+        import { Module } from '../decorators.js';
+        import { MailController } from './temp_mail.controller.js';
+
+        @Module({ controllers: [MailController] })
+        export class AppModule {}
+      `
+        });
+
+        const appJs = output['temp_app.module.js'];
+
+        expect( appJs ).toBeDefined();
+        expect( appJs ).toMatch( /controllers:\s*\[[\s\S]*temp_mail_controller_js_1\.MailController[\s\S]*\]/ );
+        expect( appJs ).not.toMatch( /controllers:\s*\[\s*MailController\s*\]/ );
+    });
 });

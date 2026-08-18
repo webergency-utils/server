@@ -53,6 +53,20 @@ if( parsedCli.errors.length )
     process.exit( 1 );
 }
 
+function inferRootDirFromSources( rootNames: readonly string[], configDir: string ): string | undefined
+{
+    if( rootNames.length === 0 ){ return undefined }
+
+    const relPaths = rootNames.map( f => path.relative( configDir, path.resolve( configDir, f )));
+
+    if( !relPaths.every( p => p === 'src' || p.startsWith( `src${path.sep}` )))
+    {
+        return undefined;
+    }
+
+    return path.join( configDir, 'src' );
+}
+
 let options: ts.CompilerOptions = { ...parsedCli.options };
 let rootNames: string[] = parsedCli.fileNames;
 
@@ -62,8 +76,11 @@ const configPath = projectPath
         ? ts.findConfigFile( process.cwd(), ts.sys.fileExists, 'tsconfig.json' )
         : undefined );
 
+let configDir = process.cwd();
+
 if( configPath )
 {
+    configDir = path.dirname( configPath );
     const configFile = ts.readConfigFile( configPath, ts.sys.readFile );
 
     if( configFile.error )
@@ -75,7 +92,7 @@ if( configPath )
     const parsed = ts.parseJsonConfigFileContent(
         configFile.config,
         ts.sys,
-        path.dirname( configPath ),
+        configDir,
         parsedCli.options,
         configPath
     );
@@ -93,6 +110,16 @@ else if( rootNames.length === 0 )
 {
     printUsage();
     process.exit( 1 );
+}
+
+if( !options.rootDir )
+{
+    const inferred = inferRootDirFromSources( rootNames, configDir );
+
+    if( inferred )
+    {
+        options.rootDir = inferred;
+    }
 }
 
 options.experimentalDecorators = options.experimentalDecorators ?? true;

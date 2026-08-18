@@ -9,12 +9,13 @@ export type ModuleGraphInfo =
 {
     path          : string
     global?       : boolean
-    controllers?  : string[]
-    providers?    : string[]
-    guards?       : string[]
-    interceptors? : string[]
-    imports?      : string[]
-    exports?      : string[]
+    /** Original decorator array elements — emit must reuse these nodes so import aliases resolve. */
+    controllers?  : ts.Expression[]
+    providers?    : ts.Expression[]
+    guards?       : ts.Expression[]
+    interceptors? : ts.Expression[]
+    imports?      : ts.Expression[]
+    exports?      : ts.Expression[]
     files?        : any
     reviver?      : any
 };

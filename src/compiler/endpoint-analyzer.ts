@@ -28,11 +28,11 @@ function decoratorIdent( dec: ts.Decorator ): ts.Expression
     return ts.isCallExpression( dec.expression ) ? dec.expression.expression : dec.expression;
 }
 
-function extractClassIdentifiers( expr: ts.Expression ): string[]
+function extractClassReferences( expr: ts.Expression ): ts.Expression[]
 {
     if( !ts.isArrayLiteralExpression( expr )){ return [] }
 
-    return expr.elements.filter( ts.isIdentifier ).map( el => el.text );
+    return expr.elements.filter( el => !ts.isOmittedExpression( el )) as ts.Expression[];
 }
 
 function extractInjectableScope( injectableDec: ts.Decorator ): number | undefined
@@ -112,7 +112,7 @@ function collectModuleGraph( statement: ts.ClassDeclaration, sourceFile: ts.Sour
 
             if(( MODULE_GRAPH_KEYS as readonly string[] ).includes( key ))
             {
-                ( graph as any )[key] = extractClassIdentifiers( prop.initializer );
+                ( graph as any )[key] = extractClassReferences( prop.initializer );
             }
             else if( key === 'files' )
             {
