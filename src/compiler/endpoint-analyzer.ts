@@ -8,6 +8,7 @@ import {
     extractCorsConfig,
     extractSecurityConfig,
     extractFileConfig,
+    extractReviver,
     extractResponseMode,
     hasPublicDecorator,
     hasSeoDecorator,
@@ -116,6 +117,10 @@ function collectModuleGraph( statement: ts.ClassDeclaration, sourceFile: ts.Sour
             else if( key === 'files' )
             {
                 graph.files = parseExpression( prop.initializer, sourceFile );
+            }
+            else if( key === 'reviver' )
+            {
+                graph.reviver = parseExpression( prop.initializer, sourceFile );
             }
         }
     }
@@ -253,6 +258,23 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     'Decorator "@Inject" must not be called with empty parentheses. Use "@Inject" instead of "@Inject()".'
                                 );
                             }
+
+                            const reviverIdent = ts.isCallExpression( expr ) ? expr.expression : expr;
+
+                            if( ts.isIdentifier( reviverIdent ) && reviverIdent.text === 'Reviver' )
+                            {
+                                const emptyCall = ts.isCallExpression( expr ) && expr.arguments.length === 0;
+                                const bare = ts.isIdentifier( expr );
+
+                                if( bare || emptyCall )
+                                {
+                                    diagnostics.error(
+                                        expr,
+                                        DiagnosticCode.DECORATOR_MISUSE,
+                                        'Decorator "@Reviver" requires a reviver function or null. Use "@Reviver(fn)" or "@Reviver(null)", not "@Reviver" or "@Reviver()".'
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -318,6 +340,9 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                         const classCors = mergeConfigs( classMeta.corsConfigs );
                         const classSecurity = mergeConfigs( classMeta.securityConfigs );
                         const classFiles = mergeFileConfigs( classMeta.fileConfigs );
+                        const classReviver = classMeta.revivers.length > 0
+                            ? classMeta.revivers[classMeta.revivers.length - 1]
+                            : undefined;
 
                         // Scan for property injections AFTER decorators have registered their classes
                         collector.scanInjections( statement, controllerName );
@@ -364,6 +389,9 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
 
                                     const methodFiles = extractFileConfig( mDecs, sourceFile );
                                     const activeFiles = mergeFileConfigs([ classFiles, methodFiles ]);
+
+                                    const methodReviver = extractReviver( mDecs, sourceFile );
+                                    const activeReviver = methodReviver !== undefined ? methodReviver : classReviver;
 
                                     const methodResponseMode = extractResponseMode( mDecs );
                                     const activeResponseMode = methodResponseMode !== undefined ? methodResponseMode : classResponseMode;
@@ -526,6 +554,11 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     if( activeFiles !== undefined )
                                     {
                                         endpoint.files = activeFiles;
+                                    }
+
+                                    if( activeReviver !== undefined )
+                                    {
+                                        endpoint.reviver = activeReviver;
                                     }
 
                                     if( isSeo )

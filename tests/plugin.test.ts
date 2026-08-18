@@ -681,6 +681,62 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( compiled ).toMatch( /kind:\s*"provider"[\s\S]*scope:\s*2/ );
     });
 
+    it( 'should emit @Reviver on controller / endpoint and Module.reviver', () =>
+    {
+        const code = `
+      import { Module, Controller, Get, Post, Reviver } from '../decorators.js';
+
+      export const isoDates = ( key, value ) => value;
+
+      @Reviver(isoDates)
+      @Controller('/inv')
+      export class InvCtrl {
+        @Get()
+        list() { return [] }
+
+        @Reviver(null)
+        @Post('/raw')
+        raw() { return 1 }
+      }
+
+      @Module({ controllers: [InvCtrl], reviver: isoDates })
+      export class InvModule {}
+    `;
+
+        const compiled = compileAndTransform( code );
+
+        expect( compiled ).toContain( 'reviver: isoDates' );
+        expect( compiled ).toContain( 'reviver: null' );
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.module")' );
+    });
+
+    it( 'should throw when @Reviver is bare or called with empty parentheses', () =>
+    {
+        const bare = `
+      import { Controller, Get, Reviver } from '../decorators.js';
+
+      @Reviver
+      @Controller('/bad')
+      export class BareReviverCtrl {
+        @Get()
+        hi() { return 1 }
+      }
+    `;
+        const empty = `
+      import { Controller, Get, Reviver } from '../decorators.js';
+
+      @Reviver()
+      @Controller('/bad')
+      export class EmptyReviverCtrl {
+        @Get()
+        hi() { return 1 }
+      }
+    `;
+
+        expect(() => compileAndTransform( bare )).toThrow( /@Reviver" requires a reviver function or null/ );
+        expect(() => compileAndTransform( empty )).toThrow( /@Reviver" requires a reviver function or null/ );
+    });
+
     it( 'should resolve @Protect against a .d.ts class without param decorators', () =>
     {
         const output = compileFiles({

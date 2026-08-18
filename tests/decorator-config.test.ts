@@ -9,6 +9,7 @@ import
     extractCorsConfig,
     extractSecurityConfig,
     extractFileConfig,
+    extractReviver,
     extractResponseMode,
     hasPublicDecorator,
     hasSeoDecorator,
@@ -225,6 +226,36 @@ class C {}
 
         // Assert
         expect( merged ).toEqual({ dest : '/keep' });
+    });
+});
+
+describe( 'extractReviver', () =>
+{
+    it( 'should return undefined without decorators and ignore bare / empty calls', () =>
+    {
+        expect( extractReviver( undefined, parseSource( '' ))).toBeUndefined();
+
+        const bare = classDecorators( '@Reviver class C {}' );
+        const empty = classDecorators( '@Reviver() class C {}' );
+
+        expect( extractReviver( bare.decorators, bare.sourceFile )).toBeUndefined();
+        expect( extractReviver( empty.decorators, empty.sourceFile )).toBeUndefined();
+    });
+
+    it( 'should capture a function identifier and allow null to opt out', () =>
+    {
+        const fn = classDecorators( '@Reviver(isoDates) class C {}' );
+        const none = classDecorators( '@Reviver(null) class C {}' );
+
+        expect( extractReviver( fn.decorators, fn.sourceFile )).toEqual({ __raw_code__ : 'isoDates' });
+        expect( extractReviver( none.decorators, none.sourceFile )).toBeNull();
+    });
+
+    it( 'should prefer the last @Reviver on the same target', () =>
+    {
+        const { decorators, sourceFile } = classDecorators( '@Reviver(isoDates) @Reviver(null) class C {}' );
+
+        expect( extractReviver( decorators, sourceFile )).toBeNull();
     });
 });
 

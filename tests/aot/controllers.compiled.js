@@ -9,8 +9,10 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 import * as __tcRuntime from "@webergency-utils/typechecker/runtime";
 const validators = __tcRuntime.validators;
-const __val_473287f8298dba71 = validators.string;
-const __val_12886f9d00055adf = validators.number;
+const __val_473287f8298dba71 = (v, path, ctx) => { v = validators.string(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "string"); return v; };
+const __val_12886f9d00055adf = (v, path, ctx) => { v = validators.number(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "number"); return v; };
 const __val_04c78f82f98a8cf4 = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "User");
     if (obj === false)
@@ -23,8 +25,10 @@ const __val_04c78f82f98a8cf4 = ((keys, props) => (v, path, ctx) => {
     ["name", false, __val_473287f8298dba71],
     ["age", false, __val_12886f9d00055adf]
 ]);
-const __val_d31fde334b3f24e2 = (v, path, ctx) => validators.literal(v, path, ctx, false);
-const __val_561da1284502fef1 = (v, path, ctx) => validators.literal(v, path, ctx, true);
+const __val_d31fde334b3f24e2 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, false))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_561da1284502fef1 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, true))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
 const __val_ced862ef1505bc73 = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<boolean>"))([__val_d31fde334b3f24e2, __val_561da1284502fef1]);
 const __val_c67915707769fcf5 = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "{ success: boolean; data: User; }");
@@ -38,7 +42,8 @@ const __val_c67915707769fcf5 = ((keys, props) => (v, path, ctx) => {
     ["success", false, __val_ced862ef1505bc73],
     ["data", false, __val_04c78f82f98a8cf4]
 ]);
-const __val_6d1570e5b8d6d45a = (v, path, ctx) => validators.literal(v, path, ctx, "simple");
+const __val_6d1570e5b8d6d45a = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "simple"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
 const __val_2258654cc0f69d37 = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "{ type: \"simple\"; val: string; }");
     if (obj === false)
@@ -51,7 +56,8 @@ const __val_2258654cc0f69d37 = ((keys, props) => (v, path, ctx) => {
     ["type", false, __val_6d1570e5b8d6d45a],
     ["val", false, __val_473287f8298dba71]
 ]);
-const __val_68056e96638382b6 = (v, path, ctx) => validators.literal(v, path, ctx, "complex");
+const __val_68056e96638382b6 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "complex"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
 const __val_e5da2f9fabafe20e = (v, path, ctx) => validators.array(v, path, ctx, __val_473287f8298dba71);
 const __val_b421a9236dfde58e = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "{ id: number; tags: string[]; }");
@@ -104,8 +110,10 @@ const __val_55e3fcb8d722f805 = ((keys, props) => (v, path, ctx) => {
 })(new Set(["reason"]), [
     ["reason", false, __val_473287f8298dba71]
 ]);
-const __val_2d1db52869bf4329 = (v, path, ctx) => validators.literal(v, path, ctx, "active");
-const __val_88e643147651d549 = (v, path, ctx) => validators.literal(v, path, ctx, "inactive");
+const __val_2d1db52869bf4329 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "active"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_88e643147651d549 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "inactive"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
 const __val_857204a536cb022c = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<Status>"))([__val_55e3fcb8d722f805, __val_2d1db52869bf4329, __val_88e643147651d549]);
 const __val_2d6ea820a293bacf = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "{ success: boolean; s: Status; }");
@@ -248,14 +256,22 @@ const __val_4ac5d9e4f4205e53 = ((keys, props) => (v, path, ctx) => {
     ["success", false, __val_ced862ef1505bc73],
     ["user", false, __val_91d782a2d0de1354]
 ]);
-const __val_32873a7f224f38d8 = (v, path, ctx) => validators.literal(v, path, ctx, "string");
-const __val_628f6ca4b78e6b50 = (v, path, ctx) => validators.literal(v, path, ctx, "number");
-const __val_46a7c6afe9b432e6 = (v, path, ctx) => validators.literal(v, path, ctx, "bigint");
-const __val_1207c37d006fe9f8 = (v, path, ctx) => validators.literal(v, path, ctx, "boolean");
-const __val_046317c2cffaf10d = (v, path, ctx) => validators.literal(v, path, ctx, "symbol");
-const __val_df6b16b0e625bf20 = (v, path, ctx) => validators.literal(v, path, ctx, "undefined");
-const __val_e64d77191bc932bb = (v, path, ctx) => validators.literal(v, path, ctx, "object");
-const __val_9120d5d091aa5bf3 = (v, path, ctx) => validators.literal(v, path, ctx, "function");
+const __val_32873a7f224f38d8 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "string"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_628f6ca4b78e6b50 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "number"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_46a7c6afe9b432e6 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "bigint"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_1207c37d006fe9f8 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "boolean"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_046317c2cffaf10d = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "symbol"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_df6b16b0e625bf20 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "undefined"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_e64d77191bc932bb = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "object"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
+const __val_9120d5d091aa5bf3 = (v, path, ctx) => { v = ((v, path, ctx) => validators.literal(v, path, ctx, "function"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "literal"); return v; };
 const __val_1e1a258db2184d0e = (checks => (v, path, ctx) => validators.union(v, path, ctx, checks, "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">"))([__val_32873a7f224f38d8, __val_628f6ca4b78e6b50, __val_46a7c6afe9b432e6, __val_1207c37d006fe9f8, __val_046317c2cffaf10d, __val_df6b16b0e625bf20, __val_e64d77191bc932bb, __val_9120d5d091aa5bf3]);
 const __val_87e266a791052d41 = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "{ success: boolean; val: string | number; type: \"string\" | \"number\" | \"bigint\" | \"boolean\" | \"symbol\" | \"undefined\" | \"object\" | \"function\"; }");
@@ -270,7 +286,8 @@ const __val_87e266a791052d41 = ((keys, props) => (v, path, ctx) => {
     ["val", false, __val_affb28566d707e35],
     ["type", false, __val_1e1a258db2184d0e]
 ]);
-const __val_9a141e74a6c02429 = (v, path, ctx) => validators.templateLiteral(v, path, ctx, validators.safeRegExp("^id-[0-9]+(\\.[0-9]+)?$"), "`id-${number}`");
+const __val_9a141e74a6c02429 = (v, path, ctx) => { v = ((v, path, ctx) => validators.templateLiteral(v, path, ctx, validators.safeRegExp("^id-[0-9]+(\\.[0-9]+)?$"), "`id-${number}`"))(v, path, ctx); if (ctx.success)
+    v = validators.applyOptionTransform(v, path, ctx, [], "string"); return v; };
 const __val_6b50e5736cb6bb55 = ((keys, props) => (v, path, ctx) => {
     const obj = validators.object(v, path, ctx, keys, "{ success: boolean; id: `id-${number}`; }");
     if (obj === false)
@@ -287,6 +304,8 @@ const __val_e5fc42b4aba2c6d1 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "string");
     if (ctx.success && v !== undefined && v !== null) {
         validators.minLength(v, path, ctx, 8);
     }
@@ -298,6 +317,8 @@ const __val_a1975336d1e3a054 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "number");
     if (ctx.success && v !== undefined && v !== null) {
         validators.minimum(v, path, ctx, 18);
     }
@@ -322,6 +343,8 @@ const __val_bb2935cf2223ae40 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "number");
     if (ctx.success && v !== undefined && v !== null) {
         validators.custom(v, path, ctx, isEvenNumber);
     }
@@ -367,6 +390,8 @@ const __val_36b3db4fc7b251a9 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "number");
     if (ctx.success && v !== undefined && v !== null) {
         validators.exclusiveMinimum(v, path, ctx, 10);
     }
@@ -378,6 +403,8 @@ const __val_397edf756fbe38e0 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "number");
     if (ctx.success && v !== undefined && v !== null) {
         validators.exclusiveMaximum(v, path, ctx, 20);
     }
@@ -389,6 +416,8 @@ const __val_a564a7ce790d29ed = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.number(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "number");
     if (ctx.success && v !== undefined && v !== null) {
         validators.multipleOf(v, path, ctx, 5);
     }
@@ -413,6 +442,8 @@ const __val_871344223c5ce37c = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "string");
     if (ctx.success && v !== undefined && v !== null) {
         v = validators.format(v, path, ctx, "email");
     }
@@ -424,6 +455,8 @@ const __val_a9030587ebb4386c = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = validators.string(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "string");
     if (ctx.success && v !== undefined && v !== null) {
         v = validators.format(v, path, ctx, "uuid");
     }
@@ -448,6 +481,8 @@ const __val_78d9364193f14947 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = __val_e5da2f9fabafe20e(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "Array");
     if (ctx.success && v !== undefined && v !== null) {
         validators.minItems(v, path, ctx, 2);
         validators.maxItems(v, path, ctx, 3);
@@ -461,6 +496,8 @@ const __val_e932e0ca2e5a5a04 = (v, path, ctx) => {
     const _s = ctx.success;
     ctx.success = true;
     v = __val_3bf071592f56335a(v, path, ctx);
+    if (ctx.success)
+        v = validators.applyOptionTransform(v, path, ctx, [], "Array");
     if (ctx.success && v !== undefined && v !== null) {
         validators.uniqueItems(v, path, ctx);
     }
@@ -635,195 +672,136 @@ const __val_4b3ffd86cc4f9e24 = ((keys, props) => (v, path, ctx) => {
     ["data", false, __val_04c78f82f98a8cf4],
     ["ageType", false, __val_1e1a258db2184d0e]
 ]);
-const __parse_04c78f82f98a8cf4_strict_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+const __parse_04c78f82f98a8cf4_strict_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), (path) ? (path) + "." + "name" : "name", transform, "string", [], obj), "age": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age"), (path) ? (path) + "." + "age" : "age", transform, "number", [], obj) }; for (const k in o) {
     if (!__keys.has(k)) {
         throw new __tcRuntime.ParseError(p, "PropertyNotAllowed<" + k + ">");
     }
 } return res; })(obj, path); });
-const __parse_04c78f82f98a8cf4_strict_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+const __parse_04c78f82f98a8cf4_strict_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), (path) ? (path) + "." + "name" : "name", transform, "string", [], rawQuery), "age": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age"), (path) ? (path) + "." + "age" : "age", transform, "number", [], rawQuery) }; for (const k in o) {
     if (!__keys.has(k)) {
         throw new __tcRuntime.ParseError(p, "PropertyNotAllowed<" + k + ">");
     }
 } return res; })(rawQuery, path); });
-const __parse_04c78f82f98a8cf4_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+const __parse_04c78f82f98a8cf4_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age") }; return res; })(obj, path); });
-const __parse_04c78f82f98a8cf4_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age") }; return res; })(rawQuery, path); });
-const __parse_04c78f82f98a8cf4_relaxed_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), (path) ? (path) + "." + "name" : "name", transform, "string", [], obj), "age": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age"), (path) ? (path) + "." + "age" : "age", transform, "number", [], obj) }; return res; })(obj, path); });
+const __parse_04c78f82f98a8cf4_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), (path) ? (path) + "." + "name" : "name", transform, "string", [], rawQuery), "age": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age"), (path) ? (path) + "." + "age" : "age", transform, "number", [], rawQuery) }; return res; })(rawQuery, path); });
+const __parse_04c78f82f98a8cf4_relaxed_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), (path) ? (path) + "." + "name" : "name", transform, "string", [], obj), "age": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.age, (path) ? (path) + "." + "age" : "age"), (path) ? (path) + "." + "age" : "age", transform, "number", [], obj) }; for (const k in o) {
     if (!__keys.has(k)) {
         res[k] = o[k];
     }
 } return res; })(obj, path); });
-const __parse_04c78f82f98a8cf4_relaxed_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age") }; for (const k in o) {
+const __parse_04c78f82f98a8cf4_relaxed_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const __keys = new Set(["name", "age"]); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), (path) ? (path) + "." + "name" : "name", transform, "string", [], rawQuery), "age": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.age, (path) ? (path) + "." + "age" : "age"), (path) ? (path) + "." + "age" : "age", transform, "number", [], rawQuery) }; for (const k in o) {
     if (!__keys.has(k)) {
         res[k] = o[k];
     }
 } return res; })(rawQuery, path); });
-const __parse_0b60aa399d818c05_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+const __parse_0b60aa399d818c05_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
 } return (function (v, p) { switch (v && v["type"]) {
-    case "simple": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (v !== "simple") {
+    case "simple": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": __tcRuntime.applyParseTransform((function (v, path) { if (v !== "simple") {
             throw new __tcRuntime.ParseError(path, "Literal<'simple'>");
-        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "val": __tcRuntime.expectString(o.val, (p) ? (p) + "." + "val" : "val") }; return res; })(v, p);
-    case "complex": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (v !== "complex") {
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), (p) ? (p) + "." + "type" : "type", transform, "literal", [], obj), "val": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.val, (p) ? (p) + "." + "val" : "val"), (p) ? (p) + "." + "val" : "val", transform, "string", [], obj) }; return res; })(v, p);
+    case "complex": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": __tcRuntime.applyParseTransform((function (v, path) { if (v !== "complex") {
             throw new __tcRuntime.ParseError(path, "Literal<'complex'>");
-        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "data": (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.expectNumber(o.id, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id"), "tags": (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectString(item, itemP); }); })(o.tags, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "tags" : "tags") }; return res; })(o.data, (p) ? (p) + "." + "data" : "data") }; return res; })(v, p);
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), (p) ? (p) + "." + "type" : "type", transform, "literal", [], obj), "data": (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.id, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id"), ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id", transform, "number", [], obj), "tags": (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.applyParseTransform(__tcRuntime.expectString(item, itemP), itemP, transform, "string", [], obj); }); })(o.tags, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "tags" : "tags") }; return res; })(o.data, (p) ? (p) + "." + "data" : "data") }; return res; })(v, p);
     default: throw new __tcRuntime.ParseError(p, "Type<MyUnion>");
 } })(obj, path); });
-const __parse_0b60aa399d818c05_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (v, p) { switch (v && v["type"]) {
-    case "simple": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (typeof v !== "string") {
+const __parse_0b60aa399d818c05_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (v, p) { switch (v && v["type"]) {
+    case "simple": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": __tcRuntime.applyParseTransform((function (v, path) { if (typeof v !== "string") {
             throw new __tcRuntime.ParseError(path, "Literal<'simple'>");
         } if (v !== "simple") {
             throw new __tcRuntime.ParseError(path, "Literal<'simple'>");
-        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "val": __tcRuntime.expectString(o.val, (p) ? (p) + "." + "val" : "val") }; return res; })(v, p);
-    case "complex": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": (function (v, path) { if (typeof v !== "string") {
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), (p) ? (p) + "." + "type" : "type", transform, "literal", [], rawQuery), "val": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.val, (p) ? (p) + "." + "val" : "val"), (p) ? (p) + "." + "val" : "val", transform, "string", [], rawQuery) }; return res; })(v, p);
+    case "complex": return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "type": __tcRuntime.applyParseTransform((function (v, path) { if (typeof v !== "string") {
             throw new __tcRuntime.ParseError(path, "Literal<'complex'>");
         } if (v !== "complex") {
             throw new __tcRuntime.ParseError(path, "Literal<'complex'>");
-        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), "data": (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.coerceNumber(o.id, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id"), "tags": __tcRuntime.coerceArray(o.tags, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "tags" : "tags", (item, itemP) => __tcRuntime.expectString(item, itemP)) }; return res; })(o.data, (p) ? (p) + "." + "data" : "data") }; return res; })(v, p);
+        } return v; })(o.type, (p) ? (p) + "." + "type" : "type"), (p) ? (p) + "." + "type" : "type", transform, "literal", [], rawQuery), "data": (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.id, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id"), ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "id" : "id", transform, "number", [], rawQuery), "tags": __tcRuntime.coerceArray(o.tags, ((p) ? (p) + "." + "data" : "data") ? ((p) ? (p) + "." + "data" : "data") + "." + "tags" : "tags", (item, itemP) => __tcRuntime.applyParseTransform(__tcRuntime.expectString(item, itemP), itemP, transform, "string", [], rawQuery)) }; return res; })(o.data, (p) ? (p) + "." + "data" : "data") }; return res; })(v, p);
     default: throw new __tcRuntime.ParseError(p, "Type<MyUnion>");
 } })(rawQuery, path); });
-const __parse_857204a536cb022c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.parseUnion(rawQuery, path, "Type<Status>", [(v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "reason": __tcRuntime.expectString(o.reason, (p) ? (p) + "." + "reason" : "reason") }; return res; })(v, p), (v, p) => (function (v, path) { if (typeof v !== "string") {
+const __parse_8c1c1b2d325f9de6_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
+}
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.parseUnion(item, itemP, "Type<string|number>", [(v, p) => __tcRuntime.applyParseTransform(__tcRuntime.expectString(v, p), p, transform, "string", [], obj), (v, p) => __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(v, p), p, transform, "number", [], obj)]); }); })(obj, path); });
+const __parse_8c1c1b2d325f9de6_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return __tcRuntime.coerceArray(rawQuery, path, (item, itemP) => __tcRuntime.parseUnion(item, itemP, "Type<string|number>", [(v, p) => __tcRuntime.applyParseTransform(__tcRuntime.expectString(v, p), p, transform, "string", [], rawQuery), (v, p) => __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(v, p), p, transform, "number", [], rawQuery)])); });
+const __parse_fdba127064c2547c_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
+}
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.id, (path) ? (path) + "." + "id" : "id"), (path) ? (path) + "." + "id" : "id", transform, "number", [], obj), "user": o.user === undefined ? undefined : __tcRuntime.parseUnion(o.user, (path) ? (path) + "." + "user" : "user", "Type<User|undefined>", [(v, p) => (function (v, path) { if (v !== undefined) {
+            throw new __tcRuntime.ParseError(path, "Type<undefined>");
+        } return v; })(v, p), (v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (p) ? (p) + "." + "name" : "name"), (p) ? (p) + "." + "name" : "name", transform, "string", [], obj), "age": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.age, (p) ? (p) + "." + "age" : "age"), (p) ? (p) + "." + "age" : "age", transform, "number", [], obj) }; return res; })(v, p)]), "tags": (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.applyParseTransform(__tcRuntime.expectString(item, itemP), itemP, transform, "string", [], obj); }); })(o.tags, (path) ? (path) + "." + "tags" : "tags") }; return res; })(obj, path); });
+const __parse_fdba127064c2547c_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.id, (path) ? (path) + "." + "id" : "id"), (path) ? (path) + "." + "id" : "id", transform, "number", [], rawQuery), "user": o.user === undefined ? undefined : __tcRuntime.parseUnion(o.user, (path) ? (path) + "." + "user" : "user", "Type<User|undefined>", [(v, p) => (function (v, path) { if (v !== undefined) {
+            throw new __tcRuntime.ParseError(path, "Type<undefined>");
+        } return v; })(v, p), (v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.name, (p) ? (p) + "." + "name" : "name"), (p) ? (p) + "." + "name" : "name", transform, "string", [], rawQuery), "age": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.age, (p) ? (p) + "." + "age" : "age"), (p) ? (p) + "." + "age" : "age", transform, "number", [], rawQuery) }; return res; })(v, p)]), "tags": __tcRuntime.coerceArray(o.tags, (path) ? (path) + "." + "tags" : "tags", (item, itemP) => __tcRuntime.applyParseTransform(__tcRuntime.expectString(item, itemP), itemP, transform, "string", [], rawQuery)) }; return res; })(rawQuery, path); });
+const __parse_f28f8acf7e68cbfd_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
+}
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.a, (path) ? (path) + "." + "a" : "a"), (path) ? (path) + "." + "a" : "a", transform, "string", [], obj), "b": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.b, (path) ? (path) + "." + "b" : "b"), (path) ? (path) + "." + "b" : "b", transform, "number", [], obj) }; return res; })(obj, path); });
+const __parse_f28f8acf7e68cbfd_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.applyParseTransform(__tcRuntime.expectString(o.a, (path) ? (path) + "." + "a" : "a"), (path) ? (path) + "." + "a" : "a", transform, "string", [], rawQuery), "b": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.b, (path) ? (path) + "." + "b" : "b"), (path) ? (path) + "." + "b" : "b", transform, "number", [], rawQuery) }; return res; })(rawQuery, path); });
+const __parse_85a41b63d9a32b8b_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.parseUnion(input, path, "Type<\"active\"|\"inactive\">", [(v, p) => __tcRuntime.applyParseTransform((function (v, path) { if (typeof v !== "string") {
         throw new __tcRuntime.ParseError(path, "Literal<'active'>");
     } if (v !== "active") {
         throw new __tcRuntime.ParseError(path, "Literal<'active'>");
-    } return v; })(v, p), (v, p) => (function (v, path) { if (typeof v !== "string") {
+    } return v; })(v, p), p, transform, "literal", [], input), (v, p) => __tcRuntime.applyParseTransform((function (v, path) { if (typeof v !== "string") {
         throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
     } if (v !== "inactive") {
         throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
-    } return v; })(v, p)]); });
-const __parse_8c1c1b2d325f9de6_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
-}
-else {
-    obj = input;
-} return (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.parseUnion(item, itemP, "Type<string|number>", [(v, p) => __tcRuntime.expectString(v, p), (v, p) => __tcRuntime.expectNumber(v, p)]); }); })(obj, path); });
-const __parse_8c1c1b2d325f9de6_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceArray(rawQuery, path, (item, itemP) => __tcRuntime.parseUnion(item, itemP, "Type<string|number>", [(v, p) => __tcRuntime.expectString(v, p), (v, p) => __tcRuntime.coerceNumber(v, p)])); });
-const __parse_fdba127064c2547c_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
-}
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.expectNumber(o.id, (path) ? (path) + "." + "id" : "id"), "user": o.user === undefined ? undefined : __tcRuntime.parseUnion(o.user, (path) ? (path) + "." + "user" : "user", "Type<User|undefined>", [(v, p) => (function (v, path) { if (v !== undefined) {
-            throw new __tcRuntime.ParseError(path, "Type<undefined>");
-        } return v; })(v, p), (v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (p) ? (p) + "." + "name" : "name"), "age": __tcRuntime.expectNumber(o.age, (p) ? (p) + "." + "age" : "age") }; return res; })(v, p)]), "tags": (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectString(item, itemP); }); })(o.tags, (path) ? (path) + "." + "tags" : "tags") }; return res; })(obj, path); });
-const __parse_fdba127064c2547c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "id": __tcRuntime.coerceNumber(o.id, (path) ? (path) + "." + "id" : "id"), "user": o.user === undefined ? undefined : __tcRuntime.parseUnion(o.user, (path) ? (path) + "." + "user" : "user", "Type<User|undefined>", [(v, p) => (function (v, path) { if (v !== undefined) {
-            throw new __tcRuntime.ParseError(path, "Type<undefined>");
-        } return v; })(v, p), (v, p) => (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (p) ? (p) + "." + "name" : "name"), "age": __tcRuntime.coerceNumber(o.age, (p) ? (p) + "." + "age" : "age") }; return res; })(v, p)]), "tags": __tcRuntime.coerceArray(o.tags, (path) ? (path) + "." + "tags" : "tags", (item, itemP) => __tcRuntime.expectString(item, itemP)) }; return res; })(rawQuery, path); });
-const __parse_f28f8acf7e68cbfd_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
-}
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.expectString(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.expectNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(obj, path); });
-const __parse_f28f8acf7e68cbfd_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.expectString(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.coerceNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(rawQuery, path); });
-const __parse_85a41b63d9a32b8b_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.parseUnion(rawQuery, path, "Type<\"active\"|\"inactive\">", [(v, p) => (function (v, path) { if (typeof v !== "string") {
-        throw new __tcRuntime.ParseError(path, "Literal<'active'>");
-    } if (v !== "active") {
-        throw new __tcRuntime.ParseError(path, "Literal<'active'>");
-    } return v; })(v, p), (v, p) => (function (v, path) { if (typeof v !== "string") {
-        throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
-    } if (v !== "inactive") {
-        throw new __tcRuntime.ParseError(path, "Literal<'inactive'>");
-    } return v; })(v, p)]); });
-const __parse_e5da2f9fabafe20e_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceArray(rawQuery, path, (item, itemP) => __tcRuntime.expectString(item, itemP)); });
-const __parse_12886f9d00055adf_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceNumber(rawQuery, path); });
-const __parse_ced862ef1505bc73_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceBoolean(rawQuery, path); });
-const __parse_99c40ab405926cb5_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceDate(rawQuery, path); });
-const __parse_eefd1c8d7e793bf3_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (v, path) { if (v instanceof RegExp) {
+    } return v; })(v, p), p, transform, "literal", [], input)]); });
+const __parse_12886f9d00055adf_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(input, path), path, transform, "number", [], input); });
+const __parse_ced862ef1505bc73_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.coerceBoolean(input, path); });
+const __parse_99c40ab405926cb5_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.applyParseTransform(__tcRuntime.coerceDate(input, path), path, transform, "Date", [], input); });
+const __parse_eefd1c8d7e793bf3_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.applyParseTransform((function (v, path) { if (v instanceof RegExp) {
     return v;
 } if (typeof v === "string") {
     const match = v.match(/^\/(.*)\/([gimuy]*)$/);
@@ -842,32 +820,22 @@ const __parse_eefd1c8d7e793bf3_strip_query = (function (input, path = "") { cons
         return new RegExp(v.source, typeof v.flags === "string" ? v.flags : "");
     }
     catch (e) { }
-} throw new __tcRuntime.ParseError(path, "Type<RegExp>"); })(rawQuery, path); });
-const __parse_75d012fe28656e0a_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.coerceBigInt(rawQuery, path); });
-const __parse_91d782a2d0de1354_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "name": __tcRuntime.expectString(o.name, (path) ? (path) + "." + "name" : "name"), "active": __tcRuntime.coerceBoolean(o.active, (path) ? (path) + "." + "active" : "active") }; return res; })(rawQuery, path); });
-const __parse_affb28566d707e35_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.parseUnion(rawQuery, path, "Type<string|number>", [(v, p) => __tcRuntime.expectString(v, p), (v, p) => __tcRuntime.coerceNumber(v, p)]); });
-const __parse_9a141e74a6c02429_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (v, path) { if (typeof v !== "string" || !(new RegExp("^id-[0-9]+(\\.[0-9]+)?$")).test(v)) {
+} throw new __tcRuntime.ParseError(path, "Type<RegExp>"); })(input, path), path, transform, "RegExp", [], input); });
+const __parse_75d012fe28656e0a_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.applyParseTransform(__tcRuntime.coerceBigInt(input, path), path, transform, "bigint", [], input); });
+const __parse_affb28566d707e35_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.parseUnion(input, path, "Type<string|number>", [(v, p) => __tcRuntime.applyParseTransform(__tcRuntime.expectString(v, p), p, transform, "string", [], input), (v, p) => __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(v, p), p, transform, "number", [], input)]); });
+const __parse_9a141e74a6c02429_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.applyParseTransform((function (v, path) { if (typeof v !== "string" || !(new RegExp("^id-[0-9]+(\\.[0-9]+)?$")).test(v)) {
     throw new __tcRuntime.ParseError(path, "`id-${number}`");
-} return v; })(rawQuery, path); });
-const __parse_e5fc42b4aba2c6d1_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minLength", "value": 8 }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_a1975336d1e3a054_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minimum", "value": 18 }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_796c4eac83a7a861_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+} return v; })(input, path), path, transform, "string", [], input); });
+const __parse_e5fc42b4aba2c6d1_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "string", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minLength", "value": 8 }], "string"); return __v; })(input, path, input); });
+const __parse_a1975336d1e3a054_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "number", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minimum", "value": 18 }], "string"); return __v; })(input, path, input); });
+const __parse_796c4eac83a7a861_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "val": (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = __tcRuntime.expectNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [], "json"); if (__v !== undefined && __v !== null) {
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "val": (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = __tcRuntime.expectNumber(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "number", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [], "json"); if (__v !== undefined && __v !== null) {
         {
             const _ctx = { success: true, errors: [], mode: "strict", from: "json", root: root };
             __tcRuntime.validators.custom(__v, p, _ctx, isEvenNumber);
@@ -876,7 +844,9 @@ else {
             }
         }
     } return __v; })(o.val, (path) ? (path) + "." + "val" : "val", obj) }; return res; })(obj, path); });
-const __parse_796c4eac83a7a861_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "val": (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [], "query"); if (__v !== undefined && __v !== null) {
+const __parse_796c4eac83a7a861_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "val": (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "number", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [], "query"); if (__v !== undefined && __v !== null) {
         {
             const _ctx = { success: true, errors: [], mode: "strict", from: "query", root: root };
             __tcRuntime.validators.custom(__v, p, _ctx, isEvenNumber);
@@ -885,232 +855,469 @@ const __parse_796c4eac83a7a861_strip_query = (function (input, path = "") { cons
             }
         }
     } return __v; })(o.val, (path) ? (path) + "." + "val" : "val", rawQuery) }; return res; })(rawQuery, path); });
-const __parse_36b3db4fc7b251a9_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "exclusiveMinimum", "value": 10 }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_397edf756fbe38e0_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "exclusiveMaximum", "value": 20 }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_a564a7ce790d29ed_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "multipleOf", "value": 5 }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_871344223c5ce37c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "email" }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_a9030587ebb4386c_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "uuid" }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_a3b8237cd422e3c4_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "date" }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_78d9364193f14947_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+const __parse_36b3db4fc7b251a9_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "number", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "exclusiveMinimum", "value": 10 }], "string"); return __v; })(input, path, input); });
+const __parse_397edf756fbe38e0_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "number", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "exclusiveMaximum", "value": 20 }], "string"); return __v; })(input, path, input); });
+const __parse_a564a7ce790d29ed_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.coerceNumber(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "number", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "multipleOf", "value": 5 }], "string"); return __v; })(input, path, input); });
+const __parse_871344223c5ce37c_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "string", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "email" }], "string"); return __v; })(input, path, input); });
+const __parse_a9030587ebb4386c_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "string", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "uuid" }], "string"); return __v; })(input, path, input); });
+const __parse_a3b8237cd422e3c4_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "string"); __v = __tcRuntime.expectString(__v, p); __v = __tcRuntime.applyParseTransform(__v, p, transform, "string", [], root); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "format", "value": "date" }], "string"); return __v; })(input, path, input); });
+const __parse_78d9364193f14947_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectString(item, itemP); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minItems", "value": 2 }, { "type": "maxItems", "value": 3 }], "json"); return __v; })(obj, path, obj); });
-const __parse_78d9364193f14947_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.expectString(item, itemP)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minItems", "value": 2 }, { "type": "maxItems", "value": 3 }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_e932e0ca2e5a5a04_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.applyParseTransform(__tcRuntime.expectString(item, itemP), itemP, transform, "string", [], obj); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minItems", "value": 2 }, { "type": "maxItems", "value": 3 }], "json"); return __v; })(obj, path, obj); });
+const __parse_78d9364193f14947_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.applyParseTransform(__tcRuntime.expectString(item, itemP), itemP, transform, "string", [], rawQuery)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "minItems", "value": 2 }, { "type": "maxItems", "value": 3 }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_e932e0ca2e5a5a04_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.expectNumber(item, itemP); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "json"); return __v; })(obj, path, obj); });
-const __parse_e932e0ca2e5a5a04_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.coerceNumber(item, itemP)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "query"); return __v; })(rawQuery, path, rawQuery); });
-const __parse_473287f8298dba71_strip_string = (function (input, path = "") { return __tcRuntime.expectString(input, path); });
-const __parse_473287f8298dba71_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return __tcRuntime.expectString(rawQuery, path); });
-const __parse_0b6ca95199f89861_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "json"); __v = (function (arr, p) { __tcRuntime.expectArray(arr, p); return arr.map((item, i) => { const itemP = (p ? p + "[" + i + "]" : "[" + i + "]"); return __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(item, itemP), itemP, transform, "number", [], obj); }); })(__v, p); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "json"); return __v; })(obj, path, obj); });
+const __parse_e932e0ca2e5a5a04_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (raw, p, root) { let __v = __tcRuntime.applyParseConstraints(raw, p, [], "query"); __v = __tcRuntime.coerceArray(__v, p, (item, itemP) => __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(item, itemP), itemP, transform, "number", [], rawQuery)); __v = __tcRuntime.applyParseConstraints(__v, p, [{ "type": "uniqueItems", "value": true }], "query"); return __v; })(rawQuery, path, rawQuery); });
+const __parse_473287f8298dba71_strip_string = (function (raw, options) { const path = ""; const transform = options && options.transform; const input = __tcRuntime.expectString(raw, path); return __tcRuntime.applyParseTransform(__tcRuntime.expectString(input, path), path, transform, "string", [], input); });
+const __parse_0b6ca95199f89861_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.expectNumber(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.expectNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(obj, path); });
-const __parse_0b6ca95199f89861_strip_query = (function (input, path = "") { const rawQuery = (typeof input === "string" ? (/[=%&]/.test(input) ? __tcRuntime.parseQueryString(input) : input) : (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams ? __tcRuntime.parseQueryString(input.toString()) : input)); return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.coerceNumber(o.a, (path) ? (path) + "." + "a" : "a"), "b": __tcRuntime.coerceNumber(o.b, (path) ? (path) + "." + "b" : "b") }; return res; })(rawQuery, path); });
-const __parse_473287f8298dba71_strip_json = (function (input, path = "") { let obj; if (typeof input === "string") {
-    const t = input.trim();
-    if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"") || t === "true" || t === "false" || t === "null" || /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
-        try {
-            obj = JSON.parse(input);
-        }
-        catch (e) {
-            throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
-        }
-    }
-    else {
-        obj = input;
-    }
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.a, (path) ? (path) + "." + "a" : "a"), (path) ? (path) + "." + "a" : "a", transform, "number", [], obj), "b": __tcRuntime.applyParseTransform(__tcRuntime.expectNumber(o.b, (path) ? (path) + "." + "b" : "b"), (path) ? (path) + "." + "b" : "b", transform, "number", [], obj) }; return res; })(obj, path); });
+const __parse_0b6ca95199f89861_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return (function (o, p) { o = __tcRuntime.expectObject(o, p); const res = { "a": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.a, (path) ? (path) + "." + "a" : "a"), (path) ? (path) + "." + "a" : "a", transform, "number", [], rawQuery), "b": __tcRuntime.applyParseTransform(__tcRuntime.coerceNumber(o.b, (path) ? (path) + "." + "b" : "b"), (path) ? (path) + "." + "b" : "b", transform, "number", [], rawQuery) }; return res; })(rawQuery, path); });
+const __parse_473287f8298dba71_strip_json = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let obj; try {
+    obj = JSON.parse(text);
 }
-else {
-    obj = input;
-} return __tcRuntime.expectString(obj, path); });
-const __parse_12886f9d00055adf_strip_string = (function (input, path = "") { return __tcRuntime.coerceNumber(input, path); });
-const __ser_c67915707769fcf5_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+catch (e) {
+    throw new __tcRuntime.ParseError(path, "Invalid JSON: " + e.message);
+} if (reviver) {
+    obj = __tcRuntime.reviveTree(obj, reviver);
+} return __tcRuntime.applyParseTransform(__tcRuntime.expectString(obj, path), path, transform, "string", [], obj); });
+const __parse_473287f8298dba71_strip_query = (function (input, options) { const path = ""; const reviver = options && options.reviver; const transform = options && options.transform; const text = __tcRuntime.expectString(input, path); let rawQuery = __tcRuntime.parseQueryString(text); if (reviver) {
+    rawQuery = __tcRuntime.reviveTree(rawQuery, reviver);
+} return __tcRuntime.applyParseTransform(__tcRuntime.expectString(rawQuery, path), path, transform, "string", [], rawQuery); });
+const __ser_c67915707769fcf5_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("data", "Type<Object>");
-} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "data.name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("data.age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_a068761681a0a813_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "data.name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.name"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "data.age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.age", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_a068761681a0a813_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (val) { switch (val["type"]) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + (function (val) { switch (val["type"]) {
     case "simple": return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
         throw new __tcRuntime.SerializationError("data", "Type<Object>");
-    } let parts = []; parts.push("\"type\":" + (obj.type === "simple" ? "\"simple\"" : (function () { throw new __tcRuntime.SerializationError("data.type", "Literal<'simple'>"); })())); parts.push("\"val\":" + __tcRuntime.serializeString(obj.val, "data.val")); return "{" + parts.join(",") + "}"; })(obj.data);
+    } let parts = []; parts.push("\"type\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.type, "data.type", transform, "literal", [], input); return (__sv === "simple" ? "\"simple\"" : (function () { throw new __tcRuntime.SerializationError("data.type", "Literal<'simple'>"); })()); })()); parts.push("\"val\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.val, "data.val", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.val"); })()); return "{" + parts.join(",") + "}"; })(obj.data);
     case "complex": return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
         throw new __tcRuntime.SerializationError("data", "Type<Object>");
-    } let parts = []; parts.push("\"type\":" + (obj.type === "complex" ? "\"complex\"" : (function () { throw new __tcRuntime.SerializationError("data.type", "Literal<'complex'>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    } let parts = []; parts.push("\"type\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.type, "data.type", transform, "literal", [], input); return (__sv === "complex" ? "\"complex\"" : (function () { throw new __tcRuntime.SerializationError("data.type", "Literal<'complex'>"); })()); })()); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
         throw new __tcRuntime.SerializationError("data.data", "Type<Object>");
-    } let parts = []; parts.push("\"id\":" + (typeof obj.id === "number" && !Number.isNaN(obj.id) ? String(obj.id) : (function () { throw new __tcRuntime.SerializationError("data.data.id", "Type<number>"); })())); parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => __tcRuntime.serializeString(item, "data.data.tags[]"), "data.data.tags")); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(obj.data);
+    } let parts = []; parts.push("\"id\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.id, "data.data.id", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.data.id", "Type<number>"); })()); })()); parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => (function () { const __sv = __tcRuntime.applySerializeTransform(item, "data.data.tags[]", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.data.tags[]"); })(), "data.data.tags")); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(obj.data);
     default: throw new __tcRuntime.SerializationError("data", "Type<MyUnion>");
-} })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_2d6ea820a293bacf_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} })(obj.data)); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_2d6ea820a293bacf_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"s\":" + __tcRuntime.serializeUnion(obj.s, "s", "Type<Status>", [val => (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"s\":" + __tcRuntime.serializeUnion(obj.s, "s", "Type<Status>", [val => (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
         throw new __tcRuntime.SerializationError("s", "Type<Object>");
-    } let parts = []; parts.push("\"reason\":" + __tcRuntime.serializeString(obj.reason, "s.reason")); return "{" + parts.join(",") + "}"; })(val), val => (val === "active" ? "\"active\"" : (function () { throw new __tcRuntime.SerializationError("s", "Literal<'active'>"); })()), val => (val === "inactive" ? "\"inactive\"" : (function () { throw new __tcRuntime.SerializationError("s", "Literal<'inactive'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_a042f9877fc2376a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    } let parts = []; parts.push("\"reason\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.reason, "s.reason", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "s.reason"); })()); return "{" + parts.join(",") + "}"; })(val), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "s", transform, "literal", [], input); return (__sv === "active" ? "\"active\"" : (function () { throw new __tcRuntime.SerializationError("s", "Literal<'active'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "s", transform, "literal", [], input); return (__sv === "inactive" ? "\"inactive\"" : (function () { throw new __tcRuntime.SerializationError("s", "Literal<'inactive'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_a042f9877fc2376a_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + __tcRuntime.serializeArray(obj.data, item => __tcRuntime.serializeUnion(item, "data[]", "Type<string|number>", [val => __tcRuntime.serializeString(val, "data[]"), val => (typeof val === "number" && !Number.isNaN(val) ? String(val) : (function () { throw new __tcRuntime.SerializationError("data[]", "Type<number>"); })())]), "data")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_d0b53ff733685c2c_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + __tcRuntime.serializeArray(obj.data, item => __tcRuntime.serializeUnion(item, "data[]", "Type<string|number>", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "data[]", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data[]"); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "data[]", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data[]", "Type<number>"); })()); })()]), "data")); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_d0b53ff733685c2c_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("data", "Type<Object>");
-} let parts = []; parts.push("\"id\":" + (typeof obj.id === "number" && !Number.isNaN(obj.id) ? String(obj.id) : (function () { throw new __tcRuntime.SerializationError("data.id", "Type<number>"); })())); if (obj.user !== undefined) {
+} let parts = []; parts.push("\"id\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.id, "data.id", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.id", "Type<number>"); })()); })()); if (obj.user !== undefined) {
     parts.push("\"user\":" + __tcRuntime.serializeUnion(obj.user, "data.user", "Type<User|undefined>", [val => (val === undefined ? "null" : (function () { throw new __tcRuntime.SerializationError("data.user", "Type<undefined>"); })()), val => (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
             throw new __tcRuntime.SerializationError("data.user", "Type<Object>");
-        } let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "data.user.name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("data.user.age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(val)]));
-} parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => __tcRuntime.serializeString(item, "data.tags[]"), "data.tags")); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_0d157d33684c0018_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+        } let parts = []; parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "data.user.name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.user.name"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "data.user.age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.user.age", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(val)]));
+} parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => (function () { const __sv = __tcRuntime.applySerializeTransform(item, "data.tags[]", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.tags[]"); })(), "data.tags")); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_0d157d33684c0018_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("data", "Type<Object>");
-} let parts = []; parts.push("\"a\":" + __tcRuntime.serializeString(obj.a, "data.a")); parts.push("\"b\":" + (typeof obj.b === "number" && !Number.isNaN(obj.b) ? String(obj.b) : (function () { throw new __tcRuntime.SerializationError("data.b", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_0084393b0d7248e4_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"a\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.a, "data.a", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.a"); })()); parts.push("\"b\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.b, "data.b", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.b", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_0084393b0d7248e4_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"status\":" + __tcRuntime.serializeUnion(obj.status, "status", "Type<\"active\"|\"inactive\">", [val => (val === "active" ? "\"active\"" : (function () { throw new __tcRuntime.SerializationError("status", "Literal<'active'>"); })()), val => (val === "inactive" ? "\"inactive\"" : (function () { throw new __tcRuntime.SerializationError("status", "Literal<'inactive'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_d9bb28ea073c815e_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"status\":" + __tcRuntime.serializeUnion(obj.status, "status", "Type<\"active\"|\"inactive\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "status", transform, "literal", [], input); return (__sv === "active" ? "\"active\"" : (function () { throw new __tcRuntime.SerializationError("status", "Literal<'active'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "status", transform, "literal", [], input); return (__sv === "inactive" ? "\"inactive\"" : (function () { throw new __tcRuntime.SerializationError("status", "Literal<'inactive'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_d9bb28ea073c815e_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => __tcRuntime.serializeString(item, "tags[]"), "tags")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_0dcd607745c5cb3e_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"tags\":" + __tcRuntime.serializeArray(obj.tags, item => (function () { const __sv = __tcRuntime.applySerializeTransform(item, "tags[]", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "tags[]"); })(), "tags")); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_0dcd607745c5cb3e_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); parts.push("\"active\":" + (typeof obj.active === "boolean" ? (obj.active ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("active", "Type<boolean>"); })())); parts.push("\"date\":" + __tcRuntime.serializeString(obj.date, "date")); parts.push("\"pattern\":" + __tcRuntime.serializeString(obj.pattern, "pattern")); parts.push("\"big\":" + __tcRuntime.serializeString(obj.big, "big")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_4ac5d9e4f4205e53_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })()); })()); parts.push("\"active\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.active, "active", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("active", "Type<boolean>"); })()); })()); parts.push("\"date\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.date, "date", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "date"); })()); parts.push("\"pattern\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.pattern, "pattern", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "pattern"); })()); parts.push("\"big\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.big, "big", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "big"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_4ac5d9e4f4205e53_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"user\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"user\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("user", "Type<Object>");
-} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "user.name")); parts.push("\"active\":" + (typeof obj.active === "boolean" ? (obj.active ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("user.active", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(obj.user)); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_87e266a791052d41_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "user.name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "user.name"); })()); parts.push("\"active\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.active, "user.active", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("user.active", "Type<boolean>"); })()); })()); return "{" + parts.join(",") + "}"; })(obj.user)); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_87e266a791052d41_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"val\":" + __tcRuntime.serializeUnion(obj.val, "val", "Type<string|number>", [val => __tcRuntime.serializeString(val, "val"), val => (typeof val === "number" && !Number.isNaN(val) ? String(val) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })())])); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_6b50e5736cb6bb55_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"val\":" + __tcRuntime.serializeUnion(obj.val, "val", "Type<string|number>", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "val", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "val"); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "val", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })()); })()])); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_6b50e5736cb6bb55_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"id\":" + __tcRuntime.serializeString(obj.id, "id")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_68075fba117f092a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"id\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.id, "id", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "id"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_68075fba117f092a_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"pass\":" + __tcRuntime.serializeString(obj.pass, "pass")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_4a8765d306ac1e9b_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"pass\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.pass, "pass", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "pass"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_4a8765d306ac1e9b_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("data", "Type<Object>");
-} let parts = []; parts.push("\"val\":" + (typeof obj.val === "number" && !Number.isNaN(obj.val) ? String(obj.val) : (function () { throw new __tcRuntime.SerializationError("data.val", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_b237870e8da1ad64_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"val\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.val, "data.val", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.val", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(obj.data)); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_b237870e8da1ad64_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"message\":" + __tcRuntime.serializeString(obj.message, "message")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_fb804057ab9cb051_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"message\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.message, "message", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "message"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_fb804057ab9cb051_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"min\":" + (typeof obj.min === "number" && !Number.isNaN(obj.min) ? String(obj.min) : (function () { throw new __tcRuntime.SerializationError("min", "Type<number>"); })())); parts.push("\"max\":" + (typeof obj.max === "number" && !Number.isNaN(obj.max) ? String(obj.max) : (function () { throw new __tcRuntime.SerializationError("max", "Type<number>"); })())); parts.push("\"mult\":" + (typeof obj.mult === "number" && !Number.isNaN(obj.mult) ? String(obj.mult) : (function () { throw new __tcRuntime.SerializationError("mult", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_a744c47def1902a9_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"min\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.min, "min", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("min", "Type<number>"); })()); })()); parts.push("\"max\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.max, "max", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("max", "Type<number>"); })()); })()); parts.push("\"mult\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.mult, "mult", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("mult", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_a744c47def1902a9_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"email\":" + __tcRuntime.serializeString(obj.email, "email")); parts.push("\"uuid\":" + __tcRuntime.serializeString(obj.uuid, "uuid")); parts.push("\"date\":" + __tcRuntime.serializeString(obj.date, "date")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_78d9364193f14947_strip_json = (function (input) { return __tcRuntime.serializeArray(input, item => __tcRuntime.serializeString(item, "[]"), ""); });
-const __ser_e932e0ca2e5a5a04_strip_json = (function (input) { return __tcRuntime.serializeArray(input, item => (typeof item === "number" && !Number.isNaN(item) ? String(item) : (function () { throw new __tcRuntime.SerializationError("[]", "Type<number>"); })()), ""); });
-const __ser_473287f8298dba71_strip_json = (function (input) { return __tcRuntime.serializeString(input, ""); });
-const __ser_263dff44d887120e_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"email\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.email, "email", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "email"); })()); parts.push("\"uuid\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.uuid, "uuid", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "uuid"); })()); parts.push("\"date\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.date, "date", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "date"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_78d9364193f14947_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = __tcRuntime.serializeArray(input, item => (function () { const __sv = __tcRuntime.applySerializeTransform(item, "[]", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "[]"); })(), ""); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_e932e0ca2e5a5a04_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = __tcRuntime.serializeArray(input, item => (function () { const __sv = __tcRuntime.applySerializeTransform(item, "[]", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("[]", "Type<number>"); })()); })(), ""); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_473287f8298dba71_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function () { const __sv = __tcRuntime.applySerializeTransform(input, "", transform, "string", [], input); return __tcRuntime.serializeString(__sv, ""); })(); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_263dff44d887120e_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"msg\":" + __tcRuntime.serializeString(obj.msg, "msg")); parts.push("\"dbUrl\":" + __tcRuntime.serializeString(obj.dbUrl, "dbUrl")); parts.push("\"logged\":" + __tcRuntime.serializeString(obj.logged, "logged")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_ab68d46bd18d4a0a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"msg\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.msg, "msg", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "msg"); })()); parts.push("\"dbUrl\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.dbUrl, "dbUrl", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "dbUrl"); })()); parts.push("\"logged\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.logged, "logged", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "logged"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_ab68d46bd18d4a0a_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"dbUrl\":" + __tcRuntime.serializeString(obj.dbUrl, "dbUrl")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_e955dd67e417e2f5_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"dbUrl\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.dbUrl, "dbUrl", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "dbUrl"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_e955dd67e417e2f5_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_07a8cc3cc8aea7a1_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_07a8cc3cc8aea7a1_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"val\":" + (typeof obj.val === "number" && !Number.isNaN(obj.val) ? String(obj.val) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_07a8cc3cc8aea7a1_strict_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"val\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.val, "val", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_07a8cc3cc8aea7a1_strict_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; const __keys = new Set(["val"]); parts.push("\"val\":" + (typeof obj.val === "number" && !Number.isNaN(obj.val) ? String(obj.val) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })())); for (const k in obj) {
+} let parts = []; const __keys = new Set(["val"]); parts.push("\"val\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.val, "val", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("val", "Type<number>"); })()); })()); for (const k in obj) {
     if (!__keys.has(k) && obj[k] !== undefined) {
         throw new __tcRuntime.SerializationError("", "PropertyNotAllowed<" + k + ">");
     }
-} return "{" + parts.join(",") + "}"; })(input); });
-const __ser_12886f9d00055adf_strip_json = (function (input) { return (typeof input === "number" && !Number.isNaN(input) ? String(input) : (function () { throw new __tcRuntime.SerializationError("", "Type<number>"); })()); });
-const __ser_04c78f82f98a8cf4_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_12886f9d00055adf_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function () { const __sv = __tcRuntime.applySerializeTransform(input, "", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("", "Type<number>"); })()); })(); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_04c78f82f98a8cf4_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_04c78f82f98a8cf4_strict_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "name"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_04c78f82f98a8cf4_strict_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; const __keys = new Set(["name", "age"]); parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); for (const k in obj) {
+} let parts = []; const __keys = new Set(["name", "age"]); parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "name"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })()); })()); for (const k in obj) {
     if (!__keys.has(k) && obj[k] !== undefined) {
         throw new __tcRuntime.SerializationError("", "PropertyNotAllowed<" + k + ">");
     }
-} return "{" + parts.join(",") + "}"; })(input); });
-const __ser_04c78f82f98a8cf4_relaxed_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_04c78f82f98a8cf4_relaxed_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; const __keys = new Set(["name", "age"]); parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })())); for (const k in obj) {
+} let parts = []; const __keys = new Set(["name", "age"]); parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "name"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("age", "Type<number>"); })()); })()); for (const k in obj) {
     if (!__keys.has(k) && obj[k] !== undefined) {
         parts.push(JSON.stringify(k) + ":" + JSON.stringify(obj[k]));
     }
-} return "{" + parts.join(",") + "}"; })(input); });
-const __ser_d78a5e9e3b797aa6_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_d78a5e9e3b797aa6_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"one\":" + __tcRuntime.serializeUnion(obj.one, "one", "Type<string|null>", [val => (val === null ? "null" : (function () { throw new __tcRuntime.SerializationError("one", "Type<null>"); })()), val => __tcRuntime.serializeString(val, "one")])); parts.push("\"two\":" + __tcRuntime.serializeUnion(obj.two, "two", "Type<string|null>", [val => (val === null ? "null" : (function () { throw new __tcRuntime.SerializationError("two", "Type<null>"); })()), val => __tcRuntime.serializeString(val, "two")])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_3854fe5bb34caec3_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"one\":" + __tcRuntime.serializeUnion(obj.one, "one", "Type<string|null>", [val => (val === null ? "null" : (function () { throw new __tcRuntime.SerializationError("one", "Type<null>"); })()), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "one", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "one"); })()])); parts.push("\"two\":" + __tcRuntime.serializeUnion(obj.two, "two", "Type<string|null>", [val => (val === null ? "null" : (function () { throw new __tcRuntime.SerializationError("two", "Type<null>"); })()), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "two", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "two"); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_3854fe5bb34caec3_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"id\":" + __tcRuntime.serializeString(obj.id, "id")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_10fc726648976d5a_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"id\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.id, "id", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "id"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_10fc726648976d5a_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"secret\":" + (typeof obj.secret === "boolean" ? (obj.secret ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("secret", "Type<boolean>"); })())); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_1cf64ebdd7fe6766_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"secret\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.secret, "secret", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("secret", "Type<boolean>"); })()); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_1cf64ebdd7fe6766_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"id\":" + __tcRuntime.serializeString(obj.id, "id")); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_ad7cc50180a59d88_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"id\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.id, "id", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "id"); })()); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_ad7cc50180a59d88_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"n\":" + (typeof obj.n === "number" && !Number.isNaN(obj.n) ? String(obj.n) : (function () { throw new __tcRuntime.SerializationError("n", "Type<number>"); })())); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_592aa28226ef808b_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"n\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.n, "n", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("n", "Type<number>"); })()); })()); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_592aa28226ef808b_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"token\":" + __tcRuntime.serializeString(obj.token, "token")); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_c73a5cfb4b62c0e6_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"token\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.token, "token", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "token"); })()); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_c73a5cfb4b62c0e6_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"session\":" + __tcRuntime.serializeString(obj.session, "session")); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_f0f7a2626b66a4d9_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"session\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.session, "session", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "session"); })()); parts.push("\"type\":" + __tcRuntime.serializeUnion(obj.type, "type", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'string'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'number'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'bigint'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'boolean'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'symbol'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'undefined'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'object'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "type", transform, "literal", [], input); return (__sv === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("type", "Literal<'function'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_f0f7a2626b66a4d9_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"attachmentId\":" + __tcRuntime.serializeString(obj.attachmentId, "attachmentId")); parts.push("\"token\":" + __tcRuntime.serializeString(obj.token, "token")); parts.push("\"flag\":" + __tcRuntime.serializeString(obj.flag, "flag")); return "{" + parts.join(",") + "}"; })(input); });
-const __ser_4b3ffd86cc4f9e24_strip_json = (function (input) { return (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"attachmentId\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.attachmentId, "attachmentId", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "attachmentId"); })()); parts.push("\"token\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.token, "token", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "token"); })()); parts.push("\"flag\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.flag, "flag", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "flag"); })()); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
+const __ser_4b3ffd86cc4f9e24_strip_json = (function (input, options) { const transform = options && options.transform; const replacer = options && options.replacer; const out = (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("", "Type<Object>");
-} let parts = []; parts.push("\"success\":" + (typeof obj.success === "boolean" ? (obj.success ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })())); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+} let parts = []; parts.push("\"success\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.success, "success", transform, "boolean", [], input); return (typeof __sv === "boolean" ? (__sv ? "true" : "false") : (function () { throw new __tcRuntime.SerializationError("success", "Type<boolean>"); })()); })()); parts.push("\"data\":" + (function (obj) { if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     throw new __tcRuntime.SerializationError("data", "Type<Object>");
-} let parts = []; parts.push("\"name\":" + __tcRuntime.serializeString(obj.name, "data.name")); parts.push("\"age\":" + (typeof obj.age === "number" && !Number.isNaN(obj.age) ? String(obj.age) : (function () { throw new __tcRuntime.SerializationError("data.age", "Type<number>"); })())); return "{" + parts.join(",") + "}"; })(obj.data)); parts.push("\"ageType\":" + __tcRuntime.serializeUnion(obj.ageType, "ageType", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (val === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'string'>"); })()), val => (val === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'number'>"); })()), val => (val === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'bigint'>"); })()), val => (val === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'boolean'>"); })()), val => (val === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'symbol'>"); })()), val => (val === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'undefined'>"); })()), val => (val === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'object'>"); })()), val => (val === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'function'>"); })())])); return "{" + parts.join(",") + "}"; })(input); });
+} let parts = []; parts.push("\"name\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.name, "data.name", transform, "string", [], input); return __tcRuntime.serializeString(__sv, "data.name"); })()); parts.push("\"age\":" + (function () { const __sv = __tcRuntime.applySerializeTransform(obj.age, "data.age", transform, "number", [], input); return (typeof __sv === "number" && !Number.isNaN(__sv) ? String(__sv) : (function () { throw new __tcRuntime.SerializationError("data.age", "Type<number>"); })()); })()); return "{" + parts.join(",") + "}"; })(obj.data)); parts.push("\"ageType\":" + __tcRuntime.serializeUnion(obj.ageType, "ageType", "Type<\"string\"|\"number\"|\"bigint\"|\"boolean\"|\"symbol\"|\"undefined\"|\"object\"|\"function\">", [val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "string" ? "\"string\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'string'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "number" ? "\"number\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'number'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "bigint" ? "\"bigint\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'bigint'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "boolean" ? "\"boolean\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'boolean'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "symbol" ? "\"symbol\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'symbol'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "undefined" ? "\"undefined\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'undefined'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "object" ? "\"object\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'object'>"); })()); })(), val => (function () { const __sv = __tcRuntime.applySerializeTransform(val, "ageType", transform, "literal", [], input); return (__sv === "function" ? "\"function\"" : (function () { throw new __tcRuntime.SerializationError("ageType", "Literal<'function'>"); })()); })()])); return "{" + parts.join(",") + "}"; })(input); if (replacer) {
+    try {
+        return JSON.stringify(JSON.parse(out), replacer);
+    }
+    catch (e) {
+        throw new __tcRuntime.SerializationError("", e && e.message ? e.message : String(e));
+    }
+} return out; });
 import { Controller, Post, Body, Get, Query, Intercept, Security, Inject, Injectable, Protect, Ws, Sse, Param, Header, Cookie, MessagePattern, EventPattern, Payload, Head, Options, All, ResponseMode, Unprotect, Unintercept, Use, OverrideUse, Unuse, Public, Seo, Internal } from '../../src/index.js';
 export const isEvenNumber = (val) => val % 2 === 0;
 export class GlobalErrorSanitizer {
@@ -2519,7 +2726,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "s",
-                    parser: __parse_857204a536cb022c_strip_query,
+                    validator: __val_857204a536cb022c,
                     mode: "strip"
                 }],
             guards: [],
@@ -2597,7 +2804,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "status",
-                    parser: __parse_85a41b63d9a32b8b_strip_query,
+                    parser: __parse_85a41b63d9a32b8b_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -2615,7 +2822,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "tags",
-                    parser: __parse_e5da2f9fabafe20e_strip_query,
+                    validator: __val_e5da2f9fabafe20e,
                     mode: "strip"
                 }],
             guards: [],
@@ -2633,27 +2840,27 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "age",
-                    parser: __parse_12886f9d00055adf_strip_query,
+                    parser: __parse_12886f9d00055adf_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "active",
-                    parser: __parse_ced862ef1505bc73_strip_query,
+                    parser: __parse_ced862ef1505bc73_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "date",
-                    parser: __parse_99c40ab405926cb5_strip_query,
+                    parser: __parse_99c40ab405926cb5_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "pattern",
-                    parser: __parse_eefd1c8d7e793bf3_strip_query,
+                    parser: __parse_eefd1c8d7e793bf3_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "big",
-                    parser: __parse_75d012fe28656e0a_strip_query,
+                    parser: __parse_75d012fe28656e0a_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -2671,7 +2878,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "user",
-                    parser: __parse_91d782a2d0de1354_strip_query,
+                    validator: __val_91d782a2d0de1354,
                     mode: undefined
                 }],
             guards: [],
@@ -2689,7 +2896,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "val",
-                    parser: __parse_affb28566d707e35_strip_query,
+                    parser: __parse_affb28566d707e35_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -2707,7 +2914,7 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "id",
-                    parser: __parse_9a141e74a6c02429_strip_query,
+                    parser: __parse_9a141e74a6c02429_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -2725,12 +2932,12 @@ TypeSafetyController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "pass",
-                    parser: __parse_e5fc42b4aba2c6d1_strip_query,
+                    parser: __parse_e5fc42b4aba2c6d1_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "age",
-                    parser: __parse_a1975336d1e3a054_strip_query,
+                    parser: __parse_a1975336d1e3a054_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -2826,17 +3033,17 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "min",
-                    parser: __parse_36b3db4fc7b251a9_strip_query,
+                    parser: __parse_36b3db4fc7b251a9_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "max",
-                    parser: __parse_397edf756fbe38e0_strip_query,
+                    parser: __parse_397edf756fbe38e0_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "mult",
-                    parser: __parse_a564a7ce790d29ed_strip_query,
+                    parser: __parse_a564a7ce790d29ed_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -2854,17 +3061,17 @@ TagParityController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "email",
-                    parser: __parse_871344223c5ce37c_strip_query,
+                    parser: __parse_871344223c5ce37c_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "uuid",
-                    parser: __parse_a9030587ebb4386c_strip_query,
+                    parser: __parse_a9030587ebb4386c_strip_string,
                     mode: undefined
                 }, {
                     source: "Query",
                     name: "date",
-                    parser: __parse_a3b8237cd422e3c4_strip_query,
+                    parser: __parse_a3b8237cd422e3c4_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -3133,7 +3340,7 @@ RealtimeController[Symbol.for("webergency.server.controller")] = {
                 }, {
                     source: "Query",
                     name: "token",
-                    parser: __parse_473287f8298dba71_strip_query,
+                    parser: __parse_473287f8298dba71_strip_string,
                     mode: undefined
                 }],
             guards: [],
@@ -3361,7 +3568,7 @@ ReturnTypeController[Symbol.for("webergency.server.controller")] = {
             params: [{
                     source: "Query",
                     name: "branch",
-                    parser: __parse_473287f8298dba71_strip_query,
+                    parser: __parse_473287f8298dba71_strip_string,
                     mode: undefined
                 }],
             guards: [],

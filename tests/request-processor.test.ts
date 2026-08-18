@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestProcessor } from '../src/core/request-processor.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
+import { setModuleMeta } from '../src/core/symbols.js';
 import { validators } from '@webergency-utils/typechecker';
 import type { AugmentedRequest, EndpointMetadata, ParamMetadata } from '../src/core/types.js';
 
@@ -305,16 +306,19 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( ctx.from ).toBeUndefined();
     });
 
-    it( 'should clone query bag before validation so req.query stays strings', async () =>
+    it( 'should pass raw query text to an unnamed Query parser', async() =>
     {
-        const req = createRequest({ query : { age : '28' } });
+        const req = createRequest({
+            url   : 'http://localhost/path?age=28',
+            query : { age : '28' }
+        });
         const ctx = { success : true, errors : [], mode : 'strict' };
-        const parser = ( input: any ) =>
+        const parser = vi.fn(( input: unknown ) =>
         {
-            input.age = Number( input.age );
+            expect( input ).toBe( 'age=28' );
 
-            return input;
-        };
+            return { age : 28 };
+        });
 
         const parsed = await RequestProcessor.resolveParam(
             { source : 'Query', parser : parser as any },
@@ -322,8 +326,62 @@ describe( 'RequestProcessor.resolveParam', () =>
             ctx
         );
 
-        expect( parsed.age ).toBe( 28 );
+        expect( parsed ).toEqual({ age : 28 });
         expect( req.query.age ).toBe( '28' );
+        expect( parser ).toHaveBeenCalledWith( 'age=28', 'query' );
+    });
+
+    it( 'should return the query bag for an untyped unnamed Query', async() =>
+    {
+        const req = createRequest({
+            url   : 'http://localhost/buy',
+            query : { src : 'seo' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const resolved = await RequestProcessor.resolveParam({ source : 'Query' }, req, ctx );
+
+        expect( resolved ).toEqual({ src : 'seo' });
+    });
+
+    it( 'should prefer req.queryString over the URL for a typed unnamed Query', async() =>
+    {
+        const req = createRequest({ url : 'http://localhost/buy' });
+        req.queryString = 'src=seo';
+        const ctx = { success : true, errors : [], mode : 'strict' };
+        const parser = vi.fn(( input: unknown ) =>
+        {
+            expect( input ).toBe( 'src=seo' );
+
+            return { src : 'seo' };
+        });
+
+        const parsed = await RequestProcessor.resolveParam(
+            { source : 'Query', parser : parser as any },
+            req,
+            ctx
+        );
+
+        expect( parsed ).toEqual({ src : 'seo' });
+    });
+
+    it( 'should assert a pre-parsed Body _json instead of parsing it as JSON text', async() =>
+    {
+        const parser = vi.fn();
+        const validator = vi.fn(( v: unknown ) => v );
+        const req = createRequest({});
+        ( req as any )._json = 'Ada';
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const resolved = await RequestProcessor.resolveParam(
+            { source : 'Body', parser, validator },
+            req,
+            ctx
+        );
+
+        expect( resolved ).toBe( 'Ada' );
+        expect( parser ).not.toHaveBeenCalled();
+        expect( validator ).toHaveBeenCalled();
     });
 
     it( 'should resolve Request as ServerRequest', async () =>
@@ -383,7 +441,7 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should use parser for JSON Body', async () =>
     {
-        const parser = vi.fn(( v: unknown ) => ({ ...( v as object ), parsed : true }));
+        const parser = vi.fn(( v: unknown ) => ({ ...JSON.parse( v as string ), parsed : true }));
         const parserQuery = vi.fn(() => ({ via : 'query' }));
         const req = createRequest({
             body    : JSON.stringify({ name : 'Ada' }),
@@ -398,8 +456,62 @@ describe( 'RequestProcessor.resolveParam', () =>
         );
 
         expect( result ).toEqual({ name : 'Ada', parsed : true });
-        expect( parser ).toHaveBeenCalled();
+        expect( parser ).toHaveBeenCalledWith( '{"name":"Ada"}', 'body' );
         expect( parserQuery ).not.toHaveBeenCalled();
+    });
+
+    it( 'should pass { reviver } into JSON Body, urlencoded Body, and Query parsers', async () =>
+    {
+        const reviver = ( _key: string, value: any ) => value;
+        const parser = vi.fn(( v: unknown ) => v );
+        const parserQuery = vi.fn(( v: unknown ) => v );
+
+        const jsonReq = createRequest({
+            body    : JSON.stringify({ name : 'Ada' }),
+            headers : { 'Content-Type' : 'application/json' }
+        });
+        jsonReq.reviver = reviver;
+
+        await RequestProcessor.resolveParam(
+            { source : 'Body', parser, parserQuery },
+            jsonReq,
+            { success : true, errors : [], mode : 'strict' }
+        );
+
+        expect( parser ).toHaveBeenCalledWith( '{"name":"Ada"}', { reviver });
+        expect( parserQuery ).not.toHaveBeenCalled();
+
+        parser.mockClear();
+        parserQuery.mockClear();
+
+        const formReq = createRequest({
+            body    : 'age=30',
+            headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+        });
+        formReq.reviver = reviver;
+
+        await RequestProcessor.resolveParam(
+            { source : 'Body', parser, parserQuery },
+            formReq,
+            { success : true, errors : [], mode : 'strict' }
+        );
+
+        expect( parserQuery ).toHaveBeenCalledWith( 'age=30', { reviver });
+        expect( parser ).not.toHaveBeenCalled();
+
+        parser.mockClear();
+
+        const queryReq = createRequest({ url : 'http://localhost/path?age=28' });
+        queryReq.queryString = 'age=28';
+        queryReq.reviver = reviver;
+
+        await RequestProcessor.resolveParam(
+            { source : 'Query', parser },
+            queryReq,
+            { success : true, errors : [], mode : 'strict' }
+        );
+
+        expect( parser ).toHaveBeenCalledWith( 'age=28', { reviver });
     });
 
     it( 'should resolve RawBody as ArrayBuffer without JSON parsing', async () =>
@@ -491,6 +603,87 @@ describe( 'RequestProcessor.resolveParam', () =>
 
         expect( a ).toEqual({});
         expect( b ).toEqual({ a : 'b' });
+    });
+});
+
+describe( 'RequestProcessor.applyReviver', () =>
+{
+    it( 'should overlay Endpoint null over a Server globalReviver', () =>
+    {
+        const req = createRequest({});
+        req.globalReviver = ( _key, value ) => value;
+
+        RequestProcessor.applyReviver( req, createEndpoint({
+            controller : 'C',
+            methodName : 'm',
+            reviver    : null
+        }));
+
+        expect( req.reviver ).toBeUndefined();
+    });
+
+    it( 'should prefer Endpoint then Module then globalReviver', () =>
+    {
+        const endpointFn = ( _key: string, value: any ) => value;
+        const moduleFn = ( _key: string, value: any ) => value;
+        const serverFn = ( _key: string, value: any ) => value;
+        const req = createRequest({});
+        req.globalReviver = serverFn;
+
+        class Host {}
+        const moduleInstance = Object.assign( new Host(), {
+            __moduleMetadata__ : { reviver : moduleFn }
+        });
+
+        RequestProcessor.applyReviver(
+            req,
+            createEndpoint({ controller : 'C', methodName : 'm' }),
+            moduleInstance
+        );
+
+        expect( req.reviver ).toBe( moduleFn );
+
+        RequestProcessor.applyReviver(
+            req,
+            createEndpoint({ controller : 'C', methodName : 'm', reviver : endpointFn }),
+            moduleInstance
+        );
+
+        expect( req.reviver ).toBe( endpointFn );
+    });
+
+    it( 'should read Module.reviver from a registry module bag via moduleClass', () =>
+    {
+        const moduleFn = ( _key: string, value: any ) => value;
+        const req = createRequest({});
+
+        class AppMod {}
+        setModuleMeta( AppMod, { reviver : moduleFn } as any );
+
+        RequestProcessor.applyReviver(
+            req,
+            createEndpoint({ controller : 'C', methodName : 'm' }),
+            { moduleClass : AppMod }
+        );
+
+        expect( req.reviver ).toBe( moduleFn );
+    });
+
+    it( 'should read Module.reviver from the constructor metadata bag', () =>
+    {
+        const moduleFn = ( _key: string, value: any ) => value;
+        const req = createRequest({});
+
+        class Host {}
+        ( Host as any ).__moduleMetadata__ = { reviver : moduleFn };
+
+        RequestProcessor.applyReviver(
+            req,
+            createEndpoint({ controller : 'C', methodName : 'm' }),
+            new Host()
+        );
+
+        expect( req.reviver ).toBe( moduleFn );
     });
 });
 

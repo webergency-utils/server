@@ -144,7 +144,7 @@ describe( 'Actual AOT Integration Test', () =>
         expect( data.data ).toEqual({ a : 'val', b : 123 });
     });
 
-    it( 'should handle array query parameters with new QueryParser', async () => 
+    it( 'should handle array query parameters', async () => 
     {
         const res1 = await server.fetch( new Request( 'http://localhost/type-safety/array-query?tags=a&tags=b' ));
         expect( res1.status ).toBe( 200 );
@@ -1214,6 +1214,7 @@ describe( 'Actual AOT Integration Test', () =>
             expect( compiled ).toMatch( /source:\s*"Header"[\s\S]{0,160}?parser:\s*__parse_[0-9a-f]+_strip_string/ );
             expect( compiled ).toMatch( /source:\s*"Cookie"[\s\S]{0,160}?parser:\s*__parse_[0-9a-f]+_strip_string/ );
             expect( compiled ).toMatch( /parserQuery:\s*__parse_[0-9a-f]+_strip_query/ );
+            expect( compiled ).toMatch( /source:\s*"Query"[\s\S]{0,160}?parser:\s*__parse_[0-9a-f]+_strip_string/ );
 
             const fn = compiled.match( new RegExp( `const ${stringParser} = ([\\s\\S]*?);\\n` ))?.[1];
             expect( fn ).toBeTruthy();

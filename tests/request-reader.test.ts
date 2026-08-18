@@ -434,7 +434,41 @@ describe( 'RequestReader.getBody', () =>
         expect( first ).toBe( second );
     });
 
-    it( 'should parse urlencoded bodies via QueryParser', async () =>
+    it( 'should apply reviver when parsing JSON and sniffed JSON', async () =>
+    {
+        const reviver = ( _key: string, value: any ) => value === 'x' ? 'y' : value;
+
+        const typed = createRequest({
+            body    : JSON.stringify({ v : 'x' }),
+            headers : { 'Content-Type' : 'application/json' }
+        });
+        typed.reviver = reviver;
+
+        const sniffed = createRequest({ body : JSON.stringify({ v : 'x' }) });
+        sniffed.reviver = reviver;
+
+        expect( await RequestReader.getBody( typed ) ).toEqual({ v : 'y' });
+        expect( await RequestReader.getBody( sniffed ) ).toEqual({ v : 'y' });
+    });
+
+    it( 'should apply reviver to urlencoded and sniffed urlencoded bodies', async () =>
+    {
+        const reviver = ( _key: string, value: any ) => value === 'x' ? 'y' : value;
+
+        const typed = createRequest({
+            body    : 'v=x',
+            headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+        });
+        typed.reviver = reviver;
+
+        const sniffed = createRequest({ body : 'v=x' });
+        sniffed.reviver = reviver;
+
+        expect( await RequestReader.getBody( typed ) ).toEqual({ v : 'y' });
+        expect( await RequestReader.getBody( sniffed ) ).toEqual({ v : 'y' });
+    });
+
+    it( 'should parse urlencoded bodies via parseQueryString', async () =>
     {
         // Arrange
         const req = createRequest({
@@ -449,7 +483,7 @@ describe( 'RequestReader.getBody', () =>
         expect( body ).toEqual({ age : '25', tags : ['a', 'b'] });
     });
 
-    it( 'tryGetUrlEncodedText returns wire text without QueryParser', async () =>
+    it( 'tryGetUrlEncodedText returns wire text without parseQueryString', async () =>
     {
         const req = createRequest({
             body    : 'age=30&token=jpUllytbmQ=',
@@ -492,6 +526,37 @@ describe( 'RequestReader.getBody', () =>
     {
         expect( await RequestReader.tryGetUrlEncodedText( createRequest({ body : '' }))).toBeUndefined();
         expect( await RequestReader.tryGetUrlEncodedText( createRequest({ body : 'not-form' }))).toBeUndefined();
+    });
+
+    it( 'tryGetJsonText returns wire text without JSON.parse', async() =>
+    {
+        const req = createRequest({
+            body    : '{"name":"Ada"}',
+            headers : { 'Content-Type' : 'application/json' }
+        });
+
+        const text = await RequestReader.tryGetJsonText( req );
+
+        expect( text ).toBe( '{"name":"Ada"}' );
+        expect( '_json' in req ).toBe( false );
+    });
+
+    it( 'tryGetJsonText returns undefined for urlencoded bodies', async() =>
+    {
+        const req = createRequest({
+            body    : 'age=30',
+            headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
+        });
+
+        expect( await RequestReader.tryGetJsonText( req )).toBeUndefined();
+    });
+
+    it( 'tryGetJsonText sniffs JSON when Content-Type is missing', async() =>
+    {
+        const req = createRequest({ body : '{"a":1}' });
+
+        expect( await RequestReader.tryGetJsonText( req )).toBe( '{"a":1}' );
+        expect( req._bodyContentType ).toBe( 'application/json' );
     });
 
     it( 'should treat urlencoded content-type with charset as form data', async () =>

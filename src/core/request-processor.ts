@@ -7,22 +7,45 @@ import { ServerRequest, parseCookieHeader, resolveRequestFileOptions } from './s
 import { SecurityOptions, type FileOptions } from '../decorators.js';
 import { getModuleMeta } from './symbols.js';
 import { httpStatusFromError } from '../errors.js';
+import { clientErrorBody } from '../helpers/error-response.js';
 import { resolveClientIp } from '../helpers/client-ip.js';
 import { invokeGuards } from './guard-runner.js';
 import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
 import { isBinaryOrStreamBody, toStreamOrBinaryBody } from '../helpers/response-body.js';
-import { QueryParser } from '../helpers/parsers.js';
+import { queryStringFromUrl } from '../helpers/query-string.js';
+import { resolveReviver, parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js';
 
-function resolveModuleFileOptions( moduleInstance: any ): FileOptions | undefined
+function parseErrorPath( sourcePath: string, inner: string ): string
+{
+    if( !inner ){ return sourcePath }
+
+    if( inner === sourcePath || inner.startsWith( `${sourcePath}.` ) || inner.startsWith( `${sourcePath}[` ))
+    {
+        return inner;
+    }
+
+    return `${sourcePath}.${inner}`;
+}
+
+function moduleMetaOf( moduleInstance: any ): any
 {
     if( !moduleInstance ){ return undefined }
 
-    const ctor = moduleInstance.constructor;
-    const meta = ( ctor && getModuleMeta( ctor ))
+    const ctor = moduleInstance.moduleClass || moduleInstance.constructor;
+
+    return ( ctor && getModuleMeta( ctor ))
         || moduleInstance.__moduleMetadata__
         || ctor?.__moduleMetadata__;
+}
 
-    return meta?.files;
+function resolveModuleFileOptions( moduleInstance: any ): FileOptions | undefined
+{
+    return moduleMetaOf( moduleInstance )?.files;
+}
+
+function resolveModuleReviver( moduleInstance: any ): Reviver | null | undefined
+{
+    return moduleMetaOf( moduleInstance )?.reviver;
 }
 
 function parseErrorCode( err: ParseError ): string
@@ -51,6 +74,19 @@ function serializationErrorCode( err: SerializationError ): string
 
 export class RequestProcessor 
 {
+    public static applyReviver(
+        req            : AugmentedRequest,
+        metadata       : EndpointMetadata,
+        moduleInstance?: any
+    )
+    {
+        req.reviver = resolveReviver(
+            metadata.reviver,
+            resolveModuleReviver( moduleInstance ),
+            req.globalReviver
+        );
+    }
+
     private static throwIfAborted( req: AugmentedRequest )
     {
         if( req.abortSignal?.aborted )
@@ -173,21 +209,32 @@ export class RequestProcessor
                     // Validated below via assert-style validator with from: 'query'.
                     val = payload.toObject();
                 }
-                else if( p.parserQuery )
+                else if( p.parserQuery || p.parser )
                 {
-                    // Typed urlencoded: raw text → one parse(text, { from: 'query' }).
-                    // With forwardBody, structurally parse once, merge, then coerce/validate.
-                    const text = await RequestReader.tryGetUrlEncodedText( req, securityConfig );
+                    // Typed urlencoded / JSON: raw text → one parse(text).
+                    // With forwardBody, structurally parse once, merge, then assert (not parse).
+                    const urlenc = await RequestReader.tryGetUrlEncodedText( req, securityConfig );
 
-                    if( text !== undefined )
+                    if( urlenc !== undefined )
                     {
                         val = req.forwardBody
-                            ? { ...QueryParser.parse( text ), ...req.forwardBody }
-                            : text;
+                            ? { ...parseAnyQuery( urlenc, req.reviver ), ...req.forwardBody }
+                            : urlenc;
                     }
                     else
                     {
-                        val = await RequestReader.getBody( req, securityConfig );
+                        const jsonText = await RequestReader.tryGetJsonText( req, securityConfig );
+
+                        if( jsonText !== undefined )
+                        {
+                            val = req.forwardBody
+                                ? { ...parseAnyJson( jsonText, req.reviver ), ...req.forwardBody }
+                                : jsonText;
+                        }
+                        else
+                        {
+                            val = await RequestReader.getBody( req, securityConfig );
+                        }
                     }
                 }
                 else
@@ -209,7 +256,22 @@ export class RequestProcessor
                 break;
             }
             case 'RawBody': val = await RequestReader.getRawBody( req, securityConfig ); break;
-            case 'Query': val = p.name ? req.query[p.name] : { ...req.query }; break;
+            case 'Query': {
+                if( p.name )
+                {
+                    val = req.query[p.name];
+                }
+                else if( p.parser || p.parserQuery )
+                {
+                    val = req.queryString ?? queryStringFromUrl( req.url );
+                }
+                else
+                {
+                    val = req.query;
+                }
+
+                break;
+            }
             case 'Header': val = req.headers.get( p.name! ); break;
             case 'Headers': val = Object.fromEntries( req.headers.entries()); break;
             case 'Request': val = serverRequest ?? new ServerRequest( req, securityConfig ); break;
@@ -256,9 +318,15 @@ export class RequestProcessor
         const bodyIsMultipart = p.source === 'Body' && isMultipartContentType( bodyContentType );
         const bodyIsUrlencoded = p.source === 'Body' && bodyContentType === 'application/x-www-form-urlencoded';
 
-        // Multipart uses the assert/validator channel (from: 'query'), not buildParser —
-        // parsers lack class instanceof for UploadedFile fields.
-        if( !bodyIsMultipart && ( p.parser || p.parserQuery ))
+        // parse() is wire text only. Objects (multipart, forward merge, header/cookie maps)
+        // and already-structured RPC `_json` stay on the assert/validator channel.
+        const bodyIsPreparsed = p.source === 'Body' && ( '_json' in req );
+        const canParse = !bodyIsMultipart
+            && !bodyIsPreparsed
+            && ( p.parser || p.parserQuery )
+            && ( typeof val === 'string' || ( p.source !== 'Body' && ( val === undefined || val === null )));
+
+        if( canParse )
         {
             let parserFn: (( input: any, path?: string ) => any ) | undefined;
 
@@ -276,10 +344,13 @@ export class RequestProcessor
             {
                 try
                 {
-                    val = parserFn( val, p.name || p.source.toLowerCase());
+                    const parseArg = req.reviver
+                        ? { reviver : req.reviver }
+                        : ( p.name || p.source.toLowerCase() );
+                    val = parserFn( val, parseArg as any );
 
-                    // Cache validated urlencoded body so a later getBody does not re-parse.
-                    if( bodyIsUrlencoded && !( '_json' in req ))
+                    // Cache validated body so a later getBody does not re-parse.
+                    if( p.source === 'Body' && !( '_json' in req ))
                     {
                         req._json = val;
                     }
@@ -289,7 +360,10 @@ export class RequestProcessor
                     if( e instanceof ParseError )
                     {
                         ctx.success = false;
-                        ctx.errors.push({ path : e.path, error : parseErrorCode( e ) });
+                        ctx.errors.push({
+                            path  : parseErrorPath( p.name || p.source.toLowerCase(), e.path ),
+                            error : parseErrorCode( e )
+                        });
 
                         return val;
                     }
@@ -347,6 +421,8 @@ export class RequestProcessor
             const controller = await MetadataStore.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
+
+            this.applyReviver( req, metadata, controllerModule );
 
             const ctx = { success : true, errors : [], mode : 'strict' };
             const middlewareResponse = new ServerResponse();
@@ -642,7 +718,7 @@ export class RequestProcessor
                 }
                 const status = httpStatusFromError( err );
 
-                const response = new Response( JSON.stringify( err.data || { success : false, error : err.message }), { 
+                const response = new Response( JSON.stringify( clientErrorBody( err, status ) ), { 
                     status, 
                     headers : { 'Content-Type' : 'application/json' } 
                 });
@@ -694,6 +770,8 @@ export class RequestProcessor
             const controller = await MetadataStore.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
+
+            this.applyReviver( req, metadata, controllerModule );
 
             const ctx = { success : true, errors : [], mode : 'strict' };
 

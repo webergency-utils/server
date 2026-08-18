@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { Router, RouteMatch } from './core/router.js';
-import { QueryParser } from './helpers/parsers.js';
+import { parseQueryString } from '@webergency-utils/typechecker/runtime';
+import { joinQueryStrings, queryStringFromBag, queryStringFromUrl } from './helpers/query-string.js';
 import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/registry.js';
 import { bootstrapRegistry } from './core/bootstrap.js';
 import { EndpointMetadata, AugmentedRequest, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
-import { CorsOptions, SecurityOptions, type FileOptions } from './decorators.js';
+import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
 import { handleCors, isPreflight } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
 
@@ -20,6 +21,7 @@ import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
 import { RequestReader, getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
 import { httpStatusFromError } from './errors.js';
+import { clientErrorBody, errorLogFields } from './helpers/error-response.js';
 import { resolveClientIp } from './helpers/client-ip.js';
 import { resolveRequestId, REQUEST_ID_HEADER } from './helpers/request-id.js';
 
@@ -95,6 +97,8 @@ export interface ServerOptions {
      * - string[]: CIDR allowlist of immediate peers (e.g. `['10.0.0.0/8', '172.16.0.0/12']`)
      */
     trustProxy?       : string[]
+    /** Passed to typechecker `parse` for JSON and query, and to untyped JSON / urlencoded bodies. Hierarchical with Module / `@Reviver`. `null` opts out. */
+    reviver?          : Reviver | null
 }
 
 export type ServerEvents = {
@@ -149,6 +153,11 @@ export class Server extends EventEmitter
     public async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
     {
         const sec = securityConfig || ( typeof this.options.security === 'object' ? this.options.security : undefined );
+
+        if( req.reviver === undefined )
+        {
+            req.reviver = this.options.reviver ?? undefined;
+        }
 
         return RequestReader.getBody( req, sec );
     }
@@ -486,10 +495,11 @@ export class Server extends EventEmitter
         return [ ...allowed ];
     }
 
-    private applyMatchBags( req: AugmentedRequest, match: RouteMatch, url: URL ): void
+    private applyMatchBags( req: AugmentedRequest, match: RouteMatch ): void
     {
         req.params = match.params;
-        req.query = QueryParser.parse( url.search.startsWith( '?' ) ? url.search.slice( 1 ) : url.search );
+        req.queryString = queryStringFromUrl( req.url );
+        req.query = parseQueryString( req.queryString );
         req.globalCors = this.options.cors;
         req.cors = match.metadata.cors;
         req.globalSecurity = this.options.security;
@@ -497,6 +507,7 @@ export class Server extends EventEmitter
         req.globalFiles = this.options.files;
         req.files = match.metadata.files;
         req.meta = match.metadata.meta;
+        req.globalReviver = this.options.reviver;
     }
 
     private async runEndpoint(
@@ -610,6 +621,15 @@ export class Server extends EventEmitter
 
         req.params = match.params;
         req.query = { ...req.query, ...( target.query || {}) };
+
+        if( target.query )
+        {
+            req.queryString = joinQueryStrings(
+                req.queryString ?? queryStringFromUrl( req.url ),
+                queryStringFromBag( target.query as Record<string, unknown> )
+            );
+        }
+
         req.cors = match.metadata.cors;
         req.security = match.metadata.security;
         req.files = match.metadata.files;
@@ -943,7 +963,10 @@ export class Server extends EventEmitter
                 // Run Guards
                 const req = request as AugmentedRequest;
                 req.params = finalMatch.params;
-                req.query = QueryParser.parse( url.search.startsWith( '?' ) ? url.search.slice( 1 ) : url.search );
+                req.queryString = queryStringFromUrl( req.url );
+                req.query = parseQueryString( req.queryString );
+                req.globalReviver = this.options.reviver;
+                RequestProcessor.applyReviver( req, finalMatch.metadata, controllerModule );
                 const ctx = { success : true, errors : [], mode : 'strict' };
 
                 // The socket does not exist until after the upgrade, so @ConnectedSocket is null.
@@ -1021,7 +1044,7 @@ export class Server extends EventEmitter
             // Try SEO matches in specificity order; void → next; forward → internal hop.
             for( const seoMatch of seoMatches )
             {
-                this.applyMatchBags( req, seoMatch, url );
+                this.applyMatchBags( req, seoMatch );
                 activeSecurity = mergeSecurityConfigs([ this.options.security, seoMatch.metadata.security ]);
                 activeCors = seoMatch.metadata.cors !== undefined ? seoMatch.metadata.cors : this.options.cors;
                 enforceSecurityGates( activeSecurity );
@@ -1079,7 +1102,7 @@ export class Server extends EventEmitter
                     return withRequestId( res );
                 }
 
-                this.applyMatchBags( req, pubMatch, url );
+                this.applyMatchBags( req, pubMatch );
                 activeSecurity = mergeSecurityConfigs([ this.options.security, pubMatch.metadata.security ]);
                 activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
                 enforceSecurityGates( activeSecurity );
@@ -1133,7 +1156,7 @@ export class Server extends EventEmitter
             {
                 this.logger.error( `Server Error: ${err.message}`, {
                     type  : 'error',
-                    error : err,
+                    error : errorLogFields( err ),
                     requestId
                 });
             }
@@ -1166,7 +1189,7 @@ export class Server extends EventEmitter
                 }
             }
 
-            let res = new Response( JSON.stringify( err.data || { success : false, error : err.message }), {
+            let res = new Response( JSON.stringify( clientErrorBody( err, statusCode ) ), {
                 status  : statusCode,
                 headers : errHeaders
             });

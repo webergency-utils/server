@@ -1,8 +1,11 @@
+import { parseQueryString } from '@webergency-utils/typechecker/runtime';
+import { queryStringFromUrl } from '../helpers/query-string.js';
+
 /**
- * Query string of an upgrade request, flattened the same way in every adapter so a
- * `@Query` parameter on a `@Ws` handler behaves identically across runtimes.
+ * Query bag of an upgrade request, parsed from the raw URL search (not
+ * `URLSearchParams`) so `@Query` on a `@Ws` handler matches HTTP query parse.
  */
-export function upgradeQuery( request: Request ): Record<string, string>
+export function upgradeQuery( request: Request ): Record<string, any>
 {
-    return Object.fromEntries( new URL( request.url ).searchParams.entries());
+    return parseQueryString( queryStringFromUrl( request.url ) );
 }

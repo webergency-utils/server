@@ -130,7 +130,8 @@ module.exports.fuzz = function( data )
     {
         const provider = new FuzzedDataProvider( data );
         const {
-            QueryParser,
+            parseQueryString,
+            createFormBag,
             parseSize,
             mergeSecurityConfigs,
             generateSecurityHeaders,
@@ -143,8 +144,9 @@ module.exports.fuzz = function( data )
         } = runtime;
 
         const qs = fuzzQueryString( provider );
-        QueryParser.parse( qs );
-        QueryParser.parse( provider.consumeString( 64 ));
+        parseQueryString( qs );
+        parseQueryString( provider.consumeString( 64 ));
+        createFormBag().assign( provider.consumeString( 24 ), provider.consumeString( 24 ));
 
         const sizeInput = provider.pickValue([
             provider.consumeNumber(),

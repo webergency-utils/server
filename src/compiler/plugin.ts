@@ -304,6 +304,11 @@ function metadataAppends( registry: ProjectRegistry, fileName: string, fileEndpo
             props.push( ts.factory.createPropertyAssignment( 'files', objectToExpression( info.files )));
         }
 
+        if( info.reviver !== undefined )
+        {
+            props.push( ts.factory.createPropertyAssignment( 'reviver', objectToExpression( info.reviver )));
+        }
+
         appends.push( symbolAssign( name, 'webergency.server.module', ts.factory.createObjectLiteralExpression( props, true )));
     }
 

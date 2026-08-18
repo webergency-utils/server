@@ -51,6 +51,7 @@ export {
     Key,
     Keys
 } from './helpers/match.js';
+export { clientErrorBody, errorLogFields, redactSecrets, REDACTED, SECRET_KEYS } from './helpers/error-response.js';
 export {
     resolveClientIp,
     normalizeIp,

@@ -15,7 +15,7 @@ ADR 0006 placed uploads on `ServerRequest.formData()` / `file()`, which buffers 
 3. **Dual `@File` surface:**
    - Class/method: `@File({ dest, maxFileSize, fields, onFile, storage })` and `@File('field', fieldOpts)`
    - Parameter: `@File('field')` → `UploadedFile`; `@Files()` → `UploadedFile[]`
-4. **`@Body()` + multipart:** when Content-Type is `multipart/form-data`, server builds a query-shaped bag (`MultipartPayload.toObject()`): bracket names unflattened like urlencoded `QueryParser` (`profile[name]`, `docs[]`), values are strings + `UploadedFile` / `UploadedFile[]`. Then AOT **validator** with `from: 'query'`. JSON still uses `parser` (`from: 'json'`); urlencoded uses `parserQuery`.
+4. **`@Body()` + multipart:** when Content-Type is `multipart/form-data`, server builds a query-shaped bag (`MultipartPayload.toObject()`): bracket names unflattened like urlencoded `parseQueryString` (`profile[name]`, `docs[]`), values are strings + `UploadedFile` / `UploadedFile[]`. Then AOT **validator** with `from: 'query'`. JSON still uses `parser` (`from: 'json'`); urlencoded uses `parserQuery`.
 5. **Storage DX:** `dest` / `filename` → disk during parse; `storage: 'memory'` (default without dest); `onFile` / `storage: 'manual'` for custom sinks (S3, etc.).
 6. **`ServerRequest`:** keep buffered `formData()` / `file()`; add `multipart()` / `upload()` / `uploads()` / `payload()` for the streaming path.
 

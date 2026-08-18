@@ -30,6 +30,7 @@ export type ModuleAotMeta =
     interceptors? : any[]
     exports?      : any[]
     files?        : any
+    reviver?      : any
 };
 
 export type InjectableAotMeta =

@@ -3,6 +3,7 @@
  */
 import { MiddlewareClass } from './core/types.js';
 import type { FileOptions, FileFieldOptions } from './helpers/file-upload.js';
+import type { Reviver } from './helpers/reviver.js';
 
 export type { FileOptions, FileFieldOptions, FileHandler } from './helpers/file-upload.js';
 export { UploadedFile } from './helpers/file-upload.js';
@@ -287,6 +288,17 @@ export interface CorsOptions {
 
 export function Cors( config?: CorsOptions | string ): any { return () => {} }
 
+/**
+ * JSON.parse-style reviver applied to typed JSON and query parse, and to untyped JSON / urlencoded bodies.
+ * Hierarchical: ServerOptions.reviver → Module.reviver → `@Reviver` on Controller → `@Reviver` on Endpoint.
+ * `null` at a layer opts out of every parent.
+ */
+export type { Reviver } from './helpers/reviver.js';
+export function Reviver( reviver: Reviver | null ): ClassDecorator & MethodDecorator
+{
+    return () => {};
+}
+
 export type ReferrerPolicyValue =
     | 'no-referrer'
     | 'no-referrer-when-downgrade'
@@ -383,6 +395,8 @@ export interface ModuleMetadata {
     exports?     : any[]
     /** Default multipart / upload handling for controllers in this module. */
     files?       : FileOptions
+    /** Default JSON / query reviver; Endpoint `@Reviver` / `null` overrides. */
+    reviver?     : Reviver | null
 }
 
 export function Module( metadata: ModuleMetadata ): ClassDecorator 

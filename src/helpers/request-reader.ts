@@ -1,8 +1,8 @@
 import { AugmentedRequest } from '../core/types.js';
 import { SecurityOptions } from '../decorators.js';
 import { parseSize } from './security.js';
-import { QueryParser } from './parsers.js';
 import { parseHeaderValueParameter } from './http-header-parse.js';
+import { parseAnyJson, parseAnyQuery, reviveAny } from './reviver.js';
 
 const UTF8_DECODER = new TextDecoder( 'utf-8' );
 
@@ -116,33 +116,30 @@ function looksLikeUrlEncoded( text: string ): boolean
     return /[=&]/.test( text );
 }
 
-function parseJsonBody( text: string ): any
-{
-    try
-    {
-        return JSON.parse( text );
-    }
-    catch
-    {
-        throw Object.assign( new Error( 'Invalid JSON body' ), { status : 400 });
-    }
-}
-
 /** When Content-Type is absent: try JSON, then urlencoded if the text looks like a form body. */
-function sniffBody( text: string ): { value: any; contentType: 'application/json' | 'application/x-www-form-urlencoded' }
+function sniffBody( text: string, reviver?: ( key: string, value: any ) => any ): { value: any; contentType: 'application/json' | 'application/x-www-form-urlencoded' }
 {
+    let jsonValue: any;
+    let isJson = false;
+
     try
     {
-        return { value : JSON.parse( text ), contentType : 'application/json' };
+        jsonValue = JSON.parse( text );
+        isJson = true;
     }
     catch
     {
         // fall through
     }
 
+    if( isJson )
+    {
+        return { value : reviveAny( jsonValue, reviver ), contentType : 'application/json' };
+    }
+
     if( looksLikeUrlEncoded( text ))
     {
-        return { value : QueryParser.parse( text ), contentType : 'application/x-www-form-urlencoded' };
+        return { value : parseAnyQuery( text, reviver ), contentType : 'application/x-www-form-urlencoded' };
     }
 
     throw Object.assign( new Error( 'Unable to parse body without Content-Type' ), { status : 400 });
@@ -254,7 +251,7 @@ export class RequestReader
 {
     /**
      * When the body is (or sniffs as) urlencoded, return decoded wire text without
-     * `QueryParser` — for a single `parse(text, { from: 'query' })` pass.
+     * `parseQueryString` — for a single `parse(text, { from: 'query' })` pass.
      * Sets `req._bodyContentType` when sniffing. Returns `undefined` when not urlencoded
      * (caller should use {@link getBody}).
      */
@@ -309,6 +306,51 @@ export class RequestReader
         return undefined;
     }
 
+    /**
+     * When the body is (or sniffs as) JSON, return decoded wire text without
+     * `JSON.parse` — for a single `parse(text, { from: 'json' })` pass.
+     * Sets `req._bodyContentType` when sniffing. Returns `undefined` when not JSON.
+     */
+    public static async tryGetJsonText(
+        req            : AugmentedRequest,
+        securityConfig?: SecurityOptions
+    ): Promise<string | undefined>
+    {
+        if( '_json' in req )
+        {
+            return undefined;
+        }
+
+        const declared = getContentType( req );
+        const raw = await this.getRawBody( req, securityConfig );
+
+        if( !raw.byteLength ){ return undefined }
+
+        const text = decodeBodyText( raw );
+
+        if( isJsonContentType( declared ))
+        {
+            return text;
+        }
+
+        if( declared )
+        {
+            return undefined;
+        }
+
+        try
+        {
+            JSON.parse( text );
+            req._bodyContentType = 'application/json';
+
+            return text;
+        }
+        catch
+        {
+            return undefined;
+        }
+    }
+
     public static async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
     {
         if( '_json' in req ) { return req._json }
@@ -329,7 +371,7 @@ export class RequestReader
 
         if( !contentType )
         {
-            const sniffed = sniffBody( text );
+            const sniffed = sniffBody( text, req.reviver );
             req._bodyContentType = sniffed.contentType;
 
             return req._json = sniffed.value;
@@ -337,12 +379,12 @@ export class RequestReader
 
         if( contentType === 'application/x-www-form-urlencoded' )
         {
-            return req._json = QueryParser.parse( text );
+            return req._json = parseAnyQuery( text, req.reviver );
         }
 
         if( isJsonContentType( contentType ))
         {
-            return req._json = parseJsonBody( text );
+            return req._json = parseAnyJson( text, req.reviver );
         }
 
         unsupportedMediaType( contentType );

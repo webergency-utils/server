@@ -207,6 +207,34 @@ export function extractFileConfig( decorators: readonly ts.Decorator[] | undefin
     return merged;
 }
 
+/**
+ * `@Reviver(fn)` / `@Reviver(null)`. Later decorator wins.
+ * Bare `@Reviver` / `@Reviver()` are invalid (diagnosed in the analyzer) and ignored here.
+ */
+export function extractReviver( decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile ): any
+{
+    if( !decorators ){ return undefined }
+
+    let present = false;
+    let value: any = undefined;
+
+    for( const d of decorators )
+    {
+        if( !ts.isCallExpression( d.expression )){ continue }
+
+        const ident = d.expression.expression;
+
+        if( !ts.isIdentifier( ident ) || ident.text !== 'Reviver' ){ continue }
+
+        if( d.expression.arguments.length === 0 ){ continue }
+
+        present = true;
+        value = parseExpression( d.expression.arguments[0], sourceFile );
+    }
+
+    return present ? value : undefined;
+}
+
 /** Later `@ResponseMode` wins, matching the original scan-to-the-end behaviour. */
 export function extractResponseMode( decorators: readonly ts.Decorator[] | undefined ): string | undefined
 {
