@@ -9,7 +9,6 @@ import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './
 import { handleCors, isPreflight } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
 
-// Decoupled architectural imports
 import { RequestProcessor } from './core/request-processor.js';
 import { invokeGuards } from './core/guard-runner.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
