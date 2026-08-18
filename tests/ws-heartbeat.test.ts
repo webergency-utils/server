@@ -218,7 +218,7 @@ describe( 'upgradeQuery', () =>
         expect( query ).toEqual({});
     });
 
-    it( 'should keep the last value of a repeated key', () =>
+    it( 'should keep repeated keys as an array like HTTP query parse', () =>
     {
         // Arrange
         const request = new Request( 'http://localhost/ws?tag=a&tag=b' );
@@ -227,6 +227,6 @@ describe( 'upgradeQuery', () =>
         const query = upgradeQuery( request );
 
         // Assert
-        expect( query ).toEqual({ tag : 'b' });
+        expect( query ).toEqual({ tag : [ 'a', 'b' ] });
     });
 });

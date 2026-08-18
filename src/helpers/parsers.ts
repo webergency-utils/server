@@ -15,7 +15,7 @@ function createPlainObject(): Record<string | number, any>
 
 /**
  * Mutable bag with PHP/Rails-style `assign(key, value)` bracket unflattening.
- * Used by urlencoded `QueryParser` and multipart `MultipartPayload.toObject()`.
+ * Used by multipart `MultipartPayload.toObject()` (files are not query text).
  */
 export type FormBag =
 {
@@ -23,131 +23,87 @@ export type FormBag =
     [key: string]: any
 };
 
-const Query = new Proxy( Object, {
-    construct : () =>
+function assignFormValue( query: any, key: string | number, value: any ): void
+{
+    const keys = key.toString().replace( /\]\[/g, '[' ).replace( /]$/, '' ).split( '[' );
+    let obj = query, parent, parent_key;
+
+    for( let i = 0; i < keys.length; ++i )
     {
-        const query: any = createPlainObject();
+        let k: string | number = keys[i];
 
-        Object.defineProperty( query, 'assign', {
-            value : ( key: string | number, value: any ) =>
+        if( isUnsafeKey( k )){ return }
+
+        if( k && intRE.test( k.toString())){ k = parseInt( k ) }
+        else if( k === '' )
+        {
+            k = Array.isArray( obj ) ? obj.length - 1 : Math.max( -1, ...Object.keys( obj ).map( k => intRE.test( k ) ? parseInt( k ) : -1 ));
+
+            if( k === -1 || i === keys.length - 1 || Object.prototype.hasOwnProperty.call( obj[k] || createPlainObject(), keys[i + 1]))
             {
-                const keys = key.toString().replace( /\]\[/g, '[' ).replace( /]$/, '' ).split( '[' );
-                let obj = query, parent, parent_key;
+                k += 1;
+            }
+        }
 
-                for( let i = 0; i < keys.length; ++i )
+        if( typeof k === 'string' && Array.isArray( obj ))
+        {
+            parent[parent_key!] = obj = obj.reduce(( o: any, v: any, i: number ) => ( o[i] = v, o ), createPlainObject());
+        }
+
+        if( i < keys.length - 1 )
+        {
+            if( !obj[k])
+            {
+                obj[k] = ( keys[i + 1] === '' || intRE.test( keys[i + 1])) ? [] : createPlainObject();
+            }
+
+            if( isUnsafeKey( keys[i + 1])){ return }
+
+            parent = obj;
+            parent_key = k;
+            obj = obj[k];
+        }
+        else
+        {
+            if( obj[k] !== undefined )
+            {
+                if( Array.isArray( obj[k]))
                 {
-                    let k: string | number = keys[i];
-
-                    if( isUnsafeKey( k )){ return }
-
-                    if( k && intRE.test( k.toString())){ k = parseInt( k ) }
-                    else if( k === '' )
-                    {
-                        k = Array.isArray( obj ) ? obj.length - 1 : Math.max( -1, ...Object.keys( obj ).map( k => intRE.test( k ) ? parseInt( k ) : -1 ));
-
-                        if( k === -1 || i === keys.length - 1 || Object.prototype.hasOwnProperty.call( obj[k] || createPlainObject(), keys[i + 1]))
-                        {
-                            k += 1;
-                        }
-                    }
-
-                    if( typeof k === 'string' && Array.isArray( obj ))
-                    {
-                        parent[parent_key!] = obj = obj.reduce(( o: any, v: any, i: number ) => ( o[i] = v, o ), createPlainObject());
-                    }
-
-                    if( i < keys.length - 1 )
-                    {
-                        if( !obj[k])
-                        {
-                            obj[k] = ( keys[i + 1] === '' || intRE.test( keys[i + 1])) ? [] : createPlainObject();
-                        }
-
-                        if( isUnsafeKey( keys[i + 1])){ return }
-
-                        parent = obj;
-                        parent_key = k;
-                        obj = obj[k];
-                    }
-                    else
-                    {
-                        if( obj[k] !== undefined )
-                        {
-                            if( Array.isArray( obj[k]))
-                            {
-                                obj[k].push( value );
-                            }
-                            else if(
-                                typeof obj[k] === 'object'
-                                && obj[k] !== null
-                                && Object.getPrototypeOf( obj[k]) === Object.prototype
-                            )
-                            {
-                                // Nested plain form object — append under a numeric key
-                                // (e.g. items[name]=first&items=second → { name, 0: second }).
-                                // Class instances (UploadedFile, …) array-coerce like scalars.
-                                const nested = obj[k];
-                                obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
-                            }
-                            else
-                            {
-                                ( obj[k] = [obj[k]]).push( value );
-                            }
-                        }
-                        else
-                        {
-                            obj[k] = value;
-                        }
-                    }
+                    obj[k].push( value );
+                }
+                else if(
+                    typeof obj[k] === 'object'
+                    && obj[k] !== null
+                    && Object.getPrototypeOf( obj[k]) === Object.prototype
+                )
+                {
+                    // Nested plain form object — append under a numeric key
+                    // (e.g. items[name]=first&items=second → { name, 0: second }).
+                    // Class instances (UploadedFile, …) array-coerce like scalars.
+                    const nested = obj[k];
+                    obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
+                }
+                else
+                {
+                    ( obj[k] = [obj[k]]).push( value );
                 }
             }
-        });
-
-        return query;
+            else
+            {
+                obj[k] = value;
+            }
+        }
     }
-});
+}
 
 /** Empty form bag with the same `assign` semantics as urlencoded query parsing. */
 export function createFormBag(): FormBag
 {
-    return new ( Query as any )() as FormBag;
-}
+    const query: any = createPlainObject();
 
-export class QueryParser
-{
-    public static parse<T>( querystring: string ): T
-    {
-        const data = createFormBag();
-        let value, pair, last_pair = 0;
-        const sep = '&', eq = '=';
+    Object.defineProperty( query, 'assign', {
+        value : ( key: string | number, value: any ) => assignFormValue( query, key, value )
+    });
 
-        if( !querystring ){ return data as T }
-
-        do
-        {
-            pair = querystring.indexOf( sep, last_pair );
-
-            if( pair === -1 ){ pair = querystring.length }
-
-            if( pair - last_pair > 1 )
-            {
-                if( ~( value = querystring.indexOf( eq, last_pair )) && value < pair )
-                {
-                    data.assign(
-                        decodeURIComponent( querystring.substring( last_pair, value ).replace( /\+/g, ' ' )),
-                        decodeURIComponent( querystring.substring( value + 1, pair ).replace( /\+/g, ' ' ))
-                    );
-                }
-                else
-                {
-                    data.assign( decodeURIComponent( querystring.substring( last_pair, pair ).replace( /\+/g, ' ' )), true );
-                }
-            }
-
-            last_pair = pair + 1;
-        }
-        while( last_pair < querystring.length );
-
-        return data as T;
-    }
+    return query;
 }

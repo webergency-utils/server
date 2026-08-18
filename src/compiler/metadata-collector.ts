@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import { buildParser, buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
 import { ProjectRegistry } from './registry.js';
-import { PARAM_DECORATORS, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig } from './decorator-config.js';
+import { PARAM_DECORATORS, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig, extractReviver } from './decorator-config.js';
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
 import { resolveTokenFromType } from './di-resolution.js';
 
@@ -96,6 +96,7 @@ export interface ClassMetadata {
     corsConfigs     : any[]
     securityConfigs : any[]
     fileConfigs     : any[]
+    revivers        : any[]
     guards          : any[]
     interceptors    : string[]
     middlewares     : string[]
@@ -281,15 +282,53 @@ export class MetadataCollector
                             mode        : vMode
                         });
                     }
-                    else if( dName === 'Query' || dName === 'Headers' || dName === 'Cookies' )
+                    else if( dName === 'Query' )
                     {
-                        // URL query bags + header/cookie maps: already structured (or raw query text).
-                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
+                        if( pName )
+                        {
+                            // Named query: scalar wire value → from:'string'. Arrays/objects stay on assert.
+                            try
+                            {
+                                buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'string' });
+                                metadata.push({
+                                    source : dName,
+                                    name   : pName,
+                                    parser : `${typeHash}_${mode}_string`,
+                                    mode   : vMode
+                                });
+                            }
+                            catch
+                            {
+                                buildValidator( type, checker, registry.validators, typeHash );
+                                metadata.push({
+                                    source    : dName,
+                                    name      : pName,
+                                    validator : typeHash,
+                                    mode      : vMode
+                                });
+                            }
+                        }
+                        else
+                        {
+                            // Whole `@Query()` bag: raw search text (no leading `?`).
+                            buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
+                            metadata.push({
+                                source : dName,
+                                name   : pName,
+                                parser : `${typeHash}_${mode}_query`,
+                                mode   : vMode
+                            });
+                        }
+                    }
+                    else if( dName === 'Headers' || dName === 'Cookies' )
+                    {
+                        // Already-decoded string maps — assert, not parse (parse is wire text only).
+                        buildValidator( type, checker, registry.validators, typeHash );
                         metadata.push({
-                            source : dName,
-                            name   : pName,
-                            parser : `${typeHash}_${mode}_query`,
-                            mode   : vMode
+                            source    : dName,
+                            name      : pName,
+                            validator : typeHash,
+                            mode      : vMode
                         });
                     }
                     else 
@@ -518,6 +557,7 @@ export class MetadataCollector
         const corsConfigs: any[] = [];
         const securityConfigs: any[] = [];
         const fileConfigs: any[] = [];
+        const revivers: any[] = [];
         let guards: any[] = [];
         let interceptors: string[] = [];
         let middlewares: string[] = [];
@@ -539,6 +579,7 @@ export class MetadataCollector
                     corsConfigs.push( ...parentMeta.corsConfigs );
                     securityConfigs.push( ...parentMeta.securityConfigs );
                     fileConfigs.push( ...parentMeta.fileConfigs );
+                    revivers.push( ...parentMeta.revivers );
                     guards.push( ...parentMeta.guards );
                     interceptors.push( ...parentMeta.interceptors );
                     middlewares.push( ...parentMeta.middlewares );
@@ -570,6 +611,13 @@ export class MetadataCollector
             fileConfigs.push( directFile );
         }
 
+        const directReviver = extractReviver( decorators, sourceFile );
+
+        if( directReviver !== undefined )
+        {
+            revivers.push( directReviver );
+        }
+
         guards = applyDirectives( guards, this.guardDirectives( decorators ), guardName );
         interceptors = applyDirectives( interceptors, this.interceptorDirectives( decorators ), byName );
         middlewares = applyDirectives( middlewares, this.middlewareDirectives( decorators ), byName );
@@ -585,6 +633,7 @@ export class MetadataCollector
             corsConfigs,
             securityConfigs,
             fileConfigs,
+            revivers,
             guards,
             interceptors,
             middlewares,

@@ -323,7 +323,7 @@ export class UploadedFile
 
 export type MultipartFieldValue = string | string[];
 
-/** One completed part in wire order (for QueryParser-style unflatten). */
+/** One completed part in wire order (for query-style unflatten). */
 export interface MultipartPartEntry
 {
     name  : string
@@ -496,7 +496,7 @@ export class MultipartPayload
 
     /**
      * Plain object for handlers / `@Body`: text + files, unflattened with the same
-     * bracket rules as urlencoded `QueryParser` (`profile[name]`, `docs[]`, …).
+     * bracket rules as urlencoded `parseQueryString` (`profile[name]`, `docs[]`, …).
      * Assigns in wire part order. Wire-level `field()` / `file()` stay literal.
      */
     toObject(): Record<string, any>

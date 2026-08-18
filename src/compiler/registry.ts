@@ -16,6 +16,7 @@ export type ModuleGraphInfo =
     imports?      : string[]
     exports?      : string[]
     files?        : any
+    reviver?      : any
 };
 
 export interface ProjectRegistry {

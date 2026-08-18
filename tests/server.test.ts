@@ -741,6 +741,101 @@ describe( 'Server & Metadata', () =>
             }));
             expect( await res.json()).toEqual({ a : 1 });
         });
+
+        it( 'should apply reviver to JSON request bodies', async () =>
+        {
+            const ctrl = { echo : ( body: any ) => body };
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'EchoCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'EchoCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/echo',
+                    params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {}
+                });
+            }, { reviver : ( _key: string, value: any ) => value === 'x' ? 'y' : value });
+
+            const res = await server.fetch( new Request( 'http://localhost/echo', {
+                method  : 'POST',
+                body    : JSON.stringify({ v : 'x' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+
+            expect( await res.json()).toEqual({ v : 'y' });
+        });
+
+        it( 'should let an Endpoint reviver override the Server reviver', async () =>
+        {
+            const ctrl = { echo : ( body: any ) => body };
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'EchoCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'EchoCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/echo',
+                    params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {},
+                    reviver      : ( _key: string, value: any ) => value === 'x' ? 'endpoint' : value
+                });
+            }, { reviver : ( _key: string, value: any ) => value === 'x' ? 'server' : value });
+
+            const res = await server.fetch( new Request( 'http://localhost/echo', {
+                method  : 'POST',
+                body    : JSON.stringify({ v : 'x' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+
+            expect( await res.json()).toEqual({ v : 'endpoint' });
+        });
+
+        it( 'should let an Endpoint reviver of null opt out of the Server reviver', async () =>
+        {
+            const ctrl = { echo : ( body: any ) => body };
+            const server = setupServer( 3000, ( registry ) =>
+            {
+                registry.registerController( 'EchoCtrl', ctrl );
+                registry.registerEndpoint({
+                    controller   : 'EchoCtrl', methodName   : 'echo', httpMethod   : 'POST', path         : '/echo',
+                    params       : [{ source : 'Body' }], guards       : [], interceptors : [], meta         : {},
+                    reviver      : null
+                });
+            }, { reviver : ( _key: string, value: any ) => value === 'x' ? 'y' : value });
+
+            const res = await server.fetch( new Request( 'http://localhost/echo', {
+                method  : 'POST',
+                body    : JSON.stringify({ v : 'x' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+
+            expect( await res.json()).toEqual({ v : 'x' });
+        });
+
+        it( 'should let a Module reviver override the Server reviver', async () =>
+        {
+            class EchoCtrl
+            {
+                echo( body: any ){ return body }
+            }
+            defineController( EchoCtrl, [{
+                methodName   : 'echo',
+                httpMethod   : 'POST',
+                path         : '/echo',
+                params       : [{ source : 'Body' }]
+            }]);
+            const AppMod = legacyModule({
+                controllers : [EchoCtrl],
+                reviver     : ( _key: string, value: any ) => value === 'x' ? 'module' : value
+            });
+            const server = setupServer( 3000, () => {}, {
+                module  : AppMod,
+                reviver : ( _key: string, value: any ) => value === 'x' ? 'server' : value
+            });
+
+            const res = await server.fetch( new Request( 'http://localhost/echo', {
+                method  : 'POST',
+                body    : JSON.stringify({ v : 'x' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+
+            expect( await res.json()).toEqual({ v : 'module' });
+        });
     });
 
     describe( 'Guards & Interceptors', () => 

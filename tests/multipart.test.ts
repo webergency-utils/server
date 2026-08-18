@@ -437,7 +437,7 @@ describe( 'MultipartPayload', () =>
         const obj = payload.toObject();
         expect( obj.title ).toBe( 'hello' );
         expect( obj.avatar ).toBeInstanceOf( UploadedFile );
-        // Duplicate part names without `[]` still become arrays (same as QueryParser).
+        // Duplicate part names without `[]` still become arrays (same as parseQueryString).
         expect( Array.isArray( obj.docs )).toBe( true );
         expect( obj.docs ).toHaveLength( 2 );
         expect( obj.docs.map(( f: UploadedFile ) => f.filename )).toEqual([ '1.txt', '2.txt' ]);
@@ -504,7 +504,7 @@ describe( 'multipart nesting', () =>
         expect( obj.docs.map(( f: UploadedFile ) => f.filename )).toEqual([ 'a.txt', 'b.txt' ]);
     });
 
-    it( 'unflattens bracket-style field names like QueryParser', async () =>
+    it( 'unflattens bracket-style field names like parseQueryString', async () =>
     {
         const boundary = 'br';
         const body = multipartBody( boundary, [

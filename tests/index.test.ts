@@ -19,6 +19,13 @@ describe( 'Exports & Config', () =>
         expect( index.WEBERGENCY_GUARD ).toBeDefined();
     });
 
+    it( 'should export the Reviver decorator', () =>
+    {
+        expect( index.Reviver ).toBeDefined();
+        expect(( index as Record<string, unknown> ).resolveReviver ).toBeUndefined();
+        expect(( index as Record<string, unknown> ).reviveTree ).toBeUndefined();
+    });
+
     it( 'should export all main components', () =>
     {
         expect( index.Server ).toBeDefined();

@@ -24,6 +24,7 @@ import {
     Protect, 
     Intercept, 
     Cors,
+    Reviver,
     Peer,
     Cookies,
     Cookie,
@@ -96,6 +97,8 @@ describe( 'Decorators', () =>
         Protect( 'G' )({}, 'test', {});
         Intercept( 'I' )({}, 'test', {});
         Cors( '*' )({}, 'test', {});
+        Reviver( null )({}, 'test', {});
+        Reviver(( _key: string, value: any ) => value )({}, 'test', {});
     });
 
     it( 'should execute Controller decorator logic', () => 

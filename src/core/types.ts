@@ -1,5 +1,8 @@
 import { ServerError } from '../errors.js';
 import { toStreamOrBinaryBody } from '../helpers/response-body.js';
+import type { Reviver } from '../helpers/reviver.js';
+
+export type { Reviver };
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'OPTIONS' | 'ALL' | 'RPC';
 
@@ -68,6 +71,8 @@ export interface EndpointMetadata {
     security?            : any
     /** Merged class + method `@File` config (runtime merges ServerOptions / Module). */
     files?               : any
+    /** Baked class + method `@Reviver` (`null` opts out of Module / Server). */
+    reviver?             : Reviver | null
     meta                 : Record<string, any>
     /** High-priority SEO route group (`@Seo`). */
     seo?                 : boolean
@@ -136,6 +141,8 @@ export type Serializer = ( v: any ) => string;
 export interface AugmentedRequest extends Request {
     params            : Record<string, string>
     query             : Record<string, string>
+    /** Raw search text (no leading `?`) for `@Query()` parse. */
+    queryString?      : string
     globalCors?       : any
     cors?             : any
     globalSecurity?   : any
@@ -157,6 +164,10 @@ export interface AugmentedRequest extends Request {
     forwardStack?     : string[]
     /** Shallow-merged into `@Body` after parse when set by a forward. */
     forwardBody?      : Record<string, unknown>
+    /** Server-wide `reviver`; Endpoint / Module overlay at execute. */
+    globalReviver?    : Reviver | null
+    /** Resolved reviver for this request (JSON + query parse). */
+    reviver?          : Reviver
     _json?            : any
     _raw?             : ArrayBuffer
     /** Set by getBody when Content-Type was missing and the body was sniffed. */

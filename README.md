@@ -111,7 +111,7 @@ Entry points:
 4. **Pipeline** — Match route → security checks → middlewares → guards → interceptors → handler → response merge (`ServerResponse` headers/status).
 5. **Routing** — Exact paths resolve through a per-method map with no regex. Pattern routes are bucketed per method and tried most-specific first, so `/users/me` beats `/users/:id` and `/files/:name` beats `/files/*rest` no matter what order they were registered in. Registration order only breaks ties between equally specific patterns, and a pattern that can never be reached (e.g. a second `/u/:key` after `/u/:id`) is warned about at bootstrap. A request whose path matches only under other verbs gets **405** with `Allow`; an unknown path is still 404. A WebSocket upgrade to a non-WS path stays 404, since WS is a transport rather than an advertised method. **SEO / Internal:** `@Seo` endpoints form a high-priority group tried before public routes; they return `{ method, path, query?, body? }` or void (fallthrough). `@Internal` paths are forward-only (direct HTTP → 404). `ServerResponse.forward` / SEO returns re-dispatch on public ∪ internal (SEO skipped; nested hops allowed, cycles rejected). See `docs/adr/0008-seo-internal-dispatch.md`.
 6. **OPTIONS** — Genuine CORS preflight is answered by the framework before guards, using the target route's own `@Cors` config. A plain `OPTIONS` request routes normally to `@Options` / `@All`, or gets `204` + `Allow`. Asterisk-form `OPTIONS *` reports server-wide `Allow` without routing.
-7. **Body `from` modes** — Query, path, cookie, header, and `application/x-www-form-urlencoded` use typechecker `from: 'query'`. JSON / `application/*+json` and `text/plain` use `from: 'json'` (`text/plain` is the raw string, charset-aware). Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**.
+7. **Body `from` modes** — `parse` is **wire text only**. JSON / `application/*+json` → `parser` (`from: 'json'`) on the raw body string. urlencoded → `parserQuery` (`from: 'query'`) on the raw form string. Whole `@Query()` → raw URL search (no `?`). Named `@Query` / `@Param` / `@Header` / `@Cookie` scalars → `from: 'string'`. `@Headers` / `@Cookies` / multipart / named query arrays → **assert** with `from: 'query'`. `text/plain` is the raw string (charset-aware). Missing Content-Type: sniff JSON then form-like urlencoded; other types → **415**. Optional `reviver` (Server / Module / `@Reviver`) is passed into `parse` for JSON and query; untyped JSON / urlencoded apply it too.
 8. **TLS** — Basic `cert`/`key` uses the native adapter on Bun/Deno. `requestCert` / `sniCallback` (mTLS / SNI) use Node `https` on all runtimes so `@Peer` works.
 9. **Request ID** — Every request accepts or generates `X-Request-Id`, exposes it on `RequestContext` / `LogContext`, and echoes it on the response.
 10. **Health** — Optional `health` probes answer before routing: liveness while the process can answer, readiness only when bootstrapped, listening, and not shutting down. OpenTelemetry is left to consumer interceptors / `Server` events — see `docs/adr/0005-observability.md`.
@@ -157,6 +157,7 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `keepAliveTimeout?` | `number` | Node only: idle keep-alive socket timeout (default `5000`) |
 | `health?` | `boolean \| { path?, readyPath? }` | Optional `GET /health` (live) and `GET /ready` (ready) probes |
 | `trustProxy?` | `string[]` | Peer CIDR allowlist for XFF; omit/`[]` = never trust. Use `TRUST_PROXY_LOOPBACK` for local loopback peers. |
+| `reviver?` | `Reviver \| null` | JSON.parse-style reviver for typed JSON / query `parse` and untyped JSON / urlencoded bodies. Overridden by Module.reviver and `@Reviver`. `null` opts out. |
 | `logger?` / `logs?` | `Logger` / `boolean` | Logging |
 | `shutdownTimeout?` | `number` | Graceful shutdown wait |
 
@@ -238,6 +239,7 @@ await ms.shutdown();
 * `@Sse(path?)` — Server-Sent Events. Yield `{ event?, id?, retry?, data }` or a bare payload. Declared return types validate **each chunk’s `data`** (or the whole chunk); `strict` / `strip` / `relaxed` apply; failure aborts the stream after headers are sent.
 * `@MessagePattern(pattern)` / `@EventPattern(pattern)` — TCP microservice patterns.
 * `@Cors(config?)` / `@Security(config?)` — Per-route CORS / security.
+* `@Reviver(fn | null)` — JSON.parse-style reviver for JSON and query parse. Requires an argument (`fn` or `null`). Class/method override of `ServerOptions.reviver` / `Module.reviver`. `null` opts out of every parent. Nearest defined wins (Endpoint → Controller → Module → Server).
 * `@ResponseMode(mode)` — Per-handler response validation mode.
 * `@Protect` / `@OverrideProtect` / `@Unprotect` — Guards.
 * `@Intercept` / `@OverrideIntercept` / `@Unintercept` — Interceptors.
@@ -246,7 +248,7 @@ await ms.shutdown();
 * `@Seo` — Paren-free; high-priority SEO route group (return `SeoForward` or void).
 * `@Internal` — Paren-free; forward-only (not externally routable).
 * `@Meta(...)` / `@SetMetadata(key, value)` — Arbitrary metadata for `Reflector`.
-* `@Injectable(options?)` / `@Inject(token?)` / `@Module(metadata)` / `@Global()` — DI.
+* `@Injectable(options?)` / `@Inject(token?)` / `@Module(metadata)` / `@Global()` — DI. `@Module` may set `files` and `reviver` defaults for its controllers.
 * Lifecycle interfaces: `OnInit`, `OnDestroy`.
 
 ### Dependency injection notes
@@ -266,9 +268,9 @@ await ms.shutdown();
 
 * `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `parser` (`from: 'json'`); `text/plain` → string; urlencoded → `parserQuery` (`from: 'query'`); **`multipart/form-data` → bag + AOT validator (`from: 'query'`)** so DTOs like `{ title: string; documents: UploadedFile[] }` coerce strings and keep file instances. Missing CT sniffs JSON then form; unsupported CT → **415**; bad JSON → **400**.
 * `@File` / `@Files` — Streaming multipart uploads. Class/method `@File({ dest, maxFileSize, onFile, fields })` configures handling (merged ServerOptions.files → Module.files → controller → endpoint). Parameter `@File('field')` injects `UploadedFile`; `@Files()` injects all files. Prefer `dest` for temp/disk paths, or `onFile` for custom sinks (e.g. S3). For the full form bag use `@Body()` with multipart Content-Type.
-* `@Query(name?, mode?)` — Query string (`from: 'query'`).
-* `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie (`from: 'query'`).
-* `@Headers` / `@Cookies` — Whole string maps, AOT-validated against the parameter type (`from: 'query'`); parsers receive a copy and do not mutate `ServerRequest` bags.
+* `@Query(name?, mode?)` — No name + typed: raw URL search text → `parse` `from: 'query'`. No name + untyped: `req.query` bag. Named scalar → `from: 'string'`. Named array/object → assert `from: 'query'`.
+* `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie scalar (`from: 'string'`).
+* `@Headers` / `@Cookies` — Whole string maps, AOT-**asserted** against the parameter type (`from: 'query'`). `parse` is not used (not wire text).
 * `@ConnectedSocket()` — WebSocket instance for `@Ws`.
 
 `@Request` injects **`ServerRequest`** (sealed; not Fetch). Convenience fields mirror `@Ip` / `@Peer` / …; buffered body helpers honor `maxBodySize`. Streaming uploads: `req.multipart()` / `req.upload(name)` / `req.uploads()` / `req.payload()`.

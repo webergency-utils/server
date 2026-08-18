@@ -48,7 +48,7 @@ One streaming multipart file part (`field`, `filename`, `mime`, `size`, `path?`,
 _Avoid_: Fetch `File` from `formData()` (buffered platform path)
 
 **MultipartPayload**:
-Low-level multipart bag after streaming parse (`field` / `file` use wire names). `@Body` uses `toObject()`, which unflattens brackets like urlencoded `QueryParser`, then assert-validates with `from: 'query'`. Nested `multipart/*` parts are re-parsed with a prefix (`bundle[child]`, depth cap 3). Prefer DTOs like `{ profile: { name: string }; documents: UploadedFile[] }`.
+Low-level multipart bag after streaming parse (`field` / `file` use wire names). `@Body` uses `toObject()`, which unflattens brackets like urlencoded `parseQueryString`, then assert-validates with `from: 'query'`. Nested `multipart/*` parts are re-parsed with a prefix (`bundle[child]`, depth cap 3). Prefer DTOs like `{ profile: { name: string }; documents: UploadedFile[] }`.
 _Avoid_: unbounded nested MIME (capped at `MAX_MULTIPART_NEST_DEPTH`)
 
 **@File / FileOptions**:
@@ -105,6 +105,10 @@ _Avoid_: from (a different concept)
 **from**:
 Typechecker coercion channel chosen at validate time: `json` (structured values, no `"30"` → `30`) or `query` (string coercion / array wrapping). Selected from the parameter source and body Content-Type.
 _Avoid_: Validation mode, content type
+
+**Reviver**:
+JSON.parse-style `(key, value) => any` applied after JSON and query wire parse (typed `parse({ reviver })`; untyped JSON is `parse<any>` — `JSON.parse` then typechecker `reviveTree`; untyped urlencoded is `parseQueryString` then the same `reviveTree`). Hierarchical: ServerOptions.reviver → Module.reviver → `@Reviver(fn)` on the Controller → `@Reviver(fn)` on the Endpoint. `undefined` inherits; `@Reviver(null)` opts out. Bare `@Reviver` / `@Reviver()` are compile errors.
+_Avoid_: jsonReviver (renamed), composing stacked revivers (nearest defined wins)
 
 ## Example dialogue
 
