@@ -48,6 +48,8 @@ export interface ParamMetadata {
     parser?      : string | Parser
     parserQuery? : string | Parser
     mode?        : ValidationMode
+    /** `?` / `| undefined` — missing wire value is `undefined`, not a parse of `undefined`. */
+    optional?    : boolean
 }
 
 export interface GuardMetadata {

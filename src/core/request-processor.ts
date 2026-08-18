@@ -314,6 +314,11 @@ export class RequestProcessor
             }
         }
 
+        if( p.optional && p.source !== 'Body' && ( val === undefined || val === null ))
+        {
+            return undefined;
+        }
+
         const bodyContentType = p.source === 'Body' ? getEffectiveBodyContentType( req ) : null;
         const bodyIsMultipart = p.source === 'Body' && isMultipartContentType( bodyContentType );
         const bodyIsUrlencoded = p.source === 'Body' && bodyContentType === 'application/x-www-form-urlencoded';

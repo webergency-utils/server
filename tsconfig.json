@@ -20,5 +20,5 @@
     }
   },
   "include": ["src/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "dist", "fuzz/**/*"]
+  "exclude": ["node_modules", "dist", "fuzz/**/*", "tests/e2e/fixture"]
 }

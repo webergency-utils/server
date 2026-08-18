@@ -27,6 +27,20 @@ interface MergeSpec<T> {
     removalOf : ( arg: ts.Expression, decorator: string ) => string | null
 }
 
+function paramIsOptional( param: ts.ParameterDeclaration, type: ts.Type ): boolean
+{
+    if( param.questionToken || param.initializer ){ return true }
+
+    if( type.flags & ts.TypeFlags.Undefined ){ return true }
+
+    if( type.isUnion() )
+    {
+        return type.types.some( t => !!( t.flags & ts.TypeFlags.Undefined ));
+    }
+
+    return false;
+}
+
 function readDirectives<T>( decorators: readonly ts.Decorator[] | undefined, spec: MergeSpec<T> ): MergeDirectives<T>
 {
     const directives: MergeDirectives<T> = { direct : [], isOverride : false, removeAll : false, toRemove : new Set() };
@@ -266,6 +280,8 @@ export class MetadataCollector
                     const type = checker.getTypeAtLocation( p );
                     const typeHash = generateHash( type, checker );
                     const mode = vMode || 'strip';
+                    const optional = paramIsOptional( p, type );
+                    const start = metadata.length;
 
                     if( dName === 'Body' ) 
                     {
@@ -341,6 +357,14 @@ export class MetadataCollector
                             parser : `${typeHash}_${mode}_string`,
                             mode   : vMode
                         });
+                    }
+
+                    if( optional )
+                    {
+                        for( let i = start; i < metadata.length; i++ )
+                        {
+                            metadata[i].optional = true;
+                        }
                     }
                 }
                 else 
