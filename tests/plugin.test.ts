@@ -850,4 +850,113 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( appJs ).toMatch( /controllers:\s*\[[\s\S]*temp_mail_controller_js_1\.MailController[\s\S]*\]/ );
         expect( appJs ).not.toMatch( /controllers:\s*\[\s*MailController\s*\]/ );
     });
+
+    it( 'should not leak source JSDoc into generated AOT serializers or parsers', () =>
+    {
+        const output = emitFiles({
+            'temp_comment.controller.ts' : `
+        import { Controller, Post, Query, Inject, Public } from '../decorators.js';
+
+        class Model {}
+        class PollerManager {}
+
+        @Controller('/webhooks')
+        export class WebhookController {
+            constructor(
+                @Inject private readonly model: Model,
+                @Inject private readonly pollerManager: PollerManager
+            ) {}
+
+            /**
+             * POST /webhooks/graph/mail
+             *
+             * Handles two distinct flows on the same endpoint:
+             *
+             * 1. **Subscription validation** – Microsoft Graph sends a POST with a
+             *    \`validationToken\` query parameter. We must echo it back as \`text/plain\`
+             *    within 10 seconds for the subscription to be activated.
+             *
+             * 2. **Change notifications** – Once validated, Graph POSTs a JSON payload
+             *    with an array of change notifications.
+             */
+            @Post('/mail')
+            @Public
+            async handleMailNotification(
+                @Query('validationToken') validationToken?: string
+            ) {
+                return this.model;
+            }
+        }
+      `
+        });
+
+        const js = output['temp_comment.controller.js'];
+
+        expect( js ).toBeDefined();
+        expect( js ).toContain( 'httpMethod: "POST"' );
+        expect( js ).toContain( 'handleMailNotification' );
+
+        const generated = collectGeneratedLocals( js );
+
+        expect( generated ).not.toContain( 'POST /webhooks/graph/mail' );
+        expect( generated ).not.toContain( 'text/plain' );
+        expect( generated ).not.toContain( 'Change notifications' );
+        expect( generated ).not.toContain( 'Subscription validation' );
+    });
+
+    it( 'should not let a line comment comment-out generated serializer statements', () =>
+    {
+        const output = emitFiles({
+            'temp_line_comment.controller.ts' : `
+        import { Controller, Post, Public } from '../decorators.js';
+
+        @Controller('/hooks')
+        export class LineCommentController {
+            constructor() {}
+            // LEAKED_LINE_COMMENT
+            @Post('/mail')
+            @Public
+            handle() { return { ok: true as const } }
+        }
+      `
+        });
+
+        const js = output['temp_line_comment.controller.js'];
+
+        expect( js ).toBeDefined();
+        expect( collectGeneratedLocals( js )).not.toContain( 'LEAKED_LINE_COMMENT' );
+        expect(() => new Function( 'exports', 'require', 'module', js )).not.toThrow();
+    });
 });
+
+function collectGeneratedLocals( js: string ): string
+{
+    const chunks: string[] = [];
+    const prefixes = [ 'const __val_', 'const __parse_', 'const __ser_' ];
+
+    for( const prefix of prefixes )
+    {
+        let from = 0;
+
+        while( true )
+        {
+            const start = js.indexOf( prefix, from );
+
+            if( start < 0 ){ break }
+
+            const ends =
+            [
+                js.indexOf( '\nconst ', start + 1 ),
+                js.indexOf( '\nlet ', start + 1 ),
+                js.indexOf( '\nclass ', start + 1 ),
+                js.indexOf( '\nexports.', start + 1 )
+            ].filter( i => i > start );
+            const end = ends.length ? Math.min( ...ends ) : js.length;
+
+            chunks.push( js.slice( start, end ));
+            from = end;
+        }
+    }
+
+    return chunks.join( '\n' );
+}

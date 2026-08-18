@@ -2,6 +2,7 @@ import ts from 'typescript';
 import { ProjectRegistry, createRegistry } from './registry.js';
 import { transformer } from './endpoint-analyzer.js';
 import { objectToExpression } from './manifest.js';
+import { detachGeneratedExpression } from './detach-generated.js';
 import { DiagnosticReporter, DiagnosticSink } from './diagnostics.js';
 
 const symbolAssign = ( className: string, symbolKey: string, value: ts.Expression ): ts.Statement =>
@@ -187,7 +188,7 @@ function emitLocalPrepends( registry: ProjectRegistry, needed: NeededEmitLocals,
                                 ts.factory.createIdentifier( name ),
                                 undefined,
                                 undefined,
-                                expr
+                                detachGeneratedExpression( expr )
                             )
                         ], ts.NodeFlags.Const )
                     )

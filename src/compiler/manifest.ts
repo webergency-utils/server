@@ -1,6 +1,7 @@
 import ts from 'typescript';
 import * as path from 'path';
 import { ProjectRegistry } from './registry.js';
+import { detachGeneratedExpression } from './detach-generated.js';
 
 /** Import specifier for `from`, relative to the manifest and pointing at emitted JS. */
 function relativeImport( manifestDir: string, from: string ): string
@@ -197,7 +198,7 @@ export function objectToExpression( obj: any ): ts.Expression
 
             if( statement && ts.isExpressionStatement( statement )) 
             {
-                return statement.expression;
+                return detachGeneratedExpression( statement.expression );
             }
 
             return ts.factory.createIdentifier( obj.__raw_code__ );
