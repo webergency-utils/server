@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * webergency-tsc — drop-in tsc wrapper that always applies the Webergency AOT transformer.
+ * webergency-tsc — drop-in tsc wrapper that always applies the typechecker
+ * transformer and the Webergency AOT transformer.
  *
  * Usage (same args as tsc):
  *   webergency-tsc -p tsconfig.json
@@ -8,13 +9,14 @@
  */
 import ts from 'typescript';
 import * as path from 'path';
-import compilerPlugin from './transformer.js';
+import { resolveRootDir } from './root-dir.js';
+import { createBeforeTransformers, readTsPatchPlugins, TsPatchPlugin } from './emit-transformers.js';
 
 const args = process.argv.slice( 2 );
 
 function printUsage()
 {
-    console.error( 'Usage: webergency-tsc [tsc options…]\n  Compiles TypeScript with the Webergency AOT transformer (Symbol.for meta + validators).' );
+    console.error( 'Usage: webergency-tsc [tsc options…]\n  Compiles TypeScript with the typechecker transformer and Webergency AOT (Symbol.for meta + validators).' );
 }
 
 if( args.includes( '-h' ) || args.includes( '--help' ))
@@ -53,22 +55,9 @@ if( parsedCli.errors.length )
     process.exit( 1 );
 }
 
-function inferRootDirFromSources( rootNames: readonly string[], configDir: string ): string | undefined
-{
-    if( rootNames.length === 0 ){ return undefined }
-
-    const relPaths = rootNames.map( f => path.relative( configDir, path.resolve( configDir, f )));
-
-    if( !relPaths.every( p => p === 'src' || p.startsWith( `src${path.sep}` )))
-    {
-        return undefined;
-    }
-
-    return path.join( configDir, 'src' );
-}
-
 let options: ts.CompilerOptions = { ...parsedCli.options };
 let rootNames: string[] = parsedCli.fileNames;
+let plugins: TsPatchPlugin[] = [];
 
 const configPath = projectPath
     ? path.resolve( process.cwd(), projectPath )
@@ -105,6 +94,7 @@ if( configPath )
 
     options = parsed.options;
     rootNames = parsed.fileNames;
+    plugins = readTsPatchPlugins( configFile.config?.compilerOptions );
 }
 else if( rootNames.length === 0 )
 {
@@ -112,14 +102,11 @@ else if( rootNames.length === 0 )
     process.exit( 1 );
 }
 
-if( !options.rootDir )
-{
-    const inferred = inferRootDirFromSources( rootNames, configDir );
+const resolvedRootDir = resolveRootDir( options.rootDir, rootNames, configDir );
 
-    if( inferred )
-    {
-        options.rootDir = inferred;
-    }
+if( resolvedRootDir )
+{
+    options.rootDir = resolvedRootDir;
 }
 
 options.experimentalDecorators = options.experimentalDecorators ?? true;
@@ -140,11 +127,12 @@ const emitResult = program.emit(
     undefined,
     undefined,
     {
-        before : [
-            compilerPlugin( program, undefined, {
-                addDiagnostic : ( d ) => { aotDiagnostics.push( d as ts.Diagnostic ) }
-            }) as unknown as ts.TransformerFactory<ts.SourceFile>
-        ]
+        before : createBeforeTransformers(
+            program,
+            { addDiagnostic : ( d ) => { aotDiagnostics.push( d as ts.Diagnostic ) } },
+            plugins,
+            configDir
+        )
     }
 );
 

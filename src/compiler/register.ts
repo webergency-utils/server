@@ -11,10 +11,12 @@ import ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
-import compilerPlugin from './transformer.js';
+import { createBeforeTransformers, readTsPatchPlugins, TsPatchPlugin } from './emit-transformers.js';
 
 interface CachedProgram {
     program     : ts.Program
+    plugins     : TsPatchPlugin[]
+    configDir   : string
     sourceMtime : number
     configMtime : number
 }
@@ -45,7 +47,7 @@ function isStale( cached: CachedProgram, fileName: string, configPath?: string )
     return configPath !== undefined && mtimeOf( configPath ) !== cached.configMtime;
 }
 
-export function getProgramFor( fileName: string ): ts.Program
+function compileContextFor( fileName: string ): CachedProgram
 {
     const configPath = ts.findConfigFile( path.dirname( fileName ), ts.sys.fileExists, 'tsconfig.json' );
     const cacheKey = configPath || path.dirname( fileName );
@@ -55,7 +57,7 @@ export function getProgramFor( fileName: string ): ts.Program
     {
         if( !isStale( cached, fileName, configPath ))
         {
-            return cached.program;
+            return cached;
         }
 
         programCache.delete( cacheKey );
@@ -70,6 +72,8 @@ export function getProgramFor( fileName: string ): ts.Program
         skipLibCheck           : true
     };
     let rootNames = [fileName];
+    let plugins: TsPatchPlugin[] = [];
+    const configDir = configPath ? path.dirname( configPath ) : path.dirname( fileName );
 
     if( configPath )
     {
@@ -77,20 +81,30 @@ export function getProgramFor( fileName: string ): ts.Program
         const parsed = ts.parseJsonConfigFileContent(
             configFile.config,
             ts.sys,
-            path.dirname( configPath )
+            configDir
         );
         options = { ...parsed.options, experimentalDecorators : true };
         rootNames = parsed.fileNames.length ? parsed.fileNames : [fileName];
+        plugins = readTsPatchPlugins( configFile.config?.compilerOptions );
     }
 
     const program = ts.createProgram({ rootNames, options });
-    programCache.set( cacheKey, {
+    const entry: CachedProgram =
+    {
         program,
+        plugins,
+        configDir,
         sourceMtime : mtimeOf( fileName ),
         configMtime : configPath ? mtimeOf( configPath ) : 0
-    });
+    };
+    programCache.set( cacheKey, entry );
 
-    return program;
+    return entry;
+}
+
+export function getProgramFor( fileName: string ): ts.Program
+{
+    return compileContextFor( fileName ).program;
 }
 
 export function transformSource( fileName: string, sourceText: string ): string
@@ -100,7 +114,7 @@ export function transformSource( fileName: string, sourceText: string ): string
         return sourceText;
     }
 
-    const program = getProgramFor( fileName );
+    const { program, plugins, configDir } = compileContextFor( fileName );
     const sourceFile = ts.createSourceFile(
         fileName,
         sourceText,
@@ -109,8 +123,10 @@ export function transformSource( fileName: string, sourceText: string ): string
         fileName.endsWith( 'x' ) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
     );
 
-    const transformer = compilerPlugin( program );
-    const result = ts.transform( sourceFile, [transformer as unknown as ts.TransformerFactory<ts.SourceFile>]);
+    const result = ts.transform(
+        sourceFile,
+        createBeforeTransformers( program, undefined, plugins, configDir )
+    );
     const transformed = result.transformed[0];
     const printer = ts.createPrinter({ newLine : ts.NewLineKind.LineFeed });
     const transformedText = printer.printFile( transformed );
