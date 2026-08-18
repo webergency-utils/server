@@ -131,6 +131,7 @@ module.exports.fuzz = function( data )
         const provider = new FuzzedDataProvider( data );
         const {
             parseQueryString,
+            ParseError,
             createFormBag,
             parseSize,
             mergeSecurityConfigs,
@@ -144,8 +145,18 @@ module.exports.fuzz = function( data )
         } = runtime;
 
         const qs = fuzzQueryString( provider );
-        parseQueryString( qs );
-        parseQueryString( provider.consumeString( 64 ));
+
+        try
+        {
+            parseQueryString( qs );
+            parseQueryString( provider.consumeString( 64 ));
+        }
+        catch( e )
+        {
+            // Leading `?` (and other invalid wire text) is a typed ParseError, not a crash.
+            if( !( e instanceof ParseError )){ throw e }
+        }
+
         createFormBag().assign( provider.consumeString( 24 ), provider.consumeString( 24 ));
 
         const sizeInput = provider.pickValue([
