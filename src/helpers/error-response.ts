@@ -36,13 +36,22 @@ export function clientErrorBody( err: unknown, status = httpStatusFromError( err
     });
 }
 
-export function errorLogFields( err: unknown ): Record<string, unknown>
+export type ErrorLogFields =
+{
+    name    : string
+    message : string
+    status  : number
+    data?   : unknown
+    stack?  : string
+}
+
+export function errorLogFields( err: unknown ): ErrorLogFields
 {
     const e = asErrorRecord( err );
 
     return {
-        name    : e.name,
-        message : e.message,
+        name    : typeof e.name === 'string' && e.name ? e.name : 'Error',
+        message : typeof e.message === 'string' ? e.message : '',
         status  : httpStatusFromError( err ),
         data    : e.data !== undefined ? redactSecrets( cloneJson( e.data ) ) : undefined,
         stack   : e.stack

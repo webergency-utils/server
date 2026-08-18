@@ -3,7 +3,7 @@
  */
 import { MiddlewareClass } from './core/types.js';
 import type { FileOptions, FileFieldOptions } from './helpers/file-upload.js';
-import type { Reviver } from './helpers/reviver.js';
+import type { Reviver as ReviverFn } from './helpers/reviver.js';
 
 export type { FileOptions, FileFieldOptions, FileHandler } from './helpers/file-upload.js';
 export { UploadedFile } from './helpers/file-upload.js';
@@ -293,7 +293,7 @@ export function Cors( config?: CorsOptions | string ): any { return () => {} }
  * Hierarchical: ServerOptions.reviver → Module.reviver → `@Reviver` on Controller → `@Reviver` on Endpoint.
  * `null` at a layer opts out of every parent.
  */
-export type { Reviver } from './helpers/reviver.js';
+export type Reviver = ReviverFn;
 export function Reviver( reviver: Reviver | null ): ClassDecorator & MethodDecorator
 {
     return () => {};
