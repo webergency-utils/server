@@ -98,6 +98,11 @@ export interface ServerOptions {
     trustProxy?       : string[]
     /** Passed to typechecker `parse` for JSON and query, and to untyped JSON / urlencoded bodies. Hierarchical with Module / `@Reviver`. `null` opts out. */
     reviver?          : Reviver | null
+    /**
+     * Whether to register process signal listeners (`SIGTERM`, `SIGINT`) for graceful shutdown.
+     * Defaults to `true`. Set to `false` in tests or custom process environments.
+     */
+    signals?          : boolean
 }
 
 export type ServerEvents = {
@@ -125,7 +130,9 @@ export class Server extends EventEmitter
     private bootstrapped = false;
     /** Per-Server metadata / DI registry (no process-global store). */
     public readonly registry = new ApplicationRegistry();
-    public logger          : Logger;
+    private sigtermListener? : () => void;
+    private sigintListener?  : () => void;
+    public logger            : Logger;
 
     public get isShuttingDown(): boolean 
     {
@@ -175,7 +182,11 @@ export class Server extends EventEmitter
         this.logger = this.options.logs
             ? ( options.logger || new ConsoleLogger())
             : new NoOpLogger();
-        this.setupSignals();
+
+        if( options.signals !== false )
+        {
+            this.setupSignals();
+        }
     }
 
     /**
@@ -321,10 +332,12 @@ export class Server extends EventEmitter
         this.events[event]?.forEach( h => h( ...args ));
     }
 
-    private setupSignals() 
+    private setupSignals(): void
     {
         const handleSignal = ( signal: string ) => 
         {
+            this.removeSignals();
+
             if( this.options.logs ) 
             {
                 this.logger.warn( `\nReceived ${signal}. Starting graceful shutdown...`, {
@@ -335,21 +348,50 @@ export class Server extends EventEmitter
             this.shutdown( signal );
         };
 
-        if( typeof process !== 'undefined' ) 
+        this.sigtermListener = () => handleSignal( 'SIGTERM' );
+        this.sigintListener = () => handleSignal( 'SIGINT' );
+
+        if( typeof process !== 'undefined' && typeof process.on === 'function' ) 
         {
-            process.on( 'SIGTERM', () => handleSignal( 'SIGTERM' ));
-            process.on( 'SIGINT', () => handleSignal( 'SIGINT' ));
+            process.on( 'SIGTERM', this.sigtermListener );
+            process.on( 'SIGINT', this.sigintListener );
         } 
-        else if(( globalThis as any ).Deno ) 
+        else if(( globalThis as any ).Deno?.addSignalListener ) 
         {
-            ( globalThis as any ).Deno.addSignalListener( 'SIGTERM', () => handleSignal( 'SIGTERM' ));
-            ( globalThis as any ).Deno.addSignalListener( 'SIGINT', () => handleSignal( 'SIGINT' ));
+            ( globalThis as any ).Deno.addSignalListener( 'SIGTERM', this.sigtermListener );
+            ( globalThis as any ).Deno.addSignalListener( 'SIGINT', this.sigintListener );
         }
+    }
+
+    private removeSignals(): void
+    {
+        if( typeof process !== 'undefined' && typeof process.off === 'function' ) 
+        {
+            if( this.sigtermListener ){ process.off( 'SIGTERM', this.sigtermListener ) }
+
+            if( this.sigintListener ){ process.off( 'SIGINT', this.sigintListener ) }
+        }
+        else if( typeof process !== 'undefined' && typeof process.removeListener === 'function' ) 
+        {
+            if( this.sigtermListener ){ process.removeListener( 'SIGTERM', this.sigtermListener ) }
+
+            if( this.sigintListener ){ process.removeListener( 'SIGINT', this.sigintListener ) }
+        }
+        else if(( globalThis as any ).Deno?.removeSignalListener ) 
+        {
+            if( this.sigtermListener ){ ( globalThis as any ).Deno.removeSignalListener( 'SIGTERM', this.sigtermListener ) }
+
+            if( this.sigintListener ){ ( globalThis as any ).Deno.removeSignalListener( 'SIGINT', this.sigintListener ) }
+        }
+        this.sigtermListener = undefined;
+        this.sigintListener = undefined;
     }
 
     public async shutdown( _signal?: string ) 
     {
-        if( this._isShuttingDown ) { return }
+        this.removeSignals();
+
+        if( this._isShuttingDown ){ return }
         this._isShuttingDown = true;
         this.listening = false;
 

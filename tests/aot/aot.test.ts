@@ -4,7 +4,7 @@ import { runWithRegistry } from '../helpers/testing.js';
 import { runAot } from './build.js';
 import { getControllerMeta, getInjectableMeta } from '../../src/core/symbols.js';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname( fileURLToPath( import.meta.url ));
@@ -12,7 +12,9 @@ const __dirname = path.dirname( fileURLToPath( import.meta.url ));
 async function loadAotHosts()
 {
     const compiled = runAot();
-    const mod = await import( `file://${compiled}?t=${Date.now()}` );
+    const targetUrl = pathToFileURL( compiled );
+    targetUrl.search = `t=${Date.now()}`;
+    const mod = await import( targetUrl.href );
     const classes = Object.values( mod ).filter( v => typeof v === 'function' ) as any[];
 
     return {

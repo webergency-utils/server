@@ -41,9 +41,10 @@ const injectableMeta = ( kind: string, token: string, scope?: number ): ts.Expre
 };
 
 interface NeededEmitLocals {
-    validators  : Set<string>
-    parsers     : Set<string>
-    serializers : Set<string>
+    validators           : Set<string>
+    parsers              : Set<string>
+    serializers          : Set<string>
+    hasBranchSerializers : boolean
 }
 
 /**
@@ -55,13 +56,14 @@ interface NeededEmitLocals {
 function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry, fileName: string ): NeededEmitLocals
 {
     const needed: NeededEmitLocals = {
-        validators  : new Set(),
-        parsers     : new Set(),
-        serializers : new Set()
+        validators           : new Set(),
+        parsers              : new Set(),
+        serializers          : new Set(),
+        hasBranchSerializers : false
     };
-    const queue: Array<{ kind : keyof NeededEmitLocals, hash : string }> = [];
+    const queue: Array<{ kind : 'validators' | 'parsers' | 'serializers', hash : string }> = [];
 
-    const request = ( kind: keyof NeededEmitLocals, hash: unknown ) =>
+    const request = ( kind: 'validators' | 'parsers' | 'serializers', hash: unknown ) =>
     {
         if( typeof hash !== 'string' || hash === '' || needed[kind].has( hash )) { return }
 
@@ -85,6 +87,18 @@ function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry,
         {
             if( key === 'validator' || key === 'returnTypeValidator' ) { request( 'validators', nested ) }
             else if( key === 'returnTypeSerializer' ) { request( 'serializers', nested ) }
+            else if( key === 'branchSerializers' && Array.isArray( nested ))
+            {
+                if( nested.length > 0 )
+                {
+                    needed.hasBranchSerializers = true;
+
+                    for( const hash of nested )
+                    {
+                        request( 'serializers', hash );
+                    }
+                }
+            }
             else if( key === 'parser' || key === 'parserQuery' ) { request( 'parsers', nested ) }
             else { scanMetadata( nested ) }
         }
@@ -121,7 +135,7 @@ function neededEmitLocals( endpoints: readonly any[], registry: ProjectRegistry,
 
 function hasAnyNeeded( needed: NeededEmitLocals ): boolean
 {
-    return needed.validators.size > 0 || needed.parsers.size > 0 || needed.serializers.size > 0;
+    return needed.validators.size > 0 || needed.parsers.size > 0 || needed.serializers.size > 0 || needed.hasBranchSerializers;
 }
 
 /** Emit locals are file-local `const __val_` / `__parse_` / `__ser_<hash>`, so imports come first. */
@@ -201,7 +215,87 @@ function emitLocalPrepends( registry: ProjectRegistry, needed: NeededEmitLocals,
     emitMap( registry.parsers, needed.parsers, '__parse_' );
     emitMap( registry.serializers, needed.serializers, '__ser_' );
 
+    if( needed.hasBranchSerializers && !hasVariableDeclaration( existing, '__withSer' ) && !hasVariableDeclaration( prepends, '__withSer' ))
+    {
+        prepends.push( createWithSerStatement());
+    }
+
     return prepends;
+}
+
+function createWithSerStatement(): ts.Statement
+{
+    const f = ts.factory;
+    const paramV = f.createParameterDeclaration( undefined, undefined, 'v' );
+    const paramS = f.createParameterDeclaration( undefined, undefined, 's' );
+
+    const condNull = f.createBinaryExpression( f.createIdentifier( 'v' ), ts.SyntaxKind.ExclamationEqualsEqualsToken, f.createNull());
+    const typeofV = f.createTypeOfExpression( f.createIdentifier( 'v' ));
+    const condObj = f.createBinaryExpression( typeofV, ts.SyntaxKind.EqualsEqualsEqualsToken, f.createStringLiteral( 'object' ));
+    const condOuter = f.createBinaryExpression( condNull, ts.SyntaxKind.AmpersandAmpersandToken, condObj );
+
+    const typeofThen = f.createTypeOfExpression( f.createPropertyAccessExpression( f.createIdentifier( 'v' ), 'then' ));
+    const condThen = f.createBinaryExpression( typeofThen, ts.SyntaxKind.EqualsEqualsEqualsToken, f.createStringLiteral( 'function' ));
+
+    const thenCall = f.createCallExpression(
+        f.createPropertyAccessExpression( f.createIdentifier( 'v' ), 'then' ),
+        undefined,
+        [
+            f.createArrowFunction(
+                undefined,
+                undefined,
+                [ f.createParameterDeclaration( undefined, undefined, 'r' ) ],
+                undefined,
+                undefined,
+                f.createCallExpression( f.createIdentifier( '__withSer' ), undefined, [ f.createIdentifier( 'r' ), f.createIdentifier( 's' ) ])
+            )
+        ]
+    );
+
+    const getWeakMap = f.createBinaryExpression(
+        f.createElementAccessExpression(
+            f.createIdentifier( 'globalThis' ),
+            f.createCallExpression(
+                f.createPropertyAccessExpression( f.createIdentifier( 'Symbol' ), 'for' ),
+                undefined,
+                [ f.createStringLiteral( 'webergency.server.branchSerializers' ) ]
+            )
+        ),
+        ts.SyntaxKind.BarBarEqualsToken,
+        f.createNewExpression( f.createIdentifier( 'WeakMap' ), undefined, [])
+    );
+
+    const setCall = f.createCallExpression(
+        f.createPropertyAccessExpression( f.createParenthesizedExpression( getWeakMap ), 'set' ),
+        undefined,
+        [ f.createIdentifier( 'v' ), f.createIdentifier( 's' ) ]
+    );
+    const commaExpr = f.createBinaryExpression( setCall, ts.SyntaxKind.CommaToken, f.createIdentifier( 'v' ));
+
+    const innerTernary = f.createConditionalExpression(
+        condThen,
+        f.createToken( ts.SyntaxKind.QuestionToken ),
+        thenCall,
+        f.createToken( ts.SyntaxKind.ColonToken ),
+        f.createParenthesizedExpression( commaExpr )
+    );
+
+    const outerTernary = f.createConditionalExpression(
+        condOuter,
+        f.createToken( ts.SyntaxKind.QuestionToken ),
+        innerTernary,
+        f.createToken( ts.SyntaxKind.ColonToken ),
+        f.createIdentifier( 'v' )
+    );
+
+    const arrowFn = f.createArrowFunction( undefined, undefined, [ paramV, paramS ], undefined, undefined, outerTernary );
+
+    return f.createVariableStatement(
+        undefined,
+        f.createVariableDeclarationList([
+            f.createVariableDeclaration( '__withSer', undefined, undefined, arrowFn )
+        ], ts.NodeFlags.Const )
+    );
 }
 
 /**
@@ -472,7 +566,7 @@ function findInsertionIndex( statements: readonly ts.Statement[]): number
                 {
                     const text = decl.name.text;
 
-                    if( text !== 'validators' && text !== 'MetadataStore' && text !== '__server_metadata_store' && !text.startsWith( '__val_' ) && !text.startsWith( '__parse_' ) && !text.startsWith( '__ser_' )) 
+                    if( text !== 'validators' && text !== '__withSer' && text !== 'MetadataStore' && text !== '__server_metadata_store' && !text.startsWith( '__val_' ) && !text.startsWith( '__parse_' ) && !text.startsWith( '__ser_' )) 
                     {
                         isPrependedVar = false;
                         break;

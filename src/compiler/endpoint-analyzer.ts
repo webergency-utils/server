@@ -148,12 +148,82 @@ function mergeConfigs( configs: any[]): any
     return merged;
 }
 
-/** The declared return type with `Promise<...>` peeled off. */
-function unwrapReturnType( member: ts.MethodDeclaration, checker: ts.TypeChecker ): { type : ts.Type, isPromise : boolean } | undefined
+/** Walk AST to collect all ReturnStatement nodes belonging directly to the node (excluding closures/nested functions). */
+function collectReturnStatements( node: ts.Node ): ts.ReturnStatement[]
+{
+    const returns: ts.ReturnStatement[] = [];
+
+    function visit( n: ts.Node ): void
+    {
+        if( ts.isFunctionDeclaration( n )
+            || ts.isFunctionExpression( n )
+            || ts.isArrowFunction( n )
+            || ts.isClassDeclaration( n )
+            || ts.isClassExpression( n ))
+        {
+            return;
+        }
+
+        if( ts.isReturnStatement( n ))
+        {
+            returns.push( n );
+        }
+
+        ts.forEachChild( n, visit );
+    }
+
+    visit( node );
+
+    return returns;
+}
+
+function unwrapTypeIfPromise( type: ts.Type, checker: ts.TypeChecker ): ts.Type
+{
+    if( type.symbol?.name === 'Promise' )
+    {
+        const typeArgs = checker.getTypeArguments( type as ts.TypeReference ) || ( type as ts.TypeReference ).typeArguments;
+
+        if( typeArgs && typeArgs[0])
+        {
+            return typeArgs[0];
+        }
+    }
+
+    return type;
+}
+
+function isNeverType( type: ts.Type, checker: ts.TypeChecker ): boolean
+{
+    const asString = checker.typeToString( type );
+
+    return asString === 'never' || ( type.flags & ts.TypeFlags.Never ) !== 0;
+}
+
+function isResponseType( type: ts.Type, checker: ts.TypeChecker ): boolean
+{
+    const name = type.aliasSymbol?.escapedName?.toString() || type.symbol?.name;
+
+    if( name === 'Response' || name === 'ServerResponse' || name === 'ReadableStream' )
+    {
+        return true;
+    }
+
+    const typeStr = checker.typeToString( type );
+
+    return typeStr === 'Response' || typeStr === 'ServerResponse' || typeStr === 'ReadableStream';
+}
+
+function isAnyOrUnknownType( type: ts.Type ): boolean
+{
+    return ( type.flags & ( ts.TypeFlags.Any | ts.TypeFlags.Unknown )) !== 0;
+}
+
+/** The declared return type with `Promise<...>` peeled off, with union synthesis for unannotated multi-branch returns. */
+export function unwrapReturnType( member: ts.MethodDeclaration, checker: ts.TypeChecker ): { type : ts.Type, isPromise : boolean } | undefined
 {
     const signature = checker.getSignatureFromDeclaration( member );
 
-    if( !signature ) { return undefined }
+    if( !signature ){ return undefined }
 
     let type = checker.getReturnTypeOfSignature( signature );
     let isPromise = false;
@@ -161,11 +231,41 @@ function unwrapReturnType( member: ts.MethodDeclaration, checker: ts.TypeChecker
     if( type.symbol?.name === 'Promise' )
     {
         isPromise = true;
-        const typeArgs = ( type as ts.TypeReference ).typeArguments;
+        const typeArgs = checker.getTypeArguments( type as ts.TypeReference ) || ( type as ts.TypeReference ).typeArguments;
 
         if( typeArgs && typeArgs[0])
         {
             type = typeArgs[0];
+        }
+    }
+    else if( member.modifiers?.some( m => m.kind === ts.SyntaxKind.AsyncKeyword ))
+    {
+        isPromise = true;
+    }
+
+    // Synthesize union from branch return expressions if unannotated, preventing subtype collapse (e.g. `{ foo: string } | {}` collapsing to `{}`)
+    if( !member.type && member.body )
+    {
+        const returnStatements = collectReturnStatements( member.body );
+        const branchTypes: ts.Type[] = [];
+
+        for( const stmt of returnStatements )
+        {
+            const branchType = stmt.expression
+                ? unwrapTypeIfPromise( checker.getTypeAtLocation( stmt.expression ), checker )
+                : (( checker as any ).getUndefinedType ? ( checker as any ).getUndefinedType() : checker.getVoidType());
+
+            if( !isNeverType( branchType, checker ) && !isResponseType( branchType, checker ))
+            {
+                branchTypes.push( branchType );
+            }
+        }
+
+        const uniqueHashes = new Set( branchTypes.map( t => generateHash( t, checker )));
+
+        if( uniqueHashes.size > 1 )
+        {
+            type = ( checker as any ).getUnionType( branchTypes );
         }
     }
 
@@ -236,6 +336,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
         return ( sourceFile: ts.SourceFile ) => 
         {
             const collector = new MetadataCollector( checker, registry, diagnostics );
+            const returnSerializerMap = new Map<ts.ReturnStatement, string>();
 
             // Check for invalid decorator usages
             const checkDecorators = ( node: ts.Node ) => 
@@ -434,6 +535,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
 
                                     let returnTypeValidatorHash = '';
                                     let returnTypeSerializerHash = '';
+                                    const branchSerializers: string[] = [];
                                     const returned = unwrapReturnType( member, checker );
 
                                     if( returned ) 
@@ -441,8 +543,8 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                         const returnType = returned.type;
                                         const returnTypeStr = checker.typeToString( returnType );
                                         const isVoid = isVoidType( returnType, checker );
-                                        const isResponse = returnTypeStr === 'Response' || returnType.symbol?.name === 'Response';
-                                        const isNever = returnTypeStr === 'never';
+                                        const isResponse = isResponseType( returnType, checker );
+                                        const isNever = isNeverType( returnType, checker );
 
                                         if( isSeo )
                                         {
@@ -484,6 +586,39 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                                     buildSerializer( typeForValidator, checker, registry.serializers, typeHash, { mode, format : 'json' });
                                                 }
                                                 returnTypeSerializerHash = serKey;
+
+                                                if( member.body && !isSse && returned.type.isUnion())
+                                                {
+                                                    const returnStmts = collectReturnStatements( member.body );
+
+                                                    for( const returnStmt of returnStmts )
+                                                    {
+                                                        if( returnStmt.expression )
+                                                        {
+                                                            const bType = unwrapTypeIfPromise( checker.getTypeAtLocation( returnStmt.expression ), checker );
+
+                                                            if( !isVoidType( bType, checker ) && !isResponseType( bType, checker ) && !isNeverType( bType, checker ) && !isAnyOrUnknownType( bType ))
+                                                            {
+                                                                const bHash = generateHash( bType, checker );
+
+                                                                if( !registry.validators.has( bHash ))
+                                                                {
+                                                                    buildValidator( bType, checker, registry.validators );
+                                                                }
+
+                                                                const bSerKey = `${bHash}_${mode}_json`;
+
+                                                                if( !registry.serializers.has( bSerKey ))
+                                                                {
+                                                                    buildSerializer( bType, checker, registry.serializers, bHash, { mode, format : 'json' });
+                                                                }
+
+                                                                branchSerializers.push( bSerKey );
+                                                                returnSerializerMap.set( returnStmt, bSerKey );
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -513,6 +648,11 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     if( returnTypeSerializerHash ) 
                                     {
                                         endpoint.returnTypeSerializer = returnTypeSerializerHash;
+                                    }
+
+                                    if( branchSerializers.length > 0 )
+                                    {
+                                        endpoint.branchSerializers = branchSerializers;
                                     }
 
 
@@ -603,6 +743,28 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
             {
                 const visit = ( node: ts.Node ): ts.Node => 
                 {
+                    if( ts.isReturnStatement( node ))
+                    {
+                        if( returnSerializerMap.has( node ))
+                        {
+                            const serKey = returnSerializerMap.get( node )!;
+
+                            if( node.expression )
+                            {
+                                const wrappedExpr = ts.factory.createCallExpression(
+                                    ts.factory.createIdentifier( '__withSer' ),
+                                    undefined,
+                                    [
+                                        ts.visitNode( node.expression, visit ) as ts.Expression,
+                                        ts.factory.createIdentifier( `__ser_${serKey}` )
+                                    ]
+                                );
+
+                                return ts.factory.updateReturnStatement( node, wrappedExpr );
+                            }
+                        }
+                    }
+
                     if( ts.isClassDeclaration( node )) 
                     {
                         const className = node.name?.text || 'Anonymous';
@@ -630,6 +792,8 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                 if( text.includes( 'Module' )) { hasModuleDec = true }
                             }
                         }
+
+                        const updatedMembers = node.members.map( member => ts.visitNode( member, visit ) as ts.ClassElement );
 
                         if( isController || isProvider || isModule || isGuard || isInterceptor || hasInjectableDec || hasControllerDec || hasModuleDec ) 
                         {
@@ -673,9 +837,18 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                 node.name,
                                 node.typeParameters,
                                 node.heritageClauses,
-                                ts.factory.createNodeArray([injectionsProperty, ...node.members])
+                                ts.factory.createNodeArray([ injectionsProperty, ...updatedMembers ])
                             );
                         }
+
+                        return ts.factory.updateClassDeclaration(
+                            node,
+                            node.modifiers,
+                            node.name,
+                            node.typeParameters,
+                            node.heritageClauses,
+                            ts.factory.createNodeArray( updatedMembers )
+                        );
                     }
 
                     return ts.visitEachChild( node, visit, context );

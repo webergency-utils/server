@@ -7,6 +7,7 @@ import { runAot } from './aot/build.js';
 import { getControllerMeta, getInjectableMeta } from '../src/core/symbols.js';
 import { defineController } from './helpers/testing.js';
 import net from 'node:net';
+import { pathToFileURL } from 'url';
 
 describe( 'Microservice Integration Tests', () =>
 {
@@ -16,7 +17,9 @@ describe( 'Microservice Integration Tests', () =>
     beforeAll( async () =>
     {
         const compiled = runAot();
-        const mod = await import( `file://${compiled}?t=${Date.now()}` );
+        const targetUrl = pathToFileURL( compiled );
+        targetUrl.search = `t=${Date.now()}`;
+        const mod = await import( targetUrl.href );
         const classes = Object.values( mod ).filter( v => typeof v === 'function' ) as any[];
         const controllers = classes.filter( c => getControllerMeta( c ));
         const guards = classes.filter( c => getInjectableMeta( c )?.kind === 'guard' );

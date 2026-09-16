@@ -81,7 +81,7 @@
   },
   "homepage": "https://github.com/webergency-utils/server#readme",
   "dependencies": {
-    "@webergency-utils/typechecker": "^0.8.0"
+    "@webergency-utils/typechecker": "^0.8.1"
   },
   "peerDependencies": {
     "typescript": "^5 || ^6"

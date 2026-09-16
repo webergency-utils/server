@@ -6,7 +6,7 @@ import { Router } from '../src/core/router.js';
 
 function setupServer( setup: ( registry: ApplicationRegistry ) => void, options: Record<string, unknown> = {}): Server
 {
-    const server = new Server({ port : 0, ...options });
+    const server = new Server({ port : 0, signals : false, ...options });
     runWithRegistry( server.registry, () => setup( server.registry ));
 
     return server;

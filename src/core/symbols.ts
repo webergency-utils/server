@@ -7,6 +7,7 @@ export const WEBERGENCY_MODULE = Symbol.for( 'webergency.server.module' );
 export const WEBERGENCY_INJECTABLE = Symbol.for( 'webergency.server.injectable' );
 export const WEBERGENCY_METADATA = Symbol.for( 'webergency.server.metadata' );
 export const WEBERGENCY_GUARD = Symbol.for( 'webergency.server.guard' );
+export const WEBERGENCY_BRANCH_SERIALIZERS = Symbol.for( 'webergency.server.branchSerializers' );
 
 export type ControllerAotMeta =
 {
@@ -106,4 +107,9 @@ export function ensureCustomMetadataBag( target: any ): Record<string | symbol, 
     target.__metadata__ = target[WEBERGENCY_METADATA];
 
     return target[WEBERGENCY_METADATA];
+}
+
+export function getBranchSerializers(): WeakMap<object, ( val: any ) => string>
+{
+    return (( globalThis as any )[WEBERGENCY_BRANCH_SERIALIZERS] ||= new WeakMap());
 }

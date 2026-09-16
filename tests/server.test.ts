@@ -7,7 +7,7 @@ import { expectString } from '@webergency-utils/typechecker/runtime';
 
 function setupServer( port: number, setup: ( registry: ApplicationRegistry ) => void, options: Record<string, any> = {}): Server
 {
-    const server = new Server({ port, ...options });
+    const server = new Server({ port, signals : false, ...options });
     runWithRegistry( server.registry, () => setup( server.registry ));
 
     return server;
@@ -933,7 +933,7 @@ describe( 'Server & Metadata', () =>
     {
         it( 'should emit request events', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const onReq = vi.fn();
             server.on( 'request', onReq );
             
@@ -943,7 +943,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle body caching', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const req: any = new Request( 'http://localhost/', {
                 method  : 'POST',
                 body    : JSON.stringify({ hello : 'world' }),
@@ -959,7 +959,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should return undefined for empty body instead of throwing JSON.parse error', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const req: any = new Request( 'http://localhost/', { method : 'POST' });
             
             const body = await ( server as any ).getBody( req );
@@ -969,7 +969,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should cache undefined body on repeated calls', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const req: any = new Request( 'http://localhost/', { method : 'POST' });
             
             const body1 = await ( server as any ).getBody( req );
@@ -981,7 +981,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should parse application/x-www-form-urlencoded bodies', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const req: any = new Request( 'http://localhost/', {
                 method  : 'POST',
                 body    : 'hello=world&count=2&count=3',
@@ -1193,7 +1193,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle router errors', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             vi.spyOn(( server as any ).router, 'lookup' ).mockImplementation(() => { throw new Error( 'Router Fail' ) });
             const res = await server.fetch( new Request( 'http://localhost/any' ));
             expect( res.status ).toBe( 500 );
@@ -1223,7 +1223,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should respect shutdown state', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             ( server as any ).isShuttingDown = true;
             const res = await server.fetch( new Request( 'http://localhost/any' ));
             expect( res.status ).toBe( 503 );
@@ -1275,7 +1275,7 @@ describe( 'Server & Metadata', () =>
 
         it.skipIf( !isNodeRuntime )( 'should detect different runtimes', () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             
             // Mock Bun
             ( globalThis as any ).Bun = {};
@@ -1350,7 +1350,7 @@ describe( 'Server & Metadata', () =>
             const mockCreateServer = vi.mocked( createServer ).mockReturnValue( mockServer as any );
 
             const tlsOptions = { key : 'key-data', cert : 'cert-data' };
-            const server = new Server({ port : 4430, tls : tlsOptions });
+            const server = new Server({ port : 4430, tls : tlsOptions, signals : false });
             await server.start();
 
             expect( mockCreateServer ).toHaveBeenCalledWith( tlsOptions, expect.any( Function ));
@@ -1362,7 +1362,7 @@ describe( 'Server & Metadata', () =>
             ( globalThis as any ).Bun = { serve : vi.fn() };
             try 
             {
-                const server = new Server({ port : 3001 });
+                const server = new Server({ port : 3001, signals : false });
                 await server.start();
                 expect(( globalThis as any ).Bun.serve ).toHaveBeenCalledWith({ port : 3001, fetch : expect.any( Function ) });
             }
@@ -1377,7 +1377,7 @@ describe( 'Server & Metadata', () =>
             ( globalThis as any ).Deno = { serve : vi.fn() };
             try 
             {
-                const server = new Server({ port : 3002 });
+                const server = new Server({ port : 3002, signals : false });
                 await server.start();
                 expect(( globalThis as any ).Deno.serve ).toHaveBeenCalledWith( expect.objectContaining({ port : 3002 }), expect.any( Function ));
             }
@@ -1413,7 +1413,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle raw body caching', async () => 
         {
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const body = new TextEncoder().encode( JSON.stringify({ a : 1 }));
             const req: any = new Request( 'http://localhost/', {
                 method : 'POST',
@@ -1481,7 +1481,7 @@ describe( 'Server & Metadata', () =>
         it( 'should remove event handlers with off()', async () =>
         {
             // Arrange
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const onReq = vi.fn();
             server.on( 'request', onReq );
             server.off( 'request', onReq );
@@ -1601,7 +1601,7 @@ describe( 'Server & Metadata', () =>
         it( 'should expose nodeServer via getter after setter creates an adapter', () =>
         {
             // Arrange
-            const server = new Server({ port : 3000 });
+            const server = new Server({ port : 3000, signals : false });
             const mockNode = { close : vi.fn() };
 
             // Act
@@ -1672,6 +1672,57 @@ describe( 'Server & Metadata', () =>
             );
             expect( shutdownSpy ).toHaveBeenCalledWith( 'SIGTERM' );
             onSpy.mockRestore();
+        });
+
+        it.skipIf( !isNodeRuntime )( 'should remove signal listeners when a signal is received', async () =>
+        {
+            // Arrange
+            const captured : Record<string, () => void> = {};
+            const onSpy = vi.spyOn( process, 'on' ).mockImplementation(( event : any, listener : any ) =>
+            {
+                if( event === 'SIGTERM' || event === 'SIGINT' )
+                {
+                    captured[event] = listener;
+                }
+
+                return process as any;
+            });
+            const offSpy = vi.spyOn( process, 'off' ).mockImplementation(() => process as any );
+            const exitSpy = vi.spyOn( process, 'exit' ).mockImplementation((() => {}) as any );
+            const server = new Server({ port : 3997, logs : false });
+            const shutdownSpy = vi.spyOn( server, 'shutdown' ).mockResolvedValue( undefined as any );
+
+            // Act
+            captured.SIGINT();
+
+            // Assert
+            expect( offSpy ).toHaveBeenCalledWith( 'SIGTERM', expect.any( Function ));
+            expect( offSpy ).toHaveBeenCalledWith( 'SIGINT', expect.any( Function ));
+            expect( shutdownSpy ).toHaveBeenCalledWith( 'SIGINT' );
+            expect( exitSpy ).not.toHaveBeenCalled();
+
+            onSpy.mockRestore();
+            offSpy.mockRestore();
+            exitSpy.mockRestore();
+        });
+
+        it.skipIf( !isNodeRuntime )( 'should remove signal listeners on programmatic shutdown', async () =>
+        {
+            // Arrange
+            const offSpy = vi.spyOn( process, 'off' ).mockImplementation(() => process as any );
+            const exitSpy = vi.spyOn( process, 'exit' ).mockImplementation((() => {}) as any );
+            const server = new Server({ port : 3996, logs : false });
+
+            // Act
+            await server.shutdown();
+
+            // Assert
+            expect( offSpy ).toHaveBeenCalledWith( 'SIGTERM', expect.any( Function ));
+            expect( offSpy ).toHaveBeenCalledWith( 'SIGINT', expect.any( Function ));
+            expect( exitSpy ).not.toHaveBeenCalled();
+
+            offSpy.mockRestore();
+            exitSpy.mockRestore();
         });
 
         it( 'should log CORS preflight and 404 when logs:true', async () =>
@@ -2130,7 +2181,7 @@ describe( 'Server & Metadata', () =>
             const ModuleB: any = legacyModule({ imports : [ModuleA] });
             setModuleMeta( ModuleA, { imports : [ModuleB] });
 
-            const server = new Server({ port : 3008, module : ModuleA });
+            const server = new Server({ port : 3008, module : ModuleA, signals : false });
             await expect( server.ensureReady()).resolves.toBeUndefined();
         });
 
@@ -2422,7 +2473,7 @@ describe( 'Server & Metadata', () =>
                 controllers : [HookController]
             });
 
-            const server = new Server({ port : 3015, module : HookModule });
+            const server = new Server({ port : 3015, module : HookModule, signals : false });
 
             // onInit runs during ensureReady / resolveAll (no listen needed)
             await server.ensureReady();

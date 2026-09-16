@@ -5,7 +5,7 @@ import { RequestReader, getEffectiveBodyContentType, isMultipartContentType } fr
 import { EndpointMetadata, ParamMetadata, AugmentedRequest, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
 import { ServerRequest, parseCookieHeader, resolveRequestFileOptions } from './server-request.js';
 import { SecurityOptions, type FileOptions } from '../decorators.js';
-import { getModuleMeta } from './symbols.js';
+import { getModuleMeta, getBranchSerializers } from './symbols.js';
 import { httpStatusFromError } from '../errors.js';
 import { clientErrorBody } from '../helpers/error-response.js';
 import { resolveClientIp } from '../helpers/client-ip.js';
@@ -582,11 +582,17 @@ export class RequestProcessor
                     return new Response( bodyStream, { headers });
                 }
 
-                if( typeof metadata.returnTypeSerializer === 'function' )
+                const branchSerializer = ( typeof result === 'object' && result !== null )
+                    ? getBranchSerializers().get( result )
+                    : undefined;
+                const activeSerializer = branchSerializer
+                    || ( typeof metadata.returnTypeSerializer === 'function' ? metadata.returnTypeSerializer : undefined );
+
+                if( typeof activeSerializer === 'function' )
                 {
                     try 
                     {
-                        const jsonStr = metadata.returnTypeSerializer( result );
+                        const jsonStr = activeSerializer( result );
 
                         return new Response( jsonStr, { headers : { 'Content-Type' : 'application/json' } });
                     }
@@ -594,7 +600,7 @@ export class RequestProcessor
                     {
                         if( e instanceof SerializationError ) 
                         {
-                            throw new Error( `Response validation failed: ${JSON.stringify([{ path : e.path, error : serializationErrorCode( e ) }])}` );
+                            throw new Error( `Response validation failed: ${JSON.stringify([{ path : e.path, error : serializationErrorCode( e ) }])}`, { cause : e });
                         }
 
                         throw e;
