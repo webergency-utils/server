@@ -128,8 +128,8 @@ describe( 'Decorators', () =>
         Global()( GlobalMod );
         Module({ providers : [] })( GlobalMod );
         Global()( GlobalMod );
-        OverrideProtect( class G {} );
-        OverrideIntercept( class I {} );
+        OverrideProtect( class G {});
+        OverrideIntercept( class I {});
         ConnectedSocket()({}, 'sock', 0 );
 
         // Assert
@@ -152,7 +152,7 @@ describe( 'Decorators', () =>
 
         // Act / Assert
         expect( Unuse( NotMiddleware )).toBe( NotMiddleware );
-        expect( Unuse( {}, 'm', desc )).toBe( desc );
+        expect( Unuse({}, 'm', desc )).toBe( desc );
         expect( typeof Unuse( RealMw )).toBe( 'function' );
         expect( Unuse()( Target )).toBe( Target );
     });

@@ -1,6 +1,7 @@
 import ts from 'typescript';
 import { ProjectRegistry, createRegistry } from './registry.js';
 import { transformer } from './endpoint-analyzer.js';
+import { isRelevantSourceClass } from './decorator-config.js';
 import { objectToExpression } from './manifest.js';
 import { detachGeneratedExpression } from './detach-generated.js';
 import { DiagnosticReporter, DiagnosticSink } from './diagnostics.js';
@@ -457,27 +458,13 @@ export default function compilerPlugin( program: ts.Program, pluginConfig?: unkn
     {
         return ( sourceFile: ts.SourceFile ) => 
         {
-            // 1. Check if the file has any class with a @Controller or @Injectable decorator
+            // 1. Check if the file has any class with a framework decorator or standalone Guard/Interceptor
             let shouldProcess = false;
             const checkNode = ( node: ts.Node ) => 
             {
-                if( ts.isClassDeclaration( node )) 
+                if( ts.isClassDeclaration( node ) && isRelevantSourceClass( node )) 
                 {
-                    const decorators = ts.getDecorators( node );
-
-                    if( decorators ) 
-                    {
-                        for( const d of decorators ) 
-                        {
-                            const text = d.expression.getText();
-
-                            if( text.includes( 'Controller' ) || text.includes( 'Injectable' ) || text.includes( 'Module' )) 
-                            {
-                                shouldProcess = true;
-                                break;
-                            }
-                        }
-                    }
+                    shouldProcess = true;
                 }
 
                 if( !shouldProcess ) 
@@ -566,7 +553,7 @@ function findInsertionIndex( statements: readonly ts.Statement[]): number
                 {
                     const text = decl.name.text;
 
-                    if( text !== 'validators' && text !== '__withSer' && text !== 'MetadataStore' && text !== '__server_metadata_store' && !text.startsWith( '__val_' ) && !text.startsWith( '__parse_' ) && !text.startsWith( '__ser_' )) 
+                    if( text !== 'validators' && text !== '__withSer' && text !== '__registry' && !text.startsWith( '__val_' ) && !text.startsWith( '__parse_' ) && !text.startsWith( '__ser_' )) 
                     {
                         isPrependedVar = false;
                         break;

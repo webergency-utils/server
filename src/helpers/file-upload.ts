@@ -12,7 +12,7 @@ import
     type MultipartValue,
     type MultipartFieldValue
 }
-from './multipart.js';
+    from './multipart.js';
 
 /** Called when a file part opens — typically `file.save(path)` or custom piping. */
 export type FileHandler = ( file: UploadedFile ) => void | Promise<void>;
@@ -48,6 +48,9 @@ export const DEFAULT_MAX_FIELDS = 128;
 export const DEFAULT_MAX_FILE_SIZE = '10mb';
 export const DEFAULT_MAX_FIELD_SIZE = '1mb';
 
+const DEFAULT_MAX_FILE_BYTES = parseSize( DEFAULT_MAX_FILE_SIZE );
+const DEFAULT_MAX_FIELD_BYTES = parseSize( DEFAULT_MAX_FIELD_SIZE );
+
 function resolveSize( value: string | number | undefined ): number | undefined
 {
     if( value === undefined ){ return undefined }
@@ -55,38 +58,91 @@ function resolveSize( value: string | number | undefined ): number | undefined
     return parseSize( value );
 }
 
+const singleFileCloneCache = new WeakMap<FileOptions, FileOptions>();
+const mergeFilePairCache = new WeakMap<FileOptions, WeakMap<FileOptions, FileOptions>>();
+
+function cloneSingleFileConfig( config: FileOptions ): FileOptions
+{
+    let cloned = singleFileCloneCache.get( config );
+
+    if( !cloned )
+    {
+        cloned = { ...config, fields : config.fields ? { ...config.fields } : undefined };
+        singleFileCloneCache.set( config, cloned );
+    }
+
+    return cloned;
+}
+
+function mergeTwoFileConfigs( base: FileOptions, override: FileOptions ): FileOptions
+{
+    let byOverride = mergeFilePairCache.get( base );
+
+    if( !byOverride )
+    {
+        byOverride = new WeakMap();
+        mergeFilePairCache.set( base, byOverride );
+    }
+
+    let merged = byOverride.get( override );
+
+    if( merged )
+    {
+        return merged;
+    }
+
+    let fields: Record<string, FileFieldOptions> | undefined;
+
+    if( base.fields || override.fields )
+    {
+        fields = {
+            ...( base.fields || {}),
+            ...( override.fields || {})
+        };
+
+        if( override.fields )
+        {
+            for( const key of Object.keys( override.fields ))
+            {
+                fields[key] = { ...( base.fields?.[key] || {}), ...( override.fields[key]) };
+            }
+        }
+
+        if( Object.keys( fields ).length === 0 )
+        {
+            fields = undefined;
+        }
+    }
+
+    merged = {
+        ...base,
+        ...override,
+        fields
+    };
+
+    byOverride.set( override, merged );
+
+    return merged;
+}
+
 export function mergeFileConfigs( configs: ( FileOptions | undefined )[]): FileOptions | undefined
 {
     let merged: FileOptions | undefined;
 
-    for( const config of configs )
+    for( let i = 0; i < configs.length; i++ )
     {
+        const config = configs[i];
+
         if( config === undefined ){ continue }
 
         if( !merged )
         {
-            merged = { ...config, fields : config.fields ? { ...config.fields } : undefined };
-
-            continue;
+            merged = cloneSingleFileConfig( config );
         }
-
-        const fields =
+        else
         {
-            ...( merged.fields || {}),
-            ...( config.fields || {})
-        };
-
-        for( const key of Object.keys( config.fields || {}))
-        {
-            fields[key] = { ...( merged.fields?.[key] || {}), ...( config.fields![key]) };
+            merged = mergeTwoFileConfigs( merged, config );
         }
-
-        merged =
-        {
-            ...merged,
-            ...config,
-            fields : Object.keys( fields ).length ? fields : undefined
-        };
     }
 
     return merged;
@@ -142,13 +198,31 @@ async function resolveDiskPath( options: FileFieldOptions, file: UploadedFile ):
     return assertPathInsideRoot( destReal, join( destReal, sanitizeFilename( name )));
 }
 
+const EMPTY_FIELD_OPTIONS: FileFieldOptions = {};
+const resolvedFieldOptionsCache = new WeakMap<FileOptions, Map<string, FileFieldOptions>>();
+
 export function resolveFieldOptions( options: FileOptions | undefined, field: string ): FileFieldOptions
 {
-    if( !options ){ return {} }
+    if( !options ){ return EMPTY_FIELD_OPTIONS }
 
-    const { fields, ...base } = options;
+    let byField = resolvedFieldOptionsCache.get( options );
 
-    return { ...base, ...( fields?.[field] || {}) };
+    if( !byField )
+    {
+        byField = new Map();
+        resolvedFieldOptionsCache.set( options, byField );
+    }
+
+    let resolved = byField.get( field );
+
+    if( !resolved )
+    {
+        const { fields, ...base } = options;
+        resolved = { ...base, ...( fields?.[field] || {}) };
+        byField.set( field, resolved );
+    }
+
+    return resolved;
 }
 
 export async function openFileStorage( file: UploadedFile, fieldOptions: FileFieldOptions )
@@ -190,6 +264,66 @@ export async function openFileStorage( file: UploadedFile, fieldOptions: FileFie
     // memory: default buffering on UploadedFile
 }
 
+interface CompiledFileUploadPlan
+{
+    baseMax        : number
+    loosestFileMax : number
+    maxFiles       : number
+    maxFields      : number
+    maxFieldSize   : number
+    maxTotalSize   : number | undefined
+}
+
+const DEFAULT_UPLOAD_PLAN: CompiledFileUploadPlan = {
+    baseMax        : DEFAULT_MAX_FILE_BYTES,
+    loosestFileMax : DEFAULT_MAX_FILE_BYTES,
+    maxFiles       : DEFAULT_MAX_FILES,
+    maxFields      : DEFAULT_MAX_FIELDS,
+    maxFieldSize   : DEFAULT_MAX_FIELD_BYTES,
+    maxTotalSize   : undefined
+};
+
+const compiledUploadPlanCache = new WeakMap<FileOptions, CompiledFileUploadPlan>();
+
+function getCompiledUploadPlan( options?: FileOptions ): CompiledFileUploadPlan
+{
+    if( !options ){ return DEFAULT_UPLOAD_PLAN }
+
+    let plan = compiledUploadPlanCache.get( options );
+
+    if( !plan )
+    {
+        const baseMax = resolveSize( options.maxFileSize ) ?? DEFAULT_MAX_FILE_BYTES;
+        let loosestFileMax = baseMax;
+
+        if( options.fields )
+        {
+            for( const field of Object.values( options.fields ))
+            {
+                const fieldMax = resolveSize( field.maxFileSize );
+
+                if( fieldMax !== undefined && fieldMax > loosestFileMax )
+                {
+                    loosestFileMax = fieldMax;
+                }
+            }
+        }
+
+        plan = {
+            baseMax,
+            loosestFileMax,
+            maxFiles     : options.maxFiles ?? DEFAULT_MAX_FILES,
+            maxFields    : options.maxFields ?? DEFAULT_MAX_FIELDS,
+            maxFieldSize : resolveSize( options.maxFieldSize ) ?? DEFAULT_MAX_FIELD_BYTES,
+            maxTotalSize : resolveSize( options.maxTotalSize )
+        };
+
+        compiledUploadPlanCache.set( options, plan );
+    }
+
+    return plan;
+}
+
 /**
  * Parse multipart with hierarchical file options.
  * Applies safe defaults for file/field counts and sizes when omitted.
@@ -202,34 +336,20 @@ export async function processMultipartUpload(
     signal?: AbortSignal
 ): Promise<MultipartParseResult>
 {
-    const baseMax = resolveSize( options?.maxFileSize ) ?? parseSize( DEFAULT_MAX_FILE_SIZE );
-    let loosestFileMax = baseMax;
-
-    if( options?.fields )
-    {
-        for( const field of Object.values( options.fields ))
-        {
-            const fieldMax = resolveSize( field.maxFileSize );
-
-            if( fieldMax !== undefined )
-            {
-                loosestFileMax = Math.max( loosestFileMax, fieldMax );
-            }
-        }
-    }
+    const plan = getCompiledUploadPlan( options );
 
     const multipartOptions: MultipartParseOptions =
     {
-        maxFileSize  : loosestFileMax,
-        maxFiles     : options?.maxFiles ?? DEFAULT_MAX_FILES,
-        maxFields    : options?.maxFields ?? DEFAULT_MAX_FIELDS,
-        maxFieldSize : resolveSize( options?.maxFieldSize ) ?? parseSize( DEFAULT_MAX_FIELD_SIZE ),
-        maxTotalSize : resolveSize( options?.maxTotalSize ) ?? maxTotalFallback,
+        maxFileSize  : plan.loosestFileMax,
+        maxFiles     : plan.maxFiles,
+        maxFields    : plan.maxFields,
+        maxFieldSize : plan.maxFieldSize,
+        maxTotalSize : plan.maxTotalSize ?? maxTotalFallback,
         signal,
         onFile       : async ( file ) =>
         {
             const fieldOptions = resolveFieldOptions( options, file.field );
-            const fieldMax = resolveSize( fieldOptions.maxFileSize ) ?? baseMax;
+            const fieldMax = resolveSize( fieldOptions.maxFileSize ) ?? plan.baseMax;
             file.setMaxSize( fieldMax );
             await openFileStorage( file, fieldOptions );
         }

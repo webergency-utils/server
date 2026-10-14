@@ -8,7 +8,7 @@ import
     extractMultipartBoundary,
     clearHeaderValueCache
 }
-from '../src/helpers/http-header-parse.js';
+    from '../src/helpers/http-header-parse.js';
 
 describe( 'http-header-parse', () =>
 {

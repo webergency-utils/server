@@ -28,7 +28,7 @@ describe( 'clientErrorBody', () =>
     {
         const err = new ForbiddenError( 'queued', { code : 'approvalRequired', stack : 'Error: leaked' });
 
-        expect( clientErrorBody( err, 403 ) ).toEqual({
+        expect( clientErrorBody( err, 403 )).toEqual({
             code : 'approvalRequired'
         });
     });
@@ -37,7 +37,7 @@ describe( 'clientErrorBody', () =>
     {
         const err = new InternalServerError( 'boom', { password : 'secret', debug : { sql : 'select 1' }, stack : 'x' });
 
-        expect( clientErrorBody( err, 500 ) ).toEqual({
+        expect( clientErrorBody( err, 500 )).toEqual({
             password : REDACTED
         });
     });
@@ -53,6 +53,6 @@ describe( 'errorLogFields', () =>
         expect( fields.message ).toBe( 'boom' );
         expect( fields.status ).toBe( 500 );
         expect( fields.data ).toEqual({ password : REDACTED });
-        expect( fields.stack ).toEqual( expect.any( String ) );
+        expect( fields.stack ).toEqual( expect.any( String ));
     });
 });

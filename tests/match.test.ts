@@ -30,7 +30,7 @@ describe( 'path match helpers', () =>
             const names = data.tokens
                 .flatMap( t => Array.isArray( t ) ? t : [t])
                 .filter( t => typeof t === 'object' && t && 'name' in t )
-                .map( t => ( t as { name: string }).name );
+                .map( t => ( t as { name : string }).name );
 
             // Assert
             expect( names ).toContain( 'name' );
@@ -162,7 +162,7 @@ describe( 'path match helpers', () =>
             const toPath = pathCompiler( '/users/:id' );
 
             // Act / Assert
-            expect( () => toPath({})).toThrow( /Missing parameters/ );
+            expect(() => toPath({})).toThrow( /Missing parameters/ );
         });
 
         it( 'should accept TokenData input', () =>
@@ -259,13 +259,13 @@ describe( 'path match helpers', () =>
         it( 'should throw PathError for unsafe params and malformed tokens', () =>
         {
             // Arrange / Act / Assert
-            expect( () => pathToRE( '/:a:b' )).toThrow( PathError );
-            expect( () => pathToRE( '/x/(unterminated' )).toThrow( PathError );
-            expect( () => pathToRE( '/x/:' )).toThrow( PathError );
-            expect( () => pathToRE( '/:"unterminated' )).toThrow( PathError );
-            expect( () => pathToRE( '/x/{unterminated' )).toThrow( PathError );
-            expect( () => pathToRE( '/:id(\\d' )).toThrow( PathError );
-            expect( () => pathToRE( '/:id(\\' )).toThrow( PathError );
+            expect(() => pathToRE( '/:a:b' )).toThrow( PathError );
+            expect(() => pathToRE( '/x/(unterminated' )).toThrow( PathError );
+            expect(() => pathToRE( '/x/:' )).toThrow( PathError );
+            expect(() => pathToRE( '/:"unterminated' )).toThrow( PathError );
+            expect(() => pathToRE( '/x/{unterminated' )).toThrow( PathError );
+            expect(() => pathToRE( '/:id(\\d' )).toThrow( PathError );
+            expect(() => pathToRE( '/:id(\\' )).toThrow( PathError );
         });
 
         it( 'should support custom delimiters and nested path arrays', () =>
@@ -301,10 +301,10 @@ describe( 'path match helpers', () =>
             expect( posts({})).toBe( '/posts' );
             expect( posts({ slug : 'x' })).toBe( '/posts/x' );
             expect( files({ path : [ 'a', 'b' ] })).toBe( '/files/a/b' );
-            expect( () => files({})).toThrow( /path/ );
-            expect( () => files({ path : [] })).toThrow( TypeError );
-            expect( () => files({ path : [ 1 as any ] })).toThrow( TypeError );
-            expect( () => id({ id : 1 as any })).toThrow( TypeError );
+            expect(() => files({})).toThrow( /path/ );
+            expect(() => files({ path : [] })).toThrow( TypeError );
+            expect(() => files({ path : [ 1 as any ] })).toThrow( TypeError );
+            expect(() => id({ id : 1 as any })).toThrow( TypeError );
             expect( pathMatcher( '/a..:ext', { delimiter : '..' })( '/a..md' )).toEqual({
                 path   : '/a..md',
                 params : { ext : 'md' }

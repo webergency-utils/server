@@ -9,14 +9,14 @@ import {
 import type { EndpointMetadata } from './types.js';
 
 export type BootstrapOptions =
-{
-    module?        : any | any[]
-    controllers?   : any[]
-    providers?     : any[]
-    guards?        : any[]
-    interceptors?  : any[]
-    responseMode?  : 'strict' | 'relaxed' | 'strip'
-};
+    {
+        module?       : any | any[]
+        controllers?  : any[]
+        providers?    : any[]
+        guards?       : any[]
+        interceptors? : any[]
+        responseMode? : 'strict' | 'relaxed' | 'strip'
+    };
 
 /**
  * Walk the module/controller graph, ingest Symbol.for AOT meta into the registry.
@@ -126,8 +126,8 @@ function collectModule(
 
     const meta =
     {
-        ...( baseMeta || {} ),
-        ...( dynamicExtra || {} ),
+        ...( baseMeta || {}),
+        ...( dynamicExtra || {}),
         global : !!( baseMeta?.global || moduleClass.__isGlobal__ || dynamicExtra?.global )
     };
 
@@ -203,7 +203,7 @@ function collectModule(
     return moduleInstance;
 }
 
-function resolveProviderToken( provider: any ): { token: string, actual: any }
+function resolveProviderToken( provider: any ): { token : string, actual : any }
 {
     if( provider && typeof provider === 'object' && 'token' in provider )
     {
@@ -354,14 +354,14 @@ function ingestControllerHost(
 function registerEndpointDef( registry: ApplicationRegistry, controllerName: string, ep: EndpointDefinition )
 {
     const metadata: EndpointMetadata =
-    {
-        ...ep,
-        controller : controllerName,
-        params     : ep.params || [],
-        guards     : ep.guards || [],
-        interceptors : ep.interceptors || [],
-        meta       : ep.meta || {}
-    } as EndpointMetadata;
+        {
+            ...ep,
+            controller   : controllerName,
+            params       : ep.params || [],
+            guards       : ep.guards || [],
+            interceptors : ep.interceptors || [],
+            meta         : ep.meta || {}
+        } as EndpointMetadata;
 
     registry.registerEndpoint( metadata );
 }

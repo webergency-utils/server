@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, tlsMaterialToString, attachClientCert } from '../helpers/peer-cert.js';
 import { NodeTlsCompat } from './node-tls-compat.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
-import { upgradeQuery } from './ws-upgrade.js';
+import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 
 export class DenoAdapter implements ServerAdapter
 {
@@ -168,18 +168,11 @@ class DenoServerWebSocket
 
         this.socket.addEventListener( 'message', ( e: any ) =>
         {
-            const maxPayload = this.wsOptions?.maxPayload;
-
-            if( maxPayload !== undefined )
+            if( isWsPayloadTooLarge( e.data, this.wsOptions?.maxPayload ))
             {
-                const len = typeof e.data === 'string' ? new TextEncoder().encode( e.data ).length : ( e.data.byteLength !== undefined ? e.data.byteLength : e.data.length || 0 );
+                this.close( 1009, 'Message Too Big' );
 
-                if( len > maxPayload )
-                {
-                    this.close( 1009, 'Message Too Big' );
-
-                    return;
-                }
+                return;
             }
             this.emitter.emit( 'message', e.data );
         });

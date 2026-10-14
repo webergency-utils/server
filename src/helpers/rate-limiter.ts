@@ -31,23 +31,36 @@ interface Bucket {
     prevCount   : number
 }
 
+const windowCache = new Map<string, number>();
+
 export function parseWindow( window: string | number | undefined ): number
 {
     if( typeof window === 'number' ){ return window }
 
     if( typeof window !== 'string' ){ return DEFAULT_WINDOW_MS }
 
+    const cached = windowCache.get( window );
+
+    if( cached !== undefined ){ return cached }
+
     const match = window.trim().toLowerCase().match( /^(\d+)(s|m|h)$/ );
 
-    if( !match ){ return DEFAULT_WINDOW_MS }
+    if( !match )
+    {
+        windowCache.set( window, DEFAULT_WINDOW_MS );
+
+        return DEFAULT_WINDOW_MS;
+    }
 
     const value = parseInt( match[1], 10 );
+    let ms = value * 3600000;
 
-    if( match[2] === 's' ){ return value * 1000 }
+    if( match[2] === 's' ){ ms = value * 1000 }
+    else if( match[2] === 'm' ){ ms = value * 60000 }
 
-    if( match[2] === 'm' ){ return value * 60000 }
+    windowCache.set( window, ms );
 
-    return value * 3600000;
+    return ms;
 }
 
 /**
@@ -78,8 +91,17 @@ export class RateLimiter
         }
 
         const storeKey = `${path}:${ip}`;
-        const bucket = this.rateLimitStore.get( storeKey ) ?? { windowStart : now, windowMs, count : 0, prevCount : 0 };
-        bucket.windowMs = windowMs;
+        let bucket = this.rateLimitStore.get( storeKey );
+        const isExisting = bucket !== undefined;
+
+        if( !bucket )
+        {
+            bucket = { windowStart : now, windowMs, count : 0, prevCount : 0 };
+        }
+        else
+        {
+            bucket.windowMs = windowMs;
+        }
 
         this.rollWindow( bucket, now, windowMs );
 
@@ -89,10 +111,21 @@ export class RateLimiter
 
         if( allowed ){ bucket.count++ }
 
-        // Re-insert so Map iteration order stays least-recently-used first.
-        this.rateLimitStore.delete( storeKey );
-        this.rateLimitStore.set( storeKey, bucket );
-        this.evictOverflow();
+        if( !isExisting )
+        {
+            this.rateLimitStore.set( storeKey, bucket );
+
+            if( this.rateLimitStore.size > this.maxKeys )
+            {
+                this.evictOverflow();
+            }
+        }
+        else if( this.rateLimitStore.size > ( this.maxKeys >>> 1 ))
+        {
+            // Refresh LRU position when approaching capacity.
+            this.rateLimitStore.delete( storeKey );
+            this.rateLimitStore.set( storeKey, bucket );
+        }
 
         return {
             allowed,

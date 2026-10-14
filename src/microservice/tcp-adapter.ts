@@ -1,8 +1,8 @@
 import { MicroserviceAdapter, MessageConnection, MicroserviceNoReply } from './adapter.js';
+import { NdjsonLineFramer, TCP_MAX_LINE_BYTES } from './ndjson-framer.js';
 import net from 'node:net';
 
-/** Max incomplete newline-delimited JSON line held in memory per socket. */
-export const TCP_MAX_LINE_BYTES = 1024 * 1024;
+export { TCP_MAX_LINE_BYTES };
 
 export class TcpMessageAdapter implements MicroserviceAdapter 
 {
@@ -16,30 +16,21 @@ export class TcpMessageAdapter implements MicroserviceAdapter
         this.server = net.createServer(( socket ) => 
         {
             this.connections.add( socket );
-            let buffer = '';
+            const framer = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
 
             socket.on( 'data', async ( chunk ) => 
             {
-                buffer += chunk.toString( 'utf8' );
-                let index;
+                const { lines, oversized } = framer.push( chunk );
 
-                while(( index = buffer.indexOf( '\n' )) !== -1 ) 
+                if( oversized )
                 {
-                    const rawLine = buffer.substring( 0, index );
+                    socket.destroy();
 
-                    if( Buffer.byteLength( rawLine, 'utf8' ) > TCP_MAX_LINE_BYTES )
-                    {
-                        buffer = '';
-                        socket.destroy();
+                    return;
+                }
 
-                        return;
-                    }
-
-                    const line = rawLine.trim();
-                    buffer = buffer.substring( index + 1 );
-
-                    if( !line ) { continue }
-
+                for( const line of lines )
+                {
                     let id: string | undefined;
 
                     try 
@@ -92,12 +83,6 @@ export class TcpMessageAdapter implements MicroserviceAdapter
                             // ignore write failures on a broken socket
                         }
                     }
-                }
-
-                if( Buffer.byteLength( buffer, 'utf8' ) > TCP_MAX_LINE_BYTES )
-                {
-                    buffer = '';
-                    socket.destroy();
                 }
             });
 

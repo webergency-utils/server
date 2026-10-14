@@ -9,12 +9,12 @@ export const TYPECHECKER_TRANSFORM = '@webergency-utils/typechecker/transformer'
 export const SERVER_TRANSFORM = '@webergency-utils/server/transformer';
 
 export type TsPatchPlugin =
-{
-    name?               : string
-    transform?          : string
-    after?              : boolean
-    afterDeclarations?  : boolean
-};
+    {
+        name?              : string
+        transform?         : string
+        after?             : boolean
+        afterDeclarations? : boolean
+    };
 
 /**
  * `webergency-tsc` is a tsc wrapper, not ts-patch — stock tsc ignores `transform`
@@ -25,7 +25,7 @@ export function collectBeforePluginIds( plugins: readonly TsPatchPlugin[] | unde
 {
     const listed: string[] = [];
 
-    for( const plugin of plugins ?? [] )
+    for( const plugin of plugins ?? [])
     {
         if( !plugin.transform ){ continue }
 
@@ -69,7 +69,7 @@ export function createBeforeTransformers(
     return factories;
 }
 
-type TransformerFactoryFn = ( program: ts.Program, ...rest: unknown[] ) => unknown;
+type TransformerFactoryFn = ( program: ts.Program, ...rest: unknown[]) => unknown;
 
 function loadTransformerFactory( id: string, require: NodeRequire ): TransformerFactoryFn
 {
@@ -78,7 +78,7 @@ function loadTransformerFactory( id: string, require: NodeRequire ): Transformer
         return typecheckerTransformer as TransformerFactoryFn;
     }
 
-    const mod = require( id ) as { default?: TransformerFactoryFn } | TransformerFactoryFn;
+    const mod = require( id ) as { default? : TransformerFactoryFn } | TransformerFactoryFn;
 
     if( typeof mod === 'function' )
     {
@@ -97,7 +97,7 @@ export function readTsPatchPlugins( compilerOptions: unknown ): TsPatchPlugin[]
 {
     if( !compilerOptions || typeof compilerOptions !== 'object' ){ return [] }
 
-    const plugins = ( compilerOptions as { plugins?: unknown }).plugins;
+    const plugins = ( compilerOptions as { plugins? : unknown }).plugins;
 
     if( !Array.isArray( plugins )){ return [] }
 

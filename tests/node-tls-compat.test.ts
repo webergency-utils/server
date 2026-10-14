@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockListen = vi.fn( async () => {} );
+const mockListen = vi.fn( async () => {});
 const mockUpgrade = vi.fn(() => new Response( 'upgraded' ));
-const mockClose = vi.fn( async () => {} );
+const mockClose = vi.fn( async () => {});
 const mockCloseAllConnections = vi.fn();
 
 vi.mock( '../src/adapters/node-adapter.js', () =>

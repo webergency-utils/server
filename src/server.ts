@@ -1,15 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { Router, RouteMatch } from './core/router.js';
-import { joinQueryStrings, queryStringFromBag } from './helpers/query-string.js';
+import { joinQueryStrings, pathnameFromUrl, queryStringFromBag } from './helpers/query-string.js';
 import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/registry.js';
 import { bootstrapRegistry } from './core/bootstrap.js';
 import { EndpointMetadata, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
 import { ServerRequest } from './core/server-request.js';
 import { Context } from './core/context.js';
-import { DIContainer } from './core/container.js';
 import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
 import { handleCors, isPreflight } from './helpers/cors.js';
-import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
+import { mergeSecurityConfigs, generateSecurityHeaders, getAllowedContentTypesSet } from './helpers/security.js';
 
 import { RequestProcessor } from './core/request-processor.js';
 import { invokeGuards } from './core/guard-runner.js';
@@ -21,6 +20,7 @@ import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
 import { getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
+import { compileTrustProxy, type CompiledTrustProxy } from './helpers/client-ip.js';
 import { httpStatusFromError } from './errors.js';
 import { clientErrorBody, errorLogFields } from './helpers/error-response.js';
 import { resolveRequestId, REQUEST_ID_HEADER } from './helpers/request-id.js';
@@ -123,17 +123,20 @@ export class Server extends EventEmitter
     /** Forward-only routes (`@Internal`). */
     private internalRouter = new Router();
     private activeRequests = 0;
-    private serverAdapter?   : ServerAdapter;
+    private serverAdapter?     : ServerAdapter;
     private _isShuttingDown = false;
     private listening = false;
     private rateLimiter = new RateLimiter();
-    private events           : { [K in keyof ServerEvents]?: Set<any> } = {};
+    private events             : { [K in keyof ServerEvents]?: Set<any> } = {};
     private bootstrapped = false;
     /** Per-Server metadata / DI registry (no process-global store). */
     public readonly registry = new ApplicationRegistry();
-    private sigtermListener? : () => void;
-    private sigintListener?  : () => void;
-    public logger            : Logger;
+    private sigtermListener?   : () => void;
+    private sigintListener?    : () => void;
+    private compiledTrustProxy : CompiledTrustProxy | null;
+    private hasSeoRoutes = false;
+    private baseSecurityConfig : SecurityOptions | undefined;
+    public logger              : Logger;
 
     public get isShuttingDown(): boolean 
     {
@@ -164,6 +167,8 @@ export class Server extends EventEmitter
         this.logger = this.options.logs
             ? ( options.logger || new ConsoleLogger())
             : new NoOpLogger();
+        this.compiledTrustProxy = compileTrustProxy( options.trustProxy );
+        this.baseSecurityConfig = mergeSecurityConfigs([ options.security ]);
 
         if( options.signals !== false )
         {
@@ -215,6 +220,7 @@ export class Server extends EventEmitter
                     }
 
                     seoKeys.add( key );
+                    this.hasSeoRoutes = true;
                     this.seoRouter.add( endpoint );
                 }
                 else if( endpoint.internal )
@@ -556,7 +562,7 @@ export class Server extends EventEmitter
             const timeoutMs = securityConfig.timeout;
             const controller = new AbortController();
             sreq.signal = controller.signal;
-            const timer = setTimeout(() => controller.abort(), timeoutMs );
+            let timer: ReturnType<typeof setTimeout> | undefined;
             const work = RequestProcessor.execute( metadata, sreq, securityConfig );
 
             try
@@ -565,25 +571,17 @@ export class Server extends EventEmitter
                     work,
                     new Promise<never>(( _, reject ) =>
                     {
-                        const fail = () =>
+                        timer = setTimeout(() =>
                         {
+                            controller.abort();
                             reject( Object.assign( new Error( `Request Timeout (${timeoutMs}ms)` ), { status : 408 }));
-                        };
-
-                        if( controller.signal.aborted )
-                        {
-                            fail();
-
-                            return;
-                        }
-
-                        controller.signal.addEventListener( 'abort', fail, { once : true });
+                        }, timeoutMs );
                     })
                 ]);
             }
             finally
             {
-                clearTimeout( timer );
+                if( timer !== undefined ) { clearTimeout( timer ) }
                 void work.catch(() => undefined );
             }
         }
@@ -629,7 +627,9 @@ export class Server extends EventEmitter
         sreq.routeFiles = match.metadata.files;
         sreq.forwardBody = target.body ? target.body : undefined;
 
-        const securityConfig = mergeSecurityConfigs([ this.options.security, match.metadata.security ]);
+        const securityConfig = match.metadata.security !== undefined
+            ? mergeSecurityConfigs([ this.baseSecurityConfig, match.metadata.security ])
+            : this.baseSecurityConfig;
 
         try
         {
@@ -670,7 +670,7 @@ export class Server extends EventEmitter
     {
         if( !this.options.health || request.method !== 'GET' ) { return null }
 
-        const url = new URL( request.url );
+        const pathname = pathnameFromUrl( request.url );
         const paths = typeof this.options.health === 'object'
             ? {
                 live  : this.options.health.path ?? '/health',
@@ -678,18 +678,23 @@ export class Server extends EventEmitter
             }
             : { live : '/health', ready : '/ready' };
 
+        if( pathname !== paths.live && pathname !== paths.ready )
+        {
+            return null;
+        }
+
         const requestId = resolveRequestId( request );
         const headers = {
             'Content-Type'      : 'application/json',
             [REQUEST_ID_HEADER] : requestId
         };
 
-        if( url.pathname === paths.live )
+        if( pathname === paths.live )
         {
             return new Response( JSON.stringify({ status : 'ok' }), { status : 200, headers });
         }
 
-        if( url.pathname === paths.ready )
+        if( pathname === paths.ready )
         {
             try
             {
@@ -724,91 +729,180 @@ export class Server extends EventEmitter
         return this.listening;
     }
 
-    private handleFetch = async ( request: Request ): Promise<Response> => 
+    /**
+     * Apply CORS, security, optional Allow, and `X-Request-Id` in one pass.
+     * Falls back to cloning the Response if its headers are immutable.
+     */
+    private finalizeResponse(
+        res: Response,
+        request: Request,
+        requestId: string,
+        corsConfig?: CorsOptions,
+        securityConfig?: SecurityOptions | boolean,
+        allowHeader?: string
+    ): Response
     {
-        this.internalEmit( 'request', request );
+        const corsHeaders = corsConfig ? handleCors( request, corsConfig ) : null;
+        const secHeaders = securityConfig !== undefined ? generateSecurityHeaders( securityConfig ) : null;
 
-        const requestId = resolveRequestId( request );
-    
-        // Some Response headers are immutable, so fall back to cloning the response.
-        // Always echo X-Request-Id last so correlation survives CORS/security merges.
-        const withHeaders = ( res: Response, headers: Record<string, string> ): Response => 
+        try
         {
-            const all = { ...headers, [REQUEST_ID_HEADER] : requestId };
-
-            try 
+            if( corsHeaders && !( corsHeaders instanceof Response ))
             {
-                for( const [ key, value ] of Object.entries( all )) 
+                for( const key in corsHeaders )
                 {
-                    res.headers.set( key, value );
+                    res.headers.set( key, corsHeaders[key]);
                 }
-
-                return res;
             }
-            catch 
-            {
-                const merged = new Headers( res.headers );
 
-                for( const [ key, value ] of Object.entries( all )) 
+            if( secHeaders )
+            {
+                for( const key in secHeaders )
                 {
-                    merged.set( key, value );
+                    res.headers.set( key, secHeaders[key]);
                 }
-
-                return new Response( res.body, {
-                    status     : res.status,
-                    statusText : res.statusText,
-                    headers    : merged
-                });
             }
-        };
 
-        const withRequestId = ( res: Response ): Response =>
-            withHeaders( res, {});
-
-        const applyCors = ( res: Response, config: any ): Response => 
-        {
-            if( !config ) { return res }
-            const corsHeaders = handleCors( request, config );
-
-            if( corsHeaders && !( corsHeaders instanceof Response )) 
+            if( allowHeader )
             {
-                return withHeaders( res, corsHeaders );
+                res.headers.set( 'Allow', allowHeader );
             }
+
+            res.headers.set( REQUEST_ID_HEADER, requestId );
 
             return res;
-        };
-
-        const applySecurityHeaders = ( res: Response, config: any ): Response => 
+        }
+        catch
         {
-            if( config === undefined ) { return res }
+            const merged = new Headers( res.headers );
 
-            return withHeaders( res, generateSecurityHeaders( config ));
-        };
+            if( corsHeaders && !( corsHeaders instanceof Response ))
+            {
+                for( const key in corsHeaders )
+                {
+                    merged.set( key, corsHeaders[key]);
+                }
+            }
+
+            if( secHeaders )
+            {
+                for( const key in secHeaders )
+                {
+                    merged.set( key, secHeaders[key]);
+                }
+            }
+
+            if( allowHeader )
+            {
+                merged.set( 'Allow', allowHeader );
+            }
+
+            merged.set( REQUEST_ID_HEADER, requestId );
+
+            return new Response( res.body, {
+                status     : res.status,
+                statusText : res.statusText,
+                headers    : merged
+            });
+        }
+    }
+
+    private enforceSecurityGates(
+        cfg: SecurityOptions | undefined,
+        request: Request,
+        sreq: ServerRequest,
+        method: string,
+        path: string
+    ): void
+    {
+        // Enforce allowedContentTypes (require a matching CT when a body is indicated)
+        if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
+        {
+            const contentType = getContentType( request );
+            const allowed = getAllowedContentTypesSet( cfg );
+
+            if( requestLikelyHasBody( request ))
+            {
+                if( !contentType || !allowed?.has( contentType ))
+                {
+                    throw Object.assign( new Error( `Unsupported Media Type: ${contentType || 'missing'}` ), { status : 415 });
+                }
+            }
+            else if( contentType && !allowed?.has( contentType ))
+            {
+                throw Object.assign( new Error( `Unsupported Media Type: ${contentType}` ), { status : 415 });
+            }
+        }
+
+        // Enforce rateLimit
+        if( cfg?.rateLimit ) 
+        {
+            const ip = sreq.ip;
+            const limit = this.rateLimiter.consume( ip, path, cfg.rateLimit );
+
+            if( !limit.allowed ) 
+            {
+                throw Object.assign( new Error( 'Too Many Requests' ), {
+                    status  : 429,
+                    headers : { 'Retry-After' : String( limit.retryAfter ) }
+                });
+            }
+        }
+    }
+
+    private logRequestEnd(
+        startTime: number,
+        method: string,
+        path: string,
+        status: number,
+        requestId: string,
+        note?: string
+    ): void
+    {
+        if( !this.options.logs ) { return }
+        const duration = Date.now() - startTime;
+        this.logger.info( `<-- ${method} ${path} - ${status}${note ? ' ' + note : ''} (${duration}ms)`, {
+            type : 'request_end',
+            method,
+            path,
+            status,
+            duration,
+            requestId
+        });
+    }
+
+    private handleFetch = async ( request: Request ): Promise<Response> => 
+    {
+        if( this.events.request?.size )
+        {
+            this.internalEmit( 'request', request );
+        }
+
+        const requestId = resolveRequestId( request );
 
         if( this.isShuttingDown ) 
         {
-            let res = new Response( 'Service Unavailable (Shutting Down)', { status : 503 });
-            res = applyCors( res, this.options.cors );
-            res = applySecurityHeaders( res, mergeSecurityConfigs([this.options.security]));
+            const res = new Response( 'Service Unavailable (Shutting Down)', { status : 503 });
 
-            return withRequestId( res );
+            return this.finalizeResponse( res, request, requestId, this.options.cors, this.baseSecurityConfig );
         }
 
         this.activeRequests++;
-        const startTime = Date.now();
+        const startTime = this.options.logs ? Date.now() : 0;
         const isUpgrade = request.headers.get( 'upgrade' )?.toLowerCase() === 'websocket';
         const method = isUpgrade ? 'WS' : request.method;
         const sreq = new ServerRequest( request, {
             requestId,
-            trustProxy    : this.options.trustProxy,
-            globalFiles   : this.options.files,
-            globalReviver : this.options.reviver
+            trustProxy         : this.options.trustProxy,
+            compiledTrustProxy : this.compiledTrustProxy,
+            globalFiles        : this.options.files,
+            globalReviver      : this.options.reviver
         });
         const path = sreq.path;
-        const rawSearch = sreq.queryString ? `?${sreq.queryString}` : '';
     
         if( this.options.logs ) 
         {
+            const rawSearch = sreq.queryString ? `?${sreq.queryString}` : '';
             this.logger.info( `--> ${method} ${path}${rawSearch}`, {
                 type : 'request_start',
                 method,
@@ -823,33 +917,22 @@ export class Server extends EventEmitter
         {
             // SEO group first (matchAll for void fallthrough), then public. Internal never
             // participates in external lookup.
-            const seoMatches = isUpgrade ? [] : this.seoRouter.matchAll( method, path );
+            const seoMatches = ( isUpgrade || !this.hasSeoRoutes ) ? [] : this.seoRouter.matchAll( method, path );
             const publicLookup = this.router.lookup( method, path );
-            const seoLookup = this.seoRouter.lookup( method, path );
-            const externalAllowed = this.externalAllowedMethods( path );
+            let cachedExternalAllowed: string[] | undefined;
+            const getExternalAllowed = (): string[] =>
+                cachedExternalAllowed ?? ( cachedExternalAllowed = this.externalAllowedMethods( path ));
 
             const match = seoMatches[0] || publicLookup.match;
             finalMatch = match || ( method === 'OPTIONS'
-                ? ( seoLookup.fallback || publicLookup.fallback )
+                ? (( this.hasSeoRoutes ? this.seoRouter.lookup( method, path ).fallback : null ) || publicLookup.fallback )
                 : null );
 
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
             const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
-            const securityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
-
-            const logOptions = ( status: number, note?: string ) =>
-            {
-                if( !this.options.logs ) { return }
-                const duration = Date.now() - startTime;
-                this.logger.info( `<-- ${method} ${path} - ${status}${note ? ' ' + note : ''} (${duration}ms)`, {
-                    type : 'request_end',
-                    method,
-                    path,
-                    status,
-                    duration,
-                    requestId
-                });
-            };
+            const securityConfig = routeSecurity !== undefined
+                ? mergeSecurityConfigs([ this.baseSecurityConfig, routeSecurity ])
+                : this.baseSecurityConfig;
 
             // A genuine CORS preflight is answered here, before guards run. Browsers omit
             // credentials on preflight, so dispatching it into a @Protect'ed route would
@@ -860,21 +943,21 @@ export class Server extends EventEmitter
 
                 if( corsRes instanceof Response ) 
                 {
-                    logOptions( 204, 'CORS Preflight' );
+                    this.logRequestEnd( startTime, method, path, 204, requestId, 'CORS Preflight' );
 
-                    return applySecurityHeaders( corsRes, securityConfig );
+                    return this.finalizeResponse( corsRes, request, requestId, undefined, securityConfig );
                 }
 
                 if( !finalMatch ) 
                 {
-                    logOptions( 404, 'Not Found' );
+                    this.logRequestEnd( startTime, method, path, 404, requestId, 'Not Found' );
 
-                    return applySecurityHeaders( new Response( 'Not Found', { status : 404 }), securityConfig );
+                    return this.finalizeResponse( new Response( 'Not Found', { status : 404 }), request, requestId, undefined, securityConfig );
                 }
 
-                logOptions( 204 );
+                this.logRequestEnd( startTime, method, path, 204, requestId );
 
-                return applySecurityHeaders( this.optionsResponse( path, externalAllowed ), securityConfig );
+                return this.finalizeResponse( this.optionsResponse( path, getExternalAllowed()), request, requestId, undefined, securityConfig );
             }
 
             // Non-preflight OPTIONS falls through to an @Options / @All handler when one
@@ -883,43 +966,32 @@ export class Server extends EventEmitter
             {
                 if( !finalMatch ) 
                 {
-                    logOptions( 404, 'Not Found' );
+                    this.logRequestEnd( startTime, method, path, 404, requestId, 'Not Found' );
 
-                    return applySecurityHeaders( new Response( 'Not Found', { status : 404 }), securityConfig );
+                    return this.finalizeResponse( new Response( 'Not Found', { status : 404 }), request, requestId, undefined, securityConfig );
                 }
 
-                logOptions( 204 );
+                this.logRequestEnd( startTime, method, path, 204, requestId );
 
-                return applyCors( applySecurityHeaders( this.optionsResponse( path, externalAllowed ), securityConfig ), corsConfig );
+                return this.finalizeResponse( this.optionsResponse( path, getExternalAllowed()), request, requestId, corsConfig, securityConfig );
             }
 
             if( !finalMatch && seoMatches.length === 0 ) 
             {
                 // The path exists under other verbs, so this is 405 + Allow, not 404. An
                 // upgrade request is exempt: WS is a transport, not an advertised method.
+                const externalAllowed = isUpgrade ? [] : getExternalAllowed();
                 const wrongMethod = !isUpgrade && externalAllowed.length > 0;
                 const status = wrongMethod ? 405 : 404;
 
-                if( this.options.logs ) 
-                {
-                    const duration = Date.now() - startTime;
-                    this.logger.info( `<-- ${method} ${path} - ${status} ${wrongMethod ? 'Method Not Allowed' : 'Not Found'} (${duration}ms)`, {
-                        type : 'request_end',
-                        method,
-                        path,
-                        status,
-                        duration,
-                        requestId
-                    });
-                }
-                let res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
+                this.logRequestEnd( startTime, method, path, status, requestId, wrongMethod ? 'Method Not Allowed' : 'Not Found' );
+
+                const res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
                     status,
                     headers : wrongMethod ? { Allow : externalAllowed.join( ', ' ) } : undefined
                 });
-                res = applyCors( res, this.options.cors );
-                res = applySecurityHeaders( res, mergeSecurityConfigs([this.options.security]));
 
-                return withRequestId( res );
+                return this.finalizeResponse( res, request, requestId, this.options.cors, this.baseSecurityConfig );
             }
 
             if( isUpgrade ) 
@@ -929,31 +1001,32 @@ export class Server extends EventEmitter
 
                 if( !wsMatch )
                 {
-                    logOptions( 404, 'Not Found' );
+                    this.logRequestEnd( startTime, method, path, 404, requestId, 'Not Found' );
 
-                    return withRequestId( new Response( 'Not Found', { status : 404 }));
+                    return this.finalizeResponse( new Response( 'Not Found', { status : 404 }), request, requestId );
                 }
 
                 finalMatch = wsMatch;
 
                 // Enforce guards before upgrading
-                const registry = getRegistry();
+                const registry = this.registry;
                 const controllerModule = registry.getTokenModule( finalMatch.metadata.controller );
                 const controller = await registry.getController( finalMatch.metadata.controller, controllerModule );
 
                 if( !controller ) { throw new Error( `Controller ${finalMatch.metadata.controller} not registered` ) }
 
-                // Run Guards
+                // Run Guards + upgrade within request context
                 sreq.params = finalMatch.params;
                 RequestProcessor.applyReviver( sreq, finalMatch.metadata, controllerModule );
                 const ctx = { success : true, errors : [], mode : 'strict' };
-
-                await Context.run({
-                    request          : sreq,
-                    metadata         : wsMatch.metadata,
+                const requestCtx = {
+                    request  : sreq,
+                    metadata : wsMatch.metadata,
                     requestId,
-                    requestInstances : new Map<string, any>()
-                }, async () =>
+                    registry
+                };
+
+                return await Context.run( requestCtx, async () =>
                 {
                     try
                     {
@@ -964,84 +1037,54 @@ export class Server extends EventEmitter
                             controllerModule,
                             websocket : null
                         });
+
+                        if( !ctx.success ) 
+                        {
+                            return this.finalizeResponse( new Response( JSON.stringify({
+                                success : false,
+                                message : 'request validation failed',
+                                errors  : ctx.errors
+                            }), {
+                                status  : 400,
+                                headers : { 'Content-Type' : 'application/json' }
+                            }), request, requestId );
+                        }
+
+                        if( this.serverAdapter && typeof this.serverAdapter.upgrade === 'function' ) 
+                        {
+                            const res = await this.serverAdapter.upgrade( request, finalMatch!.metadata, finalMatch!.params );
+
+                            return this.finalizeResponse( res, request, requestId );
+                        }
+
+                        return this.finalizeResponse( new Response( 'WebSockets not supported by adapter', { status : 501 }), request, requestId );
                     }
                     finally
                     {
-                        await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
-                        Context.get()?.requestInstances?.clear();
+                        const scoped = ( requestCtx as any ).requestInstances;
+
+                        if( scoped && scoped.size > 0 )
+                        {
+                            await ApplicationRegistry.destroyInstances( scoped.values());
+                            scoped.clear();
+                        }
                     }
                 });
-
-                if( !ctx.success ) 
-                {
-                    return withRequestId( new Response( JSON.stringify({
-                        success : false,
-                        message : 'request validation failed',
-                        errors  : ctx.errors
-                    }), {
-                        status  : 400,
-                        headers : { 'Content-Type' : 'application/json' }
-                    }));
-                }
-
-                if( this.serverAdapter && typeof this.serverAdapter.upgrade === 'function' ) 
-                {
-                    const res = await this.serverAdapter.upgrade( request, finalMatch.metadata, finalMatch.params );
-
-                    return withRequestId( res );
-                }
-
-                return withRequestId( new Response( 'WebSockets not supported by adapter', { status : 501 }));
             }
 
             let response: Response | undefined;
             let activeSecurity = securityConfig;
             let activeCors = corsConfig;
 
-            const enforceSecurityGates = ( cfg: SecurityOptions | undefined ) =>
-            {
-                // Enforce allowedContentTypes (require a matching CT when a body is indicated)
-                if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
-                {
-                    const contentType = getContentType( request );
-                    const allowed = cfg.allowedContentTypes.map( t => t.toLowerCase());
-
-                    if( requestLikelyHasBody( request ))
-                    {
-                        if( !contentType || !allowed.includes( contentType ))
-                        {
-                            throw Object.assign( new Error( `Unsupported Media Type: ${contentType || 'missing'}` ), { status : 415 });
-                        }
-                    }
-                    else if( contentType && !allowed.includes( contentType ))
-                    {
-                        throw Object.assign( new Error( `Unsupported Media Type: ${contentType}` ), { status : 415 });
-                    }
-                }
-
-                // Enforce rateLimit
-                if( cfg?.rateLimit ) 
-                {
-                    const ip = sreq.ip;
-                    const limit = this.rateLimiter.consume( ip, path, cfg.rateLimit );
-
-                    if( !limit.allowed ) 
-                    {
-                        throw Object.assign( new Error( 'Too Many Requests' ), {
-                            status  : 429,
-                            headers : { 'Retry-After' : String( limit.retryAfter ) }
-                        });
-                    }
-                }
-            };
-
             // Try SEO matches in specificity order; void → next; forward → internal hop.
             for( const seoMatch of seoMatches )
             {
                 this.applyMatchBags( sreq, seoMatch );
-                activeSecurity = mergeSecurityConfigs([ this.options.security, seoMatch.metadata.security ]);
+                activeSecurity = seoMatch.metadata.security !== undefined
+                    ? mergeSecurityConfigs([ this.baseSecurityConfig, seoMatch.metadata.security ])
+                    : this.baseSecurityConfig;
                 activeCors = seoMatch.metadata.cors !== undefined ? seoMatch.metadata.cors : this.options.cors;
-                enforceSecurityGates( activeSecurity );
+                this.enforceSecurityGates( activeSecurity, request, sreq, method, path );
 
                 try
                 {
@@ -1070,65 +1113,44 @@ export class Server extends EventEmitter
                     // SEO already declined (void fallthrough): do not advertise SEO verbs as Allow.
                     const allowedAfterSeo = seoMatches.length > 0
                         ? publicLookup.allowed
-                        : externalAllowed;
+                        : getExternalAllowed();
                     const wrongMethod = allowedAfterSeo.length > 0;
                     const status = wrongMethod ? 405 : 404;
-                    let res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
+                    const res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
                         status,
                         headers : wrongMethod ? { Allow : allowedAfterSeo.join( ', ' ) } : undefined
                     });
-                    res = applyCors( res, this.options.cors );
-                    res = applySecurityHeaders( res, mergeSecurityConfigs([ this.options.security ]));
 
-                    if( this.options.logs )
-                    {
-                        const duration = Date.now() - startTime;
-                        this.logger.info( `<-- ${method} ${path} - ${status} ${wrongMethod ? 'Method Not Allowed' : 'Not Found'} (${duration}ms)`, {
-                            type : 'request_end',
-                            method,
-                            path,
-                            status,
-                            duration,
-                            requestId
-                        });
-                    }
+                    this.logRequestEnd( startTime, method, path, status, requestId, wrongMethod ? 'Method Not Allowed' : 'Not Found' );
 
-                    return withRequestId( res );
+                    return this.finalizeResponse( res, request, requestId, this.options.cors, this.baseSecurityConfig );
                 }
 
                 this.applyMatchBags( sreq, pubMatch );
-                activeSecurity = mergeSecurityConfigs([ this.options.security, pubMatch.metadata.security ]);
+                activeSecurity = pubMatch.metadata.security !== undefined
+                    ? mergeSecurityConfigs([ this.baseSecurityConfig, pubMatch.metadata.security ])
+                    : this.baseSecurityConfig;
                 activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
-                enforceSecurityGates( activeSecurity );
+                this.enforceSecurityGates( activeSecurity, request, sreq, method, path );
                 response = await this.runEndpoint( pubMatch.metadata, sreq, activeSecurity );
             }
 
-            response = applyCors( response!, activeCors );
-            response = applySecurityHeaders( response, activeSecurity );
-
             // RFC 9110: an OPTIONS response should advertise Allow.
+            let allowHeader: string | undefined;
+
             if( method === 'OPTIONS' && !response.headers.has( 'Allow' )) 
             {
-                const allowed = this.externalAllowedMethods( path );
+                const allowed = getExternalAllowed();
 
                 if( allowed.length > 0 ) 
                 {
-                    response = withHeaders( response, { Allow : allowed.join( ', ' ) });
+                    allowHeader = allowed.join( ', ' );
                 }
             }
-      
-            if( this.options.logs ) 
-            {
-                const duration = Date.now() - startTime;
-                this.logger.info( `<-- ${method} ${path} - ${response.status} (${duration}ms)`, {
-                    type   : 'request_end',
-                    method,
-                    path,
-                    status : response.status,
-                    duration,
-                    requestId
-                });
-            }
+
+            response = this.finalizeResponse( response, request, requestId, activeCors, activeSecurity, allowHeader );
+
+            this.logRequestEnd( startTime, method, path, response.status, requestId );
 
             if( method === 'HEAD' ) 
             {
@@ -1139,11 +1161,15 @@ export class Server extends EventEmitter
                 });
             }
 
-            return withRequestId( response );
+            return response;
         }
         catch ( err: any ) 
         {
-            this.internalEmit( 'error', err );
+            if( this.events.error?.size )
+            {
+                this.internalEmit( 'error', err );
+            }
+
             const statusCode = httpStatusFromError( err );
 
             if( this.options.logs ) 
@@ -1153,24 +1179,14 @@ export class Server extends EventEmitter
                     error : errorLogFields( err ),
                     requestId
                 });
-            }
-
-            if( this.options.logs ) 
-            {
-                const duration = Date.now() - startTime;
-                this.logger.info( `<-- ${method} ${path} - ${statusCode} (${duration}ms)`, {
-                    type   : 'request_end',
-                    method,
-                    path,
-                    status : statusCode,
-                    duration,
-                    requestId
-                });
+                this.logRequestEnd( startTime, method, path, statusCode, requestId );
             }
       
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
             const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
-            const errSecurityConfig = mergeSecurityConfigs([this.options.security, routeSecurity]);
+            const errSecurityConfig = routeSecurity !== undefined
+                ? mergeSecurityConfigs([ this.baseSecurityConfig, routeSecurity ])
+                : this.baseSecurityConfig;
       
             const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };
 
@@ -1187,8 +1203,7 @@ export class Server extends EventEmitter
                 status  : statusCode,
                 headers : errHeaders
             });
-            res = applyCors( res, corsConfig );
-            res = applySecurityHeaders( res, errSecurityConfig );
+            res = this.finalizeResponse( res, request, requestId, corsConfig, errSecurityConfig );
 
             if( method === 'HEAD' ) 
             {
@@ -1199,7 +1214,7 @@ export class Server extends EventEmitter
                 });
             }
 
-            return withRequestId( res );
+            return res;
         }
         finally 
         {

@@ -155,8 +155,8 @@ export class SwaggerSpecGenerator
                             content  : {
                                 'multipart/form-data' : {
                                     schema : {
-                                        type                 : 'object',
-                                        properties           : Object.keys( properties ).length
+                                        type       : 'object',
+                                        properties : Object.keys( properties ).length
                                             ? properties
                                             : { file : { type : 'string', format : 'binary' } },
                                         additionalProperties : true
@@ -226,7 +226,7 @@ export class SwaggerSpecGenerator
                         content  : {
                             'multipart/form-data' : {
                                 schema : {
-                                    type : 'object',
+                                    type       : 'object',
                                     properties : Object.keys( properties ).length
                                         ? properties
                                         : { file : { type : 'string', format : 'binary' } }

@@ -202,9 +202,10 @@ describe( 'MultiBuffer', () =>
         expect( search.indexOf( '', 100 )).toBe( -1 );
         // negative offset is rewritten via `totalLength - offset` (past end → miss)
         expect( search.indexOf( 'world', -5 )).toBe( -1 );
-        // negative get() rewrites the index (range end defaults to 0 → empty slice)
-        expect( search.get( -1 )).toBeUndefined();
-        expect( search.get( 0 )).toBeUndefined();
+        // negative get() indexes from the end of the buffer
+        expect( search.get( -1 )).toBe( 'd'.charCodeAt( 0 ));
+        expect( search.get( 0 )).toBe( 'h'.charCodeAt( 0 ));
+        expect( search.get( 999 )).toBeUndefined();
         expect( search.partialIndexOf( 'ldZZ' )).toBe( 9 );
         expect( search.slice()).toHaveLength( 2 );
         expect( Buffer.concat( search.slice( 0, -1 )).toString()).toBe( 'hello worl' );

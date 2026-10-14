@@ -1,12 +1,16 @@
 import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
-import { SimpleMultibuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
+import { MultiBuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { toAllowList } from '../core/router.js';
+import { getRegistry } from '../core/registry.js';
 import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
 import { attachClientCert } from '../helpers/peer-cert.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
 import { upgradeQuery } from './ws-upgrade.js';
+
+const EMPTY_BUFFER = Buffer.alloc( 0 );
 
 /** Applied whenever the caller omits a timeout so the listener is never left unprotected. */
 export const DEFAULT_NODE_HTTP: Required<NodeHttpOptions> = {
@@ -33,8 +37,9 @@ export class NodeAdapter implements ServerAdapter
         http?: NodeHttpOptions
     ): Promise<void> 
     {
-        const { getRegistry } = await import( '../core/registry.js' );
         const registry = getRegistry();
+        let cachedAllowEndpointCount = -1;
+        let cachedAllowHeader = '';
 
         const connectionHandler = async ( req: any, res: any ) => 
         {
@@ -42,10 +47,18 @@ export class NodeAdapter implements ServerAdapter
             // capabilities. It is not a path, so it must never reach URL parsing or routing.
             if( req.url === '*' ) 
             {
-                const allowed = toAllowList( registry.getEndpoints().map(( ep: any ) => ep.httpMethod ));
+                const endpoints = registry.getEndpoints();
+
+                if( endpoints.length !== cachedAllowEndpointCount )
+                {
+                    cachedAllowEndpointCount = endpoints.length;
+                    const allowed = toAllowList( endpoints.map(( ep: any ) => ep.httpMethod ));
+                    cachedAllowHeader = allowed.join( ', ' );
+                }
+
                 res.statusCode = 204;
 
-                if( allowed.length > 0 ) { res.setHeader( 'Allow', allowed.join( ', ' )) }
+                if( cachedAllowHeader.length > 0 ) { res.setHeader( 'Allow', cachedAllowHeader ) }
                 res.end();
 
                 return;
@@ -53,10 +66,11 @@ export class NodeAdapter implements ServerAdapter
 
             const protocol = ( req.socket as any ).encrypted ? 'https' : 'http';
             const url = `${protocol}://${req.headers.host}${req.url}`;
+            const method = req.method || 'GET';
             const fetchReq = new Request( url, {
-                method  : req.method,
+                method,
                 headers : req.headers as any,
-                body    : ['GET', 'HEAD'].includes( req.method || '' ) ? undefined : ( req as any ),
+                body    : ( method === 'GET' || method === 'HEAD' ) ? undefined : ( req as any ),
                 // @ts-expect-error: duplex half required for fetch Request
                 duplex  : 'half'
             });
@@ -76,7 +90,6 @@ export class NodeAdapter implements ServerAdapter
 
             if( response.body ) 
             {
-                const { Readable } = await import( 'node:stream' );
                 // Pipe Fetch body → Node response with backpressure (no full buffering).
                 const nodeBody = Readable.fromWeb( response.body as any );
                 nodeBody.on( 'error', ( err: Error ) =>
@@ -96,15 +109,15 @@ export class NodeAdapter implements ServerAdapter
         {
             const { createServer } = await import( 'https' );
             const options: any = {
-        key                : tls.key as any,
-        cert               : tls.cert as any,
-        ca                 : tls.ca as any,
-        ciphers            : tls.ciphers,
-        minVersion         : tls.minVersion,
-        maxVersion         : tls.maxVersion,
-        requestCert        : tls.requestCert,
-        rejectUnauthorized : tls.rejectUnauthorized
-      };
+                key                : tls.key as any,
+                cert               : tls.cert as any,
+                ca                 : tls.ca as any,
+                ciphers            : tls.ciphers,
+                minVersion         : tls.minVersion,
+                maxVersion         : tls.maxVersion,
+                requestCert        : tls.requestCert,
+                rejectUnauthorized : tls.rejectUnauthorized
+            };
 
             if( tls.sniCallback ) 
             {
@@ -207,9 +220,9 @@ export class NodeAdapter implements ServerAdapter
 
         socket.write(
             'HTTP/1.1 101 Switching Protocols\r\n' +
-      'Upgrade: websocket\r\n' +
-      'Connection: Upgrade\r\n' +
-      `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
+            'Upgrade: websocket\r\n' +
+            'Connection: Upgrade\r\n' +
+            `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
         );
 
         const query = upgradeQuery( request );
@@ -246,8 +259,8 @@ export class NodeAdapter implements ServerAdapter
 class NodeServerWebSocket 
 {
     private emitter = new EventEmitter();
-    private rx_buffer = new SimpleMultibuffer();
-    private tx_buffer = new SimpleMultibuffer();
+    private rx_buffer = new MultiBuffer();
+    private tx_buffer = new MultiBuffer();
     /** Fragmented messages span reads, so the reader's state lives with the connection. */
     private frameState         : FrameReadState = {};
     private readonly heartbeat : WsHeartbeat;
@@ -262,7 +275,7 @@ class NodeServerWebSocket
     ) 
     {
         this.heartbeat = new WsHeartbeat({
-            ping  : () => { this.send( Buffer.alloc( 0 ), { opcode : 0x09 }) },
+            ping  : () => { this.send( EMPTY_BUFFER, { opcode : 0x09 }) },
             close : ( code, reason ) => this.close( code, reason )
         }, this.wsOptions );
 
@@ -313,21 +326,29 @@ class NodeServerWebSocket
         this.heartbeat.start();
     }
 
+    private flushTx(): void
+    {
+        if( this.tx_buffer.length === 0 ) { return }
+
+        const chunks = this.tx_buffer.splice( 0, this.tx_buffer.length );
+
+        for( const chunk of chunks )
+        {
+            this.socket.write( chunk );
+        }
+    }
+
     send( data: any, options: { opcode? : number } = {}) 
     {
         WebsocketFrame.write( this.tx_buffer, data, options );
-
-        while( this.tx_buffer.length > 0 ) 
-        {
-            this.socket.write( this.tx_buffer.spliceConcat( 0, this.tx_buffer.length ));
-        }
+        this.flushTx();
     }
 
     close( code?: number, reason?: string ) 
     {
         this.heartbeat.stop();
 
-        let payload = Buffer.alloc( code !== undefined ? 2 : 0 );
+        let payload = code !== undefined ? Buffer.allocUnsafe( 2 ) : EMPTY_BUFFER;
 
         if( code !== undefined ) 
         {
@@ -342,11 +363,7 @@ class NodeServerWebSocket
         try 
         {
             WebsocketFrame.write( this.tx_buffer, payload, { opcode : 0x08 });
-
-            while( this.tx_buffer.length > 0 ) 
-            {
-                this.socket.write( this.tx_buffer.spliceConcat( 0, this.tx_buffer.length ));
-            }
+            this.flushTx();
         }
         catch ( e ) {}
 

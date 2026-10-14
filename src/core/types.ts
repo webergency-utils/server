@@ -188,6 +188,7 @@ export class ServerResponse
 {
     #status = 200;
     #statusSet = false;
+    #headersSet = false;
     #statusText?     : string;
     #body?           : StreamableBody;
     #bodySet = false;
@@ -232,6 +233,7 @@ export class ServerResponse
     public header( name: string, value: string ): this
     {
         this.#headers.set( name, value );
+        this.#headersSet = true;
 
         return this;
     }
@@ -241,6 +243,7 @@ export class ServerResponse
         for( const [ name, value ] of Object.entries( init ))
         {
             this.#headers.set( name, value );
+            this.#headersSet = true;
         }
 
         return this;
@@ -251,6 +254,8 @@ export class ServerResponse
      */
     public cookie( name: string, value?: string | null, options?: CookieOptions ): this
     {
+        this.#headersSet = true;
+
         if( value === '' || value == null )
         {
             this.#headers.append( 'Set-Cookie', serializeCookie( name, '', {
@@ -327,13 +332,21 @@ export class ServerResponse
     /** Merge this bag onto a Fetch Response (headers always; status when explicitly set). */
     public applyTo( response: Response ): Response
     {
+        if( !this.#statusSet && !this.#headersSet )
+        {
+            return response;
+        }
+
         if( this.#statusSet )
         {
             const headers = new Headers( response.headers );
 
-            for( const [key, value] of this.#headers.entries())
+            if( this.#headersSet )
             {
-                headers.set( key, value );
+                for( const [key, value] of this.#headers.entries())
+                {
+                    headers.set( key, value );
+                }
             }
 
             return new Response( response.body, {

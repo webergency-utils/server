@@ -18,15 +18,15 @@ function relativeImport( manifestDir: string, from: string ): string
 
 /**
  * Legacy sidecar manifest: a single module that imports every discovered class and
- * registers it on `MetadataStore`. The Symbol.for emit in `plugin.ts` supersedes this for
- * normal builds; the manifest remains for consumers that publish one.
+ * registers it on the active `ApplicationRegistry` (`getRegistry()`). The Symbol.for emit in
+ * `plugin.ts` supersedes this for normal builds; the manifest remains for consumers that publish one.
  */
 export function generateManifestCode( registry: ProjectRegistry, controllerMap: Map<string, string>, manifestPath: string ): string 
 {
     const manifestDir = path.dirname( manifestPath );
     const finalControllerMap = controllerMap.size > 0 ? controllerMap : new Map( Array.from( registry.controllers.entries()).map(([k, v]) => [k, v.path]));
 
-    let imports = 'import { MetadataStore } from \'@webergency-utils/server\';\n';
+    let imports = 'import { getRegistry } from \'@webergency-utils/server\';\n';
 
     // Custom constraint/transform helpers must already be imported by the emitting file;
     // validator/parser/serializer expressions reference them by bare identifier.
@@ -40,7 +40,7 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
         }
     }
 
-    let logic = '\n// --- SINGLETONS ---\n';
+    let logic = '\n// --- SINGLETONS ---\nconst __registry = getRegistry();\n';
     const importedAndRegistered = new Set<string>();
 
     const collect = ( entries: Iterable<[ string, string ]>, register: string ) =>
@@ -49,7 +49,7 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
         {
             if( importedAndRegistered.has( name )) { continue }
             imports += `import { ${name} } from '${relativeImport( manifestDir, from )}';\n`;
-            logic += `MetadataStore.${register}('${name}', ${name});\n`;
+            logic += `__registry.${register}('${name}', ${name});\n`;
             importedAndRegistered.add( name );
         }
     };
@@ -157,7 +157,7 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
             .replace( /"/g, "'" )
             .replace( / {4}/g, '\t' );
 
-        endpointsCode += `MetadataStore.registerEndpoint(${epJson});\n\n`;
+        endpointsCode += `__registry.registerEndpoint(${epJson});\n\n`;
     }
 
     return imports + external + logic + emitLocalsCode + endpointsCode;

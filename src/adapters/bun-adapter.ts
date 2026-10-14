@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, attachBunClientCert } from '../helpers/peer-cert.js';
 import { NodeTlsCompat } from './node-tls-compat.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
-import { upgradeQuery } from './ws-upgrade.js';
+import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 
 export class BunAdapter implements ServerAdapter
 {
@@ -85,18 +85,11 @@ export class BunAdapter implements ServerAdapter
                 },
                 message( ws: any, msg: any )
                 {
-                    const maxPayload = ws.data.metadata.meta?.wsOptions?.maxPayload;
-
-                    if( maxPayload !== undefined )
+                    if( isWsPayloadTooLarge( msg, ws.data.metadata.meta?.wsOptions?.maxPayload ))
                     {
-                        const len = typeof msg === 'string' ? Buffer.byteLength( msg ) : ( msg.byteLength !== undefined ? msg.byteLength : msg.length );
+                        ws.close( 1009, 'Message Too Big' );
 
-                        if( len > maxPayload )
-                        {
-                            ws.close( 1009, 'Message Too Big' );
-
-                            return;
-                        }
+                        return;
                     }
                     ws.data.emitter.emit( 'message', msg );
                 },
@@ -196,6 +189,7 @@ class BunServerWebSocket
 
         this.ws.data.emitter.on( 'pong', () => this.heartbeat.pong());
         this.ws.data.emitter.on( 'close', () => this.heartbeat.stop());
+        this.ws.data.emitter.on( 'error', () => this.heartbeat.stop());
     }
 
     send( data: any )

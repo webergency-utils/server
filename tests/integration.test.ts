@@ -239,15 +239,15 @@ describe( 'Actual Server & Controllers Integration', () =>
                 server.registry.registerController( 'GuardTestController', new GuardTestController());
                 server.registry.registerGuard( 'ParameterGuard', ParameterGuard );
                 server.registry.registerEndpoint({
-                    controller   : 'GuardTestController',
-                    methodName   : 'testEndpoint',
-                    httpMethod   : 'GET',
-                    path         : '/guarded-endpoint',
-                    params       : [],
-                    guards       : [{
-                        name      : 'ParameterGuard',
-                        type      : 'class',
-                        params    : [
+                    controller : 'GuardTestController',
+                    methodName : 'testEndpoint',
+                    httpMethod : 'GET',
+                    path       : '/guarded-endpoint',
+                    params     : [],
+                    guards     : [{
+                        name   : 'ParameterGuard',
+                        type   : 'class',
+                        params : [
                             { source : 'Cookies' },
                             { source : 'Cookie', name : 'session' },
                             { source : 'Headers' },
@@ -272,13 +272,13 @@ describe( 'Actual Server & Controllers Integration', () =>
 
             expect( res.status ).toBe( 200 );
             expect( capturedGuardArgs ).toHaveLength( 7 );
-            expect( capturedGuardArgs[0] ).toEqual({ session : 'abc123xyz', theme : 'dark' });
-            expect( capturedGuardArgs[1] ).toBe( 'abc123xyz' );
-            expect( capturedGuardArgs[2]['x-custom-header'] ).toBe( 'test-val' );
-            expect( capturedGuardArgs[3] ).toBe( '127.0.0.1' );
-            expect( capturedGuardArgs[4] ).toBe( 'http://localhost/guarded-endpoint' );
-            expect( capturedGuardArgs[5] ).toBe( 'localhost' );
-            expect( capturedGuardArgs[6] ).toBe( '/guarded-endpoint' );
+            expect( capturedGuardArgs[0]).toEqual({ session : 'abc123xyz', theme : 'dark' });
+            expect( capturedGuardArgs[1]).toBe( 'abc123xyz' );
+            expect( capturedGuardArgs[2]['x-custom-header']).toBe( 'test-val' );
+            expect( capturedGuardArgs[3]).toBe( '127.0.0.1' );
+            expect( capturedGuardArgs[4]).toBe( 'http://localhost/guarded-endpoint' );
+            expect( capturedGuardArgs[5]).toBe( 'localhost' );
+            expect( capturedGuardArgs[6]).toBe( '/guarded-endpoint' );
         });
     });
 });

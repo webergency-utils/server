@@ -1,13 +1,28 @@
 import { CorsOptions } from '../decorators.js';
 
+const wildcardRegexCache = new Map<string, RegExp>();
+
 export function matchWildcard( value: string, pattern: string ): boolean 
 {
     if( pattern === '*' ) { return true }
-    const regexPattern = pattern
-        .replace( /[.+^${}()|[\]\\]/g, '\\$&' ) // Escape regex special chars
-        .replace( /\*/g, '.*' );               // Convert * to .*
 
-    return new RegExp( `^${regexPattern}$`, 'i' ).test( value );
+    if( !pattern.includes( '*' ))
+    {
+        return value.toLowerCase() === pattern.toLowerCase();
+    }
+
+    let regex = wildcardRegexCache.get( pattern );
+
+    if( !regex )
+    {
+        const regexPattern = pattern
+            .replace( /[.+^${}()|[\]\\]/g, '\\$&' ) // Escape regex special chars
+            .replace( /\*/g, '.*' );               // Convert * to .*
+        regex = new RegExp( `^${regexPattern}$`, 'i' );
+        wildcardRegexCache.set( pattern, regex );
+    }
+
+    return regex.test( value );
 }
 
 export function isAllowed( value: string, rule: any ): boolean 
@@ -59,14 +74,93 @@ export function isPreflight( request: Request ): boolean
         && request.headers.get( 'access-control-request-method' ) !== null;
 }
 
+const DEFAULT_METHODS = [ 'GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE' ];
+const DEFAULT_METHODS_STR = 'GET, HEAD, PUT, PATCH, POST, DELETE';
+
+interface CompiledCors {
+    originRule         : any
+    methods            : any
+    methodsStr         : string | undefined
+    allowedHeadersRule : any
+    allowedHeadersStr  : string | undefined
+    exposedHeadersStr  : string | undefined
+    maxAgeStr          : string | undefined
+    staticNonPreflight : CorsHeaders | undefined
+}
+
+const compiledCorsCache = new WeakMap<CorsOptions, CompiledCors>();
+
+function getCompiledCors( config: CorsOptions ): CompiledCors
+{
+    let compiled = compiledCorsCache.get( config );
+
+    if( compiled ) { return compiled }
+
+    const originRule = config.origin === undefined ? '*' : config.origin;
+    const methods = config.methods || DEFAULT_METHODS;
+    let methodsStr: string | undefined;
+
+    if( Array.isArray( methods ))
+    {
+        methodsStr = methods === DEFAULT_METHODS ? DEFAULT_METHODS_STR : methods.join( ', ' );
+    }
+    else if( typeof methods === 'string' )
+    {
+        methodsStr = methods;
+    }
+
+    const allowedHeadersRule = config.allowedHeaders ?? DEFAULT_ALLOWED_HEADERS;
+    const allowedHeadersStr = config.allowedHeaders && Array.isArray( config.allowedHeaders )
+        ? config.allowedHeaders.join( ', ' )
+        : undefined;
+
+    const exposedHeadersStr = config.exposedHeaders
+        ? ( Array.isArray( config.exposedHeaders ) ? config.exposedHeaders.join( ', ' ) : config.exposedHeaders )
+        : undefined;
+
+    const maxAgeStr = config.maxAge !== undefined ? String( config.maxAge ) : undefined;
+
+    let staticNonPreflight: CorsHeaders | undefined;
+
+    if( originRule === '*' && !config.credentials )
+    {
+        staticNonPreflight = { 'Access-Control-Allow-Origin' : '*' };
+
+        if( exposedHeadersStr )
+        {
+            staticNonPreflight['Access-Control-Expose-Headers'] = exposedHeadersStr;
+        }
+    }
+
+    compiled = {
+        originRule,
+        methods,
+        methodsStr,
+        allowedHeadersRule,
+        allowedHeadersStr,
+        exposedHeadersStr,
+        maxAgeStr,
+        staticNonPreflight
+    };
+    compiledCorsCache.set( config, compiled );
+
+    return compiled;
+}
+
 export function handleCors( request: Request, config: CorsOptions | undefined ): Response | CorsHeaders | null 
 {
     if( !config ) { return null }
 
+    const compiled = getCompiledCors( config );
+    const preflight = isPreflight( request );
+
+    if( !preflight && compiled.staticNonPreflight )
+    {
+        return compiled.staticNonPreflight;
+    }
+
     const originHeader = request.headers.get( 'origin' );
-  
-    // Resolve allowed origin
-    const originRule = config.origin === undefined ? '*' : config.origin;
+    const originRule = compiled.originRule;
     let allowedOrigin = '';
 
     if( originHeader ) 
@@ -121,7 +215,7 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
 
     // Only a genuine preflight short-circuits with a response; a plain OPTIONS request
     // stays routable and just receives the headers below.
-    if( isPreflight( request )) 
+    if( preflight ) 
     {
         // Without an allowed origin the browser would reject the response anyway; answering
         // 403 makes the rejection explicit rather than looking like a successful preflight.
@@ -134,18 +228,9 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
 
         if( reqMethod ) 
         {
-            const methods = config.methods || ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'];
-
-            if( isAllowed( reqMethod, methods )) 
+            if( isAllowed( reqMethod, compiled.methods )) 
             {
-                if( typeof methods === 'function' ) 
-                {
-                    headers['Access-Control-Allow-Methods'] = reqMethod;
-                }
-                else 
-                {
-                    headers['Access-Control-Allow-Methods'] = Array.isArray( methods ) ? methods.join( ', ' ) : methods;
-                }
+                headers['Access-Control-Allow-Methods'] = compiled.methodsStr ?? reqMethod;
             }
         }
 
@@ -154,22 +239,21 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
         if( reqHeadersStr ) 
         {
             const reqHeaders = reqHeadersStr.split( ',' ).map( h => h.trim());
-            const allowedHeadersConfig = config.allowedHeaders ?? DEFAULT_ALLOWED_HEADERS;
-            const allowedHeaders = reqHeaders.filter( h => isAllowed( h, allowedHeadersConfig ));
+            const allowedHeaders = reqHeaders.filter( h => isAllowed( h, compiled.allowedHeadersRule ));
 
             if( allowedHeaders.length > 0 ) 
             {
                 headers['Access-Control-Allow-Headers'] = allowedHeaders.join( ', ' );
             }
         }
-        else if( config.allowedHeaders && Array.isArray( config.allowedHeaders )) 
+        else if( compiled.allowedHeadersStr ) 
         {
-            headers['Access-Control-Allow-Headers'] = config.allowedHeaders.join( ', ' );
+            headers['Access-Control-Allow-Headers'] = compiled.allowedHeadersStr;
         }
 
-        if( config.maxAge !== undefined ) 
+        if( compiled.maxAgeStr !== undefined ) 
         {
-            headers['Access-Control-Max-Age'] = String( config.maxAge );
+            headers['Access-Control-Max-Age'] = compiled.maxAgeStr;
         }
 
         return new Response( null, {
@@ -179,11 +263,9 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
     }
 
     // Actual Request headers
-    if( config.exposedHeaders ) 
+    if( compiled.exposedHeadersStr ) 
     {
-        headers['Access-Control-Expose-Headers'] = Array.isArray( config.exposedHeaders )
-            ? config.exposedHeaders.join( ', ' )
-            : config.exposedHeaders;
+        headers['Access-Control-Expose-Headers'] = compiled.exposedHeadersStr;
     }
 
     return headers;

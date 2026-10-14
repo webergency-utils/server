@@ -7,14 +7,24 @@ const SIZE_UNITS: Record<string, number> = {
   gb : 1024 * 1024 * 1024
 };
 
+const sizeCache = new Map<string, number>();
+
 export function parseSize( size: string | number ): number 
 {
     if( typeof size === 'number' ) { return size }
+
+    const cached = sizeCache.get( size );
+
+    if( cached !== undefined ) { return cached }
+
     const match = size.trim().toLowerCase().match( /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)$/ );
 
     if( !match ) { throw new Error( `Invalid size format: "${size}". Use formats like "2mb", "500kb", "1gb".` ) }
 
-    return Math.floor( parseFloat( match[1]) * SIZE_UNITS[match[2]]);
+    const bytes = Math.floor( parseFloat( match[1]) * SIZE_UNITS[match[2]]);
+    sizeCache.set( size, bytes );
+
+    return bytes;
 }
 
 /** RFC-defined `Referrer-Policy` tokens; anything else is dropped rather than emitted. */
@@ -31,7 +41,71 @@ const REFERRER_POLICIES = new Set([
 
 const CROSS_DOMAIN_POLICIES = new Set([ 'none', 'master-only', 'by-content-type', 'by-ftp-filename', 'all' ]);
 
+const mergedSecurityPairCache = new WeakMap<object, Map<unknown, SecurityOptions | undefined>>();
+const allowedContentTypesCache = new WeakMap<SecurityOptions, Set<string>>();
+
+export function getAllowedContentTypesSet( cfg: SecurityOptions ): Set<string> | undefined
+{
+    if( !cfg.allowedContentTypes ) { return undefined }
+
+    let set = allowedContentTypesCache.get( cfg );
+
+    if( !set )
+    {
+        set = new Set( cfg.allowedContentTypes.map( t => t.toLowerCase()));
+        allowedContentTypesCache.set( cfg, set );
+    }
+
+    return set;
+}
+
 export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | undefined )[]): SecurityOptions | undefined 
+{
+    if( configs.length === 1 && typeof configs[0] === 'object' && configs[0] !== null )
+    {
+        return configs[0];
+    }
+
+    if( configs.length === 2 )
+    {
+        const [ first, second ] = configs;
+
+        if( second === undefined && typeof first === 'object' && first !== null )
+        {
+            return first;
+        }
+
+        if( first === undefined && typeof second === 'object' && second !== null )
+        {
+            return second;
+        }
+
+        if( typeof first === 'object' && first !== null )
+        {
+            let inner = mergedSecurityPairCache.get( first );
+
+            if( !inner )
+            {
+                inner = new Map();
+                mergedSecurityPairCache.set( first, inner );
+            }
+
+            if( inner.has( second ))
+            {
+                return inner.get( second );
+            }
+
+            const computed = computeMergedSecurityConfigs( configs );
+            inner.set( second, computed );
+
+            return computed;
+        }
+    }
+
+    return computeMergedSecurityConfigs( configs );
+}
+
+function computeMergedSecurityConfigs( configs: ( SecurityOptions | boolean | undefined )[]): SecurityOptions | undefined
 {
     let merged: SecurityOptions | undefined = undefined;
 
@@ -46,20 +120,20 @@ export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | und
         else if( config === false ) 
         {
             merged = {
-        // `0` disables the default body cap; `security: false` opts out of protection wholesale.
-        maxBodySize                  : 0,
-        frameguard                   : false,
-        noSniff                      : false,
-        hsts                         : false,
-        downloadOptions              : false,
-        permittedCrossDomainPolicies : false,
-        referrerPolicy               : false,
-        xssFilter                    : false,
-        csp                          : false,
-        coep                         : false,
-        coop                         : false,
-        corp                         : false
-      };
+                // `0` disables the default body cap; `security: false` opts out of protection wholesale.
+                maxBodySize                  : 0,
+                frameguard                   : false,
+                noSniff                      : false,
+                hsts                         : false,
+                downloadOptions              : false,
+                permittedCrossDomainPolicies : false,
+                referrerPolicy               : false,
+                xssFilter                    : false,
+                csp                          : false,
+                coep                         : false,
+                coop                         : false,
+                corp                         : false
+            };
         }
         else if( typeof config === 'object' ) 
         {
@@ -71,9 +145,33 @@ export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | und
     return merged;
 }
 
+const securityHeadersCache = new WeakMap<SecurityOptions, Record<string, string>>();
+let cachedTrueSecurityHeaders: Record<string, string> | undefined;
+let cachedFalseSecurityHeaders: Record<string, string> | undefined;
+
 export function generateSecurityHeaders( config: SecurityOptions | boolean | undefined ): Record<string, string> 
 {
     if( config === undefined ) { return {} }
+
+    if( config === true && cachedTrueSecurityHeaders )
+    {
+        return cachedTrueSecurityHeaders;
+    }
+
+    if( config === false && cachedFalseSecurityHeaders )
+    {
+        return cachedFalseSecurityHeaders;
+    }
+
+    if( typeof config === 'object' && config !== null )
+    {
+        const cached = securityHeadersCache.get( config );
+
+        if( cached )
+        {
+            return cached;
+        }
+    }
 
     const headers: Record<string, string> = {};
   
@@ -263,6 +361,19 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
 
             if( parts.length > 0 ) { headers['Permissions-Policy'] = parts.join( ', ' ) }
         }
+    }
+
+    if( config === true )
+    {
+        cachedTrueSecurityHeaders = headers;
+    }
+    else if( config === false )
+    {
+        cachedFalseSecurityHeaders = headers;
+    }
+    else if( typeof config === 'object' && config !== null )
+    {
+        securityHeadersCache.set( config, headers );
     }
 
     return headers;

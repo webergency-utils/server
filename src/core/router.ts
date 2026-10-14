@@ -69,13 +69,15 @@ function effectiveMethods( method: Method ): string[]
 
 interface Shape {
     /** Identity of the pattern ignoring param names, for overlap detection. */
-    key        : string
+    key         : string
     /** A path made only of literal text can be matched by string equality. */
-    isStatic   : boolean
-    wildcards  : number
-    groups     : number
-    params     : number
-    literalLen : number
+    isStatic    : boolean
+    /** Static first path segment when guaranteed (e.g. `users` for `/users/:id`), else `null`. */
+    firstPrefix : string | null
+    wildcards   : number
+    groups      : number
+    params      : number
+    literalLen  : number
 }
 
 function describeTokens( tokens: Token[], shape: Shape ): string
@@ -113,14 +115,55 @@ function describeTokens( tokens: Token[], shape: Shape ): string
     return key;
 }
 
+function extractStaticFirstSegment( tokens: Token[]): string | null
+{
+    const first = tokens[0];
+
+    if( !first || first.type !== 'text' || !first.value.startsWith( '/' ))
+    {
+        return null;
+    }
+
+    const slashIdx = first.value.indexOf( '/', 1 );
+
+    if( slashIdx > 1 )
+    {
+        return first.value.slice( 1, slashIdx );
+    }
+
+    return null;
+}
+
+function extractFirstSegmentFromPath( path: string ): string
+{
+    if( !path.startsWith( '/' ) || path.length <= 1 )
+    {
+        return '';
+    }
+
+    const slashIdx = path.indexOf( '/', 1 );
+
+    return slashIdx === -1 ? path.slice( 1 ) : path.slice( 1, slashIdx );
+}
+
 function describe( path: string ): Shape
 {
-    const shape: Shape = { key : '', isStatic : true, wildcards : 0, groups : 0, params : 0, literalLen : 0 };
+    const shape: Shape = {
+        key         : '',
+        isStatic    : true,
+        firstPrefix : null,
+        wildcards   : 0,
+        groups      : 0,
+        params      : 0,
+        literalLen  : 0
+    };
 
     // An unparsable path is left to pathMatcher to reject; treat it as opaquely dynamic.
     try
     {
-        shape.key = describeTokens( parse( path ).tokens, shape );
+        const parsedTokens = parse( path ).tokens;
+        shape.key = describeTokens( parsedTokens, shape );
+        shape.firstPrefix = extractStaticFirstSegment( parsedTokens );
     }
     catch
     {
@@ -137,6 +180,11 @@ interface Entry {
     order : number
 }
 
+interface MethodDynamicBucket {
+    byPrefix   : Map<string, Entry[]>
+    rootRoutes : Entry[]
+}
+
 /**
  * Most specific first: wildcards and optional groups match the widest, then fewer params and
  * more literal text win, and registration order breaks the remaining ties.
@@ -150,6 +198,8 @@ function bySpecificity( a: Entry, b: Entry ): number
         || a.order - b.order;
 }
 
+const EMPTY_PARAMS: Record<string, any> = Object.freeze( Object.create( null ));
+
 export class Router 
 {
     private entries : Entry[] = [];
@@ -159,8 +209,8 @@ export class Router
     private staticRoutes = new Map<string, Route>();
     /** Per exact path: the methods serving it and the first route registered, for `Allow`. */
     private staticPaths = new Map<string, { methods : Set<string>, first : Route }>();
-    /** Pattern routes bucketed per method, specificity-sorted. */
-    private dynamicRoutes = new Map<string, Entry[]>();
+    /** Pattern routes bucketed per method and first static segment, specificity-sorted. */
+    private dynamicRoutes = new Map<string, MethodDynamicBucket>();
     /** Every HTTP-facing pattern route, for the `Allow` fallback scan. */
     private dynamicHttp : Entry[] = [];
 
@@ -195,6 +245,7 @@ export class Router
         this.warnings.length = 0;
 
         const seen = new Map<string, Route>();
+        const rawDynamic = new Map<string, Entry[]>();
 
         for( const entry of this.entries )
         {
@@ -224,9 +275,9 @@ export class Router
                 }
                 else
                 {
-                    let bucket = this.dynamicRoutes.get( method );
+                    let bucket = rawDynamic.get( method );
 
-                    if( !bucket ){ this.dynamicRoutes.set( method, bucket = []) }
+                    if( !bucket ){ rawDynamic.set( method, bucket = []) }
                     bucket.push( entry );
                 }
             }
@@ -243,7 +294,38 @@ export class Router
             else { this.dynamicHttp.push( entry ) }
         }
 
-        for( const bucket of this.dynamicRoutes.values()){ bucket.sort( bySpecificity ) }
+        for( const [ method, list ] of rawDynamic.entries())
+        {
+            list.sort( bySpecificity );
+
+            const byPrefix = new Map<string, Entry[]>();
+            const rootRoutes: Entry[] = [];
+
+            for( const entry of list )
+            {
+                if( entry.shape.firstPrefix === null )
+                {
+                    rootRoutes.push( entry );
+                }
+                else if( !byPrefix.has( entry.shape.firstPrefix ))
+                {
+                    byPrefix.set( entry.shape.firstPrefix, []);
+                }
+            }
+
+            for( const [ prefix, prefixBucket ] of byPrefix.entries())
+            {
+                for( const entry of list )
+                {
+                    if( entry.shape.firstPrefix === prefix || entry.shape.firstPrefix === null )
+                    {
+                        prefixBucket.push( entry );
+                    }
+                }
+            }
+
+            this.dynamicRoutes.set( method, { byPrefix, rootRoutes });
+        }
 
         this.compiled = true;
     }
@@ -313,7 +395,7 @@ export class Router
         if( staticHit )
         {
             matched.push( ...staticHit.methods );
-            fallback = { metadata : staticHit.first.metadata, params : Object.create( null ) };
+            fallback = { metadata : staticHit.first.metadata, params : EMPTY_PARAMS };
         }
 
         for( const entry of this.dynamicHttp )
@@ -330,11 +412,48 @@ export class Router
         return { allowed : toAllowList( matched ), fallback };
     }
 
+    private getDynamicCandidates( method: string, path: string ): Entry[] | undefined
+    {
+        const methodBucket = this.dynamicRoutes.get( method );
+
+        if( !methodBucket ){ return undefined }
+
+        if( methodBucket.byPrefix.size === 0 )
+        {
+            return methodBucket.rootRoutes;
+        }
+
+        const firstSeg = extractFirstSegmentFromPath( path );
+
+        return methodBucket.byPrefix.get( firstSeg ) ?? methodBucket.rootRoutes;
+    }
+
     private matchMethod( method: string, path: string ): RouteMatch | null
     {
-        const matches = this.collectMatches( method, path );
+        // `pathMatcher` accepts an optional trailing slash, so the map lookup must too.
+        const exact = this.staticRoutes.get( `${method} ${path}` )
+            ?? ( path.endsWith( '/' ) ? this.staticRoutes.get( `${method} ${path.slice( 0, -1 )}` ) : undefined );
 
-        return matches[0] ?? null;
+        if( exact )
+        {
+            return { metadata : exact.metadata, params : EMPTY_PARAMS };
+        }
+
+        const candidates = this.getDynamicCandidates( method, path );
+
+        if( !candidates || candidates.length === 0 ){ return null }
+
+        for( const { route } of candidates )
+        {
+            const match = route.matchFn( path );
+
+            if( match )
+            {
+                return { metadata : route.metadata, params : match.params };
+            }
+        }
+
+        return null;
     }
 
     private collectMatches( method: string, path: string ): RouteMatch[]
@@ -347,14 +466,14 @@ export class Router
 
         if( exact )
         {
-            out.push({ metadata : exact.metadata, params : Object.create( null ) });
+            out.push({ metadata : exact.metadata, params : EMPTY_PARAMS });
         }
 
-        const bucket = this.dynamicRoutes.get( method );
+        const candidates = this.getDynamicCandidates( method, path );
 
-        if( !bucket ){ return out }
+        if( !candidates || candidates.length === 0 ){ return out }
 
-        for( const { route } of bucket )
+        for( const { route } of candidates )
         {
             const match = route.matchFn( path );
 

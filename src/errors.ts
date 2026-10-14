@@ -19,7 +19,7 @@ export function httpStatusFromError( err: unknown ): number
 {
     if( err && typeof err === 'object' )
     {
-        const e = err as { status?: unknown, code?: unknown };
+        const e = err as { status? : unknown, code? : unknown };
 
         if( typeof e.status === 'number' && e.status >= 100 && e.status < 600 )
         {

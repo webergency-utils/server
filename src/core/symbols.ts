@@ -10,11 +10,11 @@ export const WEBERGENCY_GUARD = Symbol.for( 'webergency.server.guard' );
 export const WEBERGENCY_BRANCH_SERIALIZERS = Symbol.for( 'webergency.server.branchSerializers' );
 
 export type ControllerAotMeta =
-{
-    prefix?   : string
-    scope?    : Scope
-    endpoints : EndpointDefinition[]
-};
+    {
+        prefix?   : string
+        scope?    : Scope
+        endpoints : EndpointDefinition[]
+    };
 
 /** Endpoint as stored on the controller class (controller name filled at bootstrap). */
 export type EndpointDefinition = Omit<EndpointMetadata, 'controller'> & {
@@ -22,31 +22,31 @@ export type EndpointDefinition = Omit<EndpointMetadata, 'controller'> & {
 };
 
 export type ModuleAotMeta =
-{
-    global?       : boolean
-    imports?      : any[]
-    controllers?  : any[]
-    providers?    : any[]
-    guards?       : any[]
-    interceptors? : any[]
-    exports?      : any[]
-    files?        : any
-    reviver?      : any
-};
+    {
+        global?       : boolean
+        imports?      : any[]
+        controllers?  : any[]
+        providers?    : any[]
+        guards?       : any[]
+        interceptors? : any[]
+        exports?      : any[]
+        files?        : any
+        reviver?      : any
+    };
 
 export type InjectableAotMeta =
-{
-    kind   : 'provider' | 'guard' | 'interceptor' | 'controller'
-    token  : string
-    scope? : Scope
-};
+    {
+        kind   : 'provider' | 'guard' | 'interceptor' | 'controller'
+        token  : string
+        scope? : Scope
+    };
 
 /** Param AOT for a published guard `use()` — lives on the guard class, not the consumer controller. */
 export type GuardAotMeta =
-{
-    params   : ParamMetadata[]
-    isAsync? : boolean
-};
+    {
+        params   : ParamMetadata[]
+        isAsync? : boolean
+    };
 
 export function getControllerMeta( target: any ): ControllerAotMeta | undefined
 {

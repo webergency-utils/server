@@ -46,8 +46,8 @@ describe( 'client-ip', () =>
         {
             const req =
             {
-                headers        : new Headers({ 'x-forwarded-for' : '203.0.113.9' }),
-                remoteAddress  : '10.0.0.5'
+                headers       : new Headers({ 'x-forwarded-for' : '203.0.113.9' }),
+                remoteAddress : '10.0.0.5'
             };
 
             expect( resolveClientIp( req )).toBe( '10.0.0.5' );
@@ -156,6 +156,27 @@ describe( 'client-ip', () =>
 
             // Act / Assert
             expect( resolveClientIp( req, [ '10.0.0.0/8' ])).toBe( '10.0.0.9' );
+        });
+
+        it( 'should memoize compileTrustProxy by array reference and accept pre-compiled ranges', () =>
+        {
+            // Arrange
+            const allowlist = [ '10.0.0.0/8', '172.16.0.0/12' ];
+            const compiled1 = compileTrustProxy( allowlist );
+            const compiled2 = compileTrustProxy( allowlist );
+            const compiledFromPre = compileTrustProxy( compiled1 );
+            const req =
+            {
+                headers            : new Headers({ 'x-forwarded-for' : '203.0.113.42, 10.0.0.2' }),
+                remoteAddress      : '10.0.0.5',
+                compiledTrustProxy : compiled1
+            };
+
+            // Act / Assert
+            expect( compiled1 ).toBe( compiled2 );
+            expect( compiledFromPre ).toBe( compiled1 );
+            expect( resolveClientIp( req )).toBe( '203.0.113.42' );
+            expect( resolveClientIp( req, compiled1 )).toBe( '203.0.113.42' );
         });
     });
 });

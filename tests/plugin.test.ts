@@ -500,7 +500,8 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( secondVals.size ).toBeLessThan( firstVals.size );
         expect( secondParsers.size ).toBeLessThan( firstParsers.size );
         expect( output['temp_first_controller.ts']).toContain( 'parser: __parse_' );
-        expect( output['temp_first_controller.ts']).toContain( 'returnTypeSerializer: __ser_' );    });
+        expect( output['temp_first_controller.ts']).toContain( 'returnTypeSerializer: __ser_' );    
+    });
 
     it( 'should report an unresolved @Protect argument instead of dropping the guard', () =>
     {
@@ -927,6 +928,27 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( collectGeneratedLocals( js )).not.toContain( 'LEAKED_LINE_COMMENT' );
         expect(() => new Function( 'exports', 'require', 'module', js )).not.toThrow();
     });
+
+    it( 'should transform a standalone Guard class file even without @Injectable()', () =>
+    {
+        const code = `
+      import { Guard, Header } from '../decorators.js';
+
+      export class StandaloneAuthGuard implements Guard {
+        async use(@Header('authorization') auth: string) {
+          if (!auth) throw new Error('Unauthorized');
+        }
+      }
+    `;
+
+        const compiled = compileAndTransform( code );
+
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.guard")' );
+        expect( compiled ).toContain( 'Symbol.for("webergency.server.injectable")' );
+        expect( compiled ).toContain( 'kind: "guard"' );
+        expect( compiled ).toContain( 'isAsync: true' );
+        expect( compiled ).toContain( 'source: "Header"' );
+    });
 });
 
 function collectGeneratedLocals( js: string ): string
@@ -945,12 +967,12 @@ function collectGeneratedLocals( js: string ): string
             if( start < 0 ){ break }
 
             const ends =
-            [
-                js.indexOf( '\nconst ', start + 1 ),
-                js.indexOf( '\nlet ', start + 1 ),
-                js.indexOf( '\nclass ', start + 1 ),
-                js.indexOf( '\nexports.', start + 1 )
-            ].filter( i => i > start );
+                [
+                    js.indexOf( '\nconst ', start + 1 ),
+                    js.indexOf( '\nlet ', start + 1 ),
+                    js.indexOf( '\nclass ', start + 1 ),
+                    js.indexOf( '\nexports.', start + 1 )
+                ].filter( i => i > start );
             const end = ends.length ? Math.min( ...ends ) : js.length;
 
             chunks.push( js.slice( start, end ));

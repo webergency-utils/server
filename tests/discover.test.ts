@@ -9,7 +9,7 @@ describe( 'discoverFromEntryPoint', () =>
 {
     const tempFiles: string[] = [];
 
-    afterEach( () =>
+    afterEach(() =>
     {
         for( const file of tempFiles.splice( 0 ))
         {
@@ -23,7 +23,7 @@ describe( 'discoverFromEntryPoint', () =>
         // Arrange
         const tempFile = path.resolve( './temp_discover_entry.ts' );
         tempFiles.push( tempFile );
-        vi.spyOn( console, 'log' ).mockImplementation( () => {});
+        vi.spyOn( console, 'log' ).mockImplementation(() => {});
 
         fs.writeFileSync( tempFile, `
             function Controller( path?: string ){ return ( _: any ) => {} }
@@ -38,7 +38,7 @@ describe( 'discoverFromEntryPoint', () =>
 
             @Module({ controllers : [ ApiController ] })
             class AppModule {}
-        `);
+        ` );
 
         const program = ts.createProgram([ tempFile ], {
             target                 : ts.ScriptTarget.ES2022,
@@ -70,12 +70,12 @@ describe( 'discoverFromEntryPoint', () =>
         tempFiles.push( srcFile, manifest );
         fs.writeFileSync( srcFile, 'export const x = 1;\n' );
         fs.writeFileSync( manifest, 'export {};\n' );
-        vi.spyOn( console, 'log' ).mockImplementation( () => {});
+        vi.spyOn( console, 'log' ).mockImplementation(() => {});
 
         const program = ts.createProgram([ srcFile ], {
-            target           : ts.ScriptTarget.ES2022,
-            module           : ts.ModuleKind.ESNext,
-            skipLibCheck     : true
+            target       : ts.ScriptTarget.ES2022,
+            module       : ts.ModuleKind.ESNext,
+            skipLibCheck : true
         });
         const registry = createRegistry();
 
@@ -100,7 +100,7 @@ describe( 'discoverFromEntryPoint', () =>
         tempFiles.push( srcFile, pkgJson );
         fs.writeFileSync( srcFile, 'export const x = 1;\n' );
         fs.writeFileSync( pkgJson, JSON.stringify({ name : 'pkg-only', version : '1.0.0' }));
-        vi.spyOn( console, 'log' ).mockImplementation( () => {});
+        vi.spyOn( console, 'log' ).mockImplementation(() => {});
 
         const program = ts.createProgram([ srcFile ], {
             target       : ts.ScriptTarget.ES2022,

@@ -73,7 +73,7 @@ describe( 'AOT Symbol metadata helpers', () =>
         // Assert
         expect( getCustomMetadataBag( Host )).toBe( bag );
         expect( Host[WEBERGENCY_METADATA]).toBe( bag );
-        expect(( Host as any ).__metadata__).toBe( bag );
+        expect(( Host as any ).__metadata__ ).toBe( bag );
         expect( bag.legacy ).toBe( 1 );
         expect( bag.extra ).toBe( true );
     });

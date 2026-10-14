@@ -12,14 +12,14 @@ describe( 'DIContainer', () =>
         class A
         {
             static __injections__ = { constructorDeps : [ 'B' ], propertyDeps : {} };
-            b: any;
+            b : any;
             constructor( b: any ){ this.b = b }
             name(){ return 'A' }
         }
         class B
         {
             static __injections__ = { constructorDeps : [ 'A' ], propertyDeps : {} };
-            a: any;
+            a : any;
             constructor( a: any ){ this.a = a }
             name(){ return 'B' }
         }
@@ -54,7 +54,7 @@ describe( 'DIContainer', () =>
                 constructorDeps : [],
                 propertyDeps    : { dep : 'Dep' }
             };
-            dep!: Dep;
+            dep! : Dep;
         }
 
         const registry = new ApplicationRegistry();
@@ -116,16 +116,16 @@ describe( 'DIContainer', () =>
     it( 'should resolve value, class, and factory providers', async () =>
     {
         // Arrange
-        class Dep { value = 1 }
+        class Dep { value = 1; }
         class Host
         {
             static __injections__ = {
                 constructorDeps : [ 'Dep', 'any' ],
                 propertyDeps    : { extra : 'Dep' }
             };
-            dep: Dep;
-            unused: any;
-            extra!: Dep;
+            dep    : Dep;
+            unused : any;
+            extra! : Dep;
             constructor( dep: Dep, unused: any )
             {
                 this.dep = dep;
@@ -163,14 +163,14 @@ describe( 'DIContainer', () =>
         class A
         {
             static __injections__ = { constructorDeps : [ 'B' ], propertyDeps : {} };
-            b: any;
+            b : any;
             tag = 'a';
             constructor( b: any ){ this.b = b }
         }
         class B
         {
             static __injections__ = { constructorDeps : [ 'A' ], propertyDeps : {} };
-            a: any;
+            a : any;
             constructor( a: any ){ this.a = a }
             name(){ return 'B' }
         }
@@ -196,7 +196,7 @@ describe( 'DIContainer', () =>
         {
             static __scope__ = Scope.REQUEST;
             static __injections__ = { constructorDeps : [ 'B' ], propertyDeps : {} };
-            b: any;
+            b : any;
             tag = 'a';
             constructor( b: any ){ this.b = b }
             name(){ return 'A' }
@@ -205,7 +205,7 @@ describe( 'DIContainer', () =>
         {
             static __scope__ = Scope.REQUEST;
             static __injections__ = { constructorDeps : [ 'A' ], propertyDeps : {} };
-            a: any;
+            a : any;
             constructor( a: any ){ this.a = a }
             name(){ return 'B' }
         }
@@ -528,7 +528,7 @@ describe( 'DIContainer', () =>
         {
             static __scope__ = Scope.TRANSIENT;
             static __injections__ = { constructorDeps : [ 'B' ], propertyDeps : {} };
-            b: any;
+            b : any;
             tag = 'a';
             constructor( b: any ){ this.b = b }
             name(){ return 'A' }
@@ -537,7 +537,7 @@ describe( 'DIContainer', () =>
         {
             static __scope__ = Scope.TRANSIENT;
             static __injections__ = { constructorDeps : [ 'A' ], propertyDeps : {} };
-            a: any;
+            a : any;
             constructor( a: any ){ this.a = a }
             name(){ return 'B' }
         }

@@ -1,28 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { SimpleMultibuffer, WebsocketFrame, maskPayload } from '../src/helpers/ws-frame.js';
+import { MultiBuffer, WebsocketFrame, maskPayload } from '../src/helpers/ws-frame.js';
 
 describe( 'WebsocketFrame Framing and Multibuffer Utility', () => 
 {
-    it( 'should manage SimpleMultibuffer operations correctly', () => 
+    it( 'should manage MultiBuffer operations correctly', () => 
     {
-        const buffer = new SimpleMultibuffer();
+        const buffer = new MultiBuffer();
         expect( buffer.length ).toBe( 0 );
-        expect(() => buffer.get( 0 )).toThrowError( 'Index out of bounds' );
+        expect( buffer.get( 0 )).toBeUndefined();
 
         buffer.append( Buffer.from([1, 2, 3]));
         expect( buffer.length ).toBe( 3 );
         expect( buffer.get( 0 )).toBe( 1 );
         expect( buffer.get( 1 )).toBe( 2 );
         expect( buffer.get( 2 )).toBe( 3 );
-        expect(() => buffer.get( 3 )).toThrowError( 'Index out of bounds' );
+        expect( buffer.get( 3 )).toBeUndefined();
 
         buffer.append( Buffer.from([4, 5]));
         expect( buffer.length ).toBe( 5 );
         expect( buffer.get( 3 )).toBe( 4 );
         expect( buffer.get( 4 )).toBe( 5 );
-
-        expect(() => buffer.spliceConcat( 1, 2 )).toThrowError( 'Only spliceConcat starting at 0 is supported' );
-        expect(() => buffer.spliceConcat( 0, 10 )).toThrowError( 'Not enough bytes in buffer' );
 
         const spliced = buffer.spliceConcat( 0, 3 );
         expect( spliced ).toEqual( Buffer.from([1, 2, 3]));
@@ -36,11 +33,11 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
 
     it( 'should write and read a masked text frame arriving in chunks', () => 
     {
-        const tx = new SimpleMultibuffer();
+        const tx = new MultiBuffer();
         const message = 'Hello, WebSocket!';
         WebsocketFrame.write( tx, message, { mask : true });
 
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
 
         while( tx.length > 0 ) 
         {
@@ -59,7 +56,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
 
     it( 'should write and read masked text frame correctly', () => 
     {
-        const tx = new SimpleMultibuffer();
+        const tx = new MultiBuffer();
         const message = 'Hello, Masked!';
         WebsocketFrame.write( tx, message, { mask : true });
 
@@ -71,7 +68,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
         expect( payloadBytes[1] & 0x80 ).toBe( 0x80 ); // mask bit is set
     
         // Put it back to rx
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( payloadBytes );
 
         const events: any[] = [];
@@ -86,7 +83,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
 
     it( 'should write and read control frames (ping/pong/close)', () => 
     {
-        const tx = new SimpleMultibuffer();
+        const tx = new MultiBuffer();
         // Ping frame (opcode 9)
         WebsocketFrame.write( tx, 'ping-payload', { opcode : 9, mask : true });
         // Pong frame (opcode 10)
@@ -97,7 +94,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
         const closePayload = Buffer.concat([codeBuf, Buffer.from( 'Going away', 'utf8' )]);
         WebsocketFrame.write( tx, closePayload, { opcode : 8, mask : true });
 
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( tx.spliceConcat( 0, tx.length ));
 
         const events: any[] = [];
@@ -120,11 +117,11 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
 
     it( 'should handle medium payloads (length >= 126)', () => 
     {
-        const tx = new SimpleMultibuffer();
+        const tx = new MultiBuffer();
         const largeMessage = 'A'.repeat( 500 ); // 500 bytes (extended 16-bit length)
         WebsocketFrame.write( tx, largeMessage, { mask : true });
 
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( tx.spliceConcat( 0, tx.length ));
 
         const events: any[] = [];
@@ -140,11 +137,11 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
     it( 'should handle large payloads (length >= 65536) and binary frames', () => 
     {
         // Arrange
-        const tx = new SimpleMultibuffer();
+        const tx = new MultiBuffer();
         const payload = Buffer.alloc( 65536 );
         WebsocketFrame.write( tx, payload, { mask : true });
 
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( tx.spliceConcat( 0, tx.length ));
 
         // Act
@@ -164,13 +161,13 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
     it( 'should wait for full payload if header is parsed but payload is incomplete', () => 
     {
         // Arrange
-        const tx = new SimpleMultibuffer();
+        const tx = new MultiBuffer();
         WebsocketFrame.write( tx, 'hello', { mask : true });
 
         // Slice the 6-byte header and part of the payload (2 bytes out of 5)
         const partial = tx.spliceConcat( 0, 8 );
 
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( partial );
 
         // Act & Assert 1: Incomplete payload
@@ -199,7 +196,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
     it( 'should parse empty masked text frames (header only)', () =>
     {
         // Arrange — FIN + text, masked, length 0
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( Buffer.from([ 0x81, 0x80, 0x01, 0x02, 0x03, 0x04 ]));
 
         // Act
@@ -217,7 +214,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
     it( 'should reject 64-bit lengths with non-zero high bytes without throwing', () =>
     {
         // Arrange — length encoding 127 with high 32 bits set (would overflow signed << 24 before)
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( Buffer.from([
             0x82, 0xff,
             0x00, 0x00, 0x00, 0x01,
@@ -238,7 +235,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
     it( 'should read 64-bit lengths near 2GiB without signed-shift overflow', () =>
     {
         // Arrange — declare ~2.1GiB payload via 64-bit length; reject via maxPayload before alloc
-        const rx = new SimpleMultibuffer();
+        const rx = new MultiBuffer();
         rx.append( Buffer.from([
             0x82, 0xff,
             0x00, 0x00, 0x00, 0x00,
@@ -261,7 +258,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
         /** Read `bytes` as if they arrived from a client and collect the emitted events. */
         function readFrames( bytes: Buffer, options?: { maxPayload? : number }, state?: any )
         {
-            const rx = new SimpleMultibuffer();
+            const rx = new MultiBuffer();
             rx.append( bytes );
 
             const events: { event : string, args : any[] }[] = [];
@@ -357,7 +354,7 @@ describe( 'WebsocketFrame Framing and Multibuffer Utility', () =>
         {
             // Arrange
             const state = {};
-            const rx = new SimpleMultibuffer();
+            const rx = new MultiBuffer();
             const events: { event : string, args : any[] }[] = [];
             const emit = ( event: string, ...args: any[]) => { events.push({ event, args }) };
 

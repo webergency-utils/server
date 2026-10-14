@@ -52,7 +52,7 @@ describe( 'Microservice Integration Tests', () =>
             const client = net.connect( port, 'localhost', () =>
             {
                 const envelope = {
-                    id      : 'test-req-id',
+                    id : 'test-req-id',
                     pattern,
                     payload
                 };
@@ -218,7 +218,7 @@ describe( 'Microservice handler branches', () =>
         handler = undefined;
     });
 
-    async function startWith( controllers: any[] )
+    async function startWith( controllers: any[])
     {
         const adapter: MicroserviceAdapter =
         {
@@ -245,7 +245,7 @@ describe( 'Microservice handler branches', () =>
             interceptors : [],
             meta         : {}
         }]);
-        await startWith( [Ctrl] );
+        await startWith([Ctrl]);
 
         // Act / Assert
         await expect( handler!( 'unknown.pattern', {}, noopConnection ))
@@ -268,8 +268,8 @@ describe( 'Microservice handler branches', () =>
             interceptors : [],
             meta         : { event : true }
         }]);
-        const spy = vi.spyOn( console, 'error' ).mockImplementation( () => {} );
-        await startWith( [EvCtrl] );
+        const spy = vi.spyOn( console, 'error' ).mockImplementation(() => {});
+        await startWith([EvCtrl]);
 
         // Act
         const result = await handler!( 'ev.boom', {}, noopConnection );
@@ -295,7 +295,7 @@ describe( 'Microservice handler branches', () =>
             interceptors : [],
             meta         : {}
         }]);
-        await startWith( [MsgCtrl] );
+        await startWith([MsgCtrl]);
 
         // Act / Assert
         await expect( handler!( 'msg.boom', {}, noopConnection )).rejects.toMatchObject({
@@ -304,3 +304,47 @@ describe( 'Microservice handler branches', () =>
         });
     });
 });
+
+describe( 'NdjsonLineFramer', () =>
+{
+    it( 'should decode multi-byte UTF-8 characters split across chunks without corruption', async () =>
+    {
+        const { NdjsonLineFramer } = await import( '../src/microservice/ndjson-framer.js' );
+        const framer = new NdjsonLineFramer();
+        const json = JSON.stringify({ id : '1', pattern : 'greet', payload : 'héllo 🚀 日本語' }) + '\n';
+        const fullBuf = Buffer.from( json, 'utf8' );
+
+        // Split right inside multi-byte UTF-8 sequences (byte-by-byte)
+        const collected: string[] = [];
+
+        for( let i = 0; i < fullBuf.length; i += 2 )
+        {
+            const slice = fullBuf.subarray( i, Math.min( i + 2, fullBuf.length ));
+            const res = framer.push( slice );
+            expect( res.oversized ).toBe( false );
+            collected.push( ...res.lines );
+        }
+
+        expect( collected ).toHaveLength( 1 );
+        expect( JSON.parse( collected[0])).toEqual({
+            id      : '1',
+            pattern : 'greet',
+            payload : 'héllo 🚀 日本語'
+        });
+    });
+
+    it( 'should flag oversized lines and reset state', async () =>
+    {
+        const { NdjsonLineFramer } = await import( '../src/microservice/ndjson-framer.js' );
+        const framer = new NdjsonLineFramer( 16 );
+
+        const res1 = framer.push( Buffer.from( 'x'.repeat( 32 ), 'utf8' ));
+        expect( res1.oversized ).toBe( true );
+        expect( res1.lines ).toEqual([]);
+
+        const res2 = framer.push( Buffer.from( '{"ok":1}\n', 'utf8' ));
+        expect( res2.oversized ).toBe( false );
+        expect( res2.lines ).toEqual([ '{"ok":1}' ]);
+    });
+});
+

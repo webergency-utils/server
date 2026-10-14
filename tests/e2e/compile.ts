@@ -87,7 +87,7 @@ export function compileFixture(): void
     }
 }
 
-export async function loadCompiledApp(): Promise<{ AppModule: any, ParseController: any }>
+export async function loadCompiledApp(): Promise<{ AppModule : any, ParseController : any }>
 {
     const stamp = Date.now();
     const appUrl = `${pathToFileURL( path.join( fixtureDist, 'app.module.js' )).href}?t=${stamp}`;
@@ -109,7 +109,12 @@ export function allocatePort(): Promise<number>
             const port = typeof addr === 'object' && addr ? addr.port : 0;
             server.close( err =>
             {
-                if( err ){ reject( err ); return }
+                if( err )
+                {
+                    reject( err );
+
+                    return; 
+                }
 
                 resolve( port );
             });
@@ -119,12 +124,12 @@ export function allocatePort(): Promise<number>
 }
 
 export type HttpResult =
-{
-    status  : number
-    body    : any
-    raw     : string
-    headers : Headers
-};
+    {
+        status  : number
+        body    : any
+        raw     : string
+        headers : Headers
+    };
 
 export async function httpJson( base: string, pathAndQuery: string, init?: RequestInit ): Promise<HttpResult>
 {

@@ -10,7 +10,7 @@ describe( 'SwaggerSpecGenerator unit', () =>
 {
     const temps: string[] = [];
 
-    afterEach( () =>
+    afterEach(() =>
     {
         for( const f of temps.splice( 0 ))
         {
@@ -38,13 +38,13 @@ describe( 'SwaggerSpecGenerator unit', () =>
                 nested(): Nested { return { id: '1' } }
                 tree( body: TreeNode ): TreeNode { return body }
             }
-        `);
+        ` );
 
         const program = ts.createProgram([ ctrlPath ], {
-            target           : ts.ScriptTarget.ES2022,
-            module           : ts.ModuleKind.ESNext,
-            skipLibCheck     : true,
-            strict           : true
+            target       : ts.ScriptTarget.ES2022,
+            module       : ts.ModuleKind.ESNext,
+            skipLibCheck : true,
+            strict       : true
         });
         const registry = createRegistry();
         registry.controllers.set( 'DocController', { path : ctrlPath, injections : new Map() });
@@ -61,74 +61,74 @@ describe( 'SwaggerSpecGenerator unit', () =>
                 guards : [], interceptors : [], meta : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'upload',
-                httpMethod : 'POST',
-                path       : '/docs/upload',
-                params     : [{ source : 'RawBody' }],
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'upload',
+                httpMethod   : 'POST',
+                path         : '/docs/upload',
+                params       : [{ source : 'RawBody' }],
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'nested',
-                httpMethod : 'GET',
-                path       : '/docs/nested',
-                params     : [],
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'nested',
+                httpMethod   : 'GET',
+                path         : '/docs/nested',
+                params       : [],
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'tree',
-                httpMethod : 'POST',
-                path       : '/docs/tree',
-                params     : [{ source : 'Body' }],
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'tree',
+                httpMethod   : 'POST',
+                path         : '/docs/tree',
+                params       : [{ source : 'Body' }],
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'nested',
-                httpMethod : 'WS',
-                path       : '/docs/ws',
-                params     : [],
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'nested',
+                httpMethod   : 'WS',
+                path         : '/docs/ws',
+                params       : [],
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'upload',
-                httpMethod : 'POST',
-                path       : '/docs/file',
-                params     : [{ source : 'File', name : 'avatar' }],
-                files      : { fields : { avatar : { dest : '/tmp' }, note : {} } },
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'upload',
+                httpMethod   : 'POST',
+                path         : '/docs/file',
+                params       : [{ source : 'File', name : 'avatar' }],
+                files        : { fields : { avatar : { dest : '/tmp' }, note : {} } },
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'bag',
-                httpMethod : 'POST',
-                path       : '/docs/multipart',
-                params     : [{ source : 'Body' }],
-                files      : { fields : { photo : {} } },
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'bag',
+                httpMethod   : 'POST',
+                path         : '/docs/multipart',
+                params       : [{ source : 'Body' }],
+                files        : { fields : { photo : {} } },
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'upload',
-                httpMethod : 'POST',
-                path       : '/docs/files',
-                params     : [{ source : 'Files', name : 'docs' }],
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'upload',
+                httpMethod   : 'POST',
+                path         : '/docs/files',
+                params       : [{ source : 'Files', name : 'docs' }],
+                guards       : [], interceptors : [], meta         : {}
             },
             {
-                controller : 'DocController',
-                methodName : 'upload',
-                httpMethod : 'POST',
-                path       : '/docs/files-all',
-                params     : [{ source : 'Files' }],
-                guards : [], interceptors : [], meta : {}
+                controller   : 'DocController',
+                methodName   : 'upload',
+                httpMethod   : 'POST',
+                path         : '/docs/files-all',
+                params       : [{ source : 'Files' }],
+                guards       : [], interceptors : [], meta         : {}
             }
         );
 
-        vi.spyOn( console, 'log' ).mockImplementation( () => {});
+        vi.spyOn( console, 'log' ).mockImplementation(() => {});
 
         // Act
         SwaggerSpecGenerator.generate( registry, program, dir );

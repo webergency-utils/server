@@ -7,7 +7,7 @@ import
     setControllerMeta,
     setModuleMeta
 }
-from '../src/core/symbols.js';
+    from '../src/core/symbols.js';
 
 describe( 'bootstrapRegistry', () =>
 {
@@ -18,7 +18,7 @@ describe( 'bootstrapRegistry', () =>
         const registry = new ApplicationRegistry();
 
         // Act / Assert
-        expect( () => bootstrapRegistry( registry, { controllers : [BareCtrl] })).toThrow( /Missing AOT metadata/ );
+        expect(() => bootstrapRegistry( registry, { controllers : [BareCtrl] })).toThrow( /Missing AOT metadata/ );
     });
 
     it( 'should fail fast when a module class lacks AOT meta', () =>
@@ -28,7 +28,7 @@ describe( 'bootstrapRegistry', () =>
         const registry = new ApplicationRegistry();
 
         // Act / Assert
-        expect( () => bootstrapRegistry( registry, { module : BareMod })).toThrow( /Missing AOT metadata for: BareMod/ );
+        expect(() => bootstrapRegistry( registry, { module : BareMod })).toThrow( /Missing AOT metadata for: BareMod/ );
         expect( registry.missingAotHosts ).toContain( 'BareMod' );
     });
 
@@ -77,7 +77,7 @@ describe( 'bootstrapRegistry', () =>
         } as any );
 
         // Act / Assert
-        expect( () => registry.registerEndpoint({
+        expect(() => registry.registerEndpoint({
             controller   : 'B',
             methodName   : 'b',
             httpMethod   : 'GET',

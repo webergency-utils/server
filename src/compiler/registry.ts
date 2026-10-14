@@ -6,19 +6,19 @@ import ts from 'typescript';
  * registry is shared across the whole program so each expression is built once and reused.
  */
 export type ModuleGraphInfo =
-{
-    path          : string
-    global?       : boolean
-    /** Original decorator array elements — emit must reuse these nodes so import aliases resolve. */
-    controllers?  : ts.Expression[]
-    providers?    : ts.Expression[]
-    guards?       : ts.Expression[]
-    interceptors? : ts.Expression[]
-    imports?      : ts.Expression[]
-    exports?      : ts.Expression[]
-    files?        : any
-    reviver?      : any
-};
+    {
+        path          : string
+        global?       : boolean
+        /** Original decorator array elements — emit must reuse these nodes so import aliases resolve. */
+        controllers?  : ts.Expression[]
+        providers?    : ts.Expression[]
+        guards?       : ts.Expression[]
+        interceptors? : ts.Expression[]
+        imports?      : ts.Expression[]
+        exports?      : ts.Expression[]
+        files?        : any
+        reviver?      : any
+    };
 
 export interface ProjectRegistry {
     controllers       : Map<string, { path : string, injections : Map<string, string> }>

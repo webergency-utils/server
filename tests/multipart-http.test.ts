@@ -322,10 +322,10 @@ describe( 'multipart HTTP (real Node listen + fetch)', () =>
         {
             registry.registerController( 'C', {
                 echo : ( data: any ) => ({
-                    title  : data.title,
-                    name   : data.profile?.name,
-                    child  : data.bundle?.child,
-                    docs   : ( Array.isArray( data.docs ) ? data.docs : data.docs ? [ data.docs ] : [])
+                    title : data.title,
+                    name  : data.profile?.name,
+                    child : data.bundle?.child,
+                    docs  : ( Array.isArray( data.docs ) ? data.docs : data.docs ? [ data.docs ] : [])
                         .map(( f: UploadedFile ) => ({ filename : f.filename, size : f.size }))
                 })
             });
@@ -426,7 +426,7 @@ describe( 'multipart HTTP (real Node listen + fetch)', () =>
         const boundary = 'out';
         const body = multipartBody( boundary, [
             'Content-Disposition: form-data; name="title"\r\n\r\nraw',
-            `Content-Disposition: form-data; name="profile[name]"\r\n\r\nBob`,
+            'Content-Disposition: form-data; name="profile[name]"\r\n\r\nBob',
             `Content-Disposition: form-data; name="bundle"\r\nContent-Type: multipart/mixed; boundary=${inner}\r\n\r\n${nested}`
         ]);
 

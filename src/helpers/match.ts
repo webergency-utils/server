@@ -553,6 +553,23 @@ export type Path = string | TokenData;
  */
 function safeDecode( decode: Decode, name: string ): Decode
 {
+    if( decode === decodeURIComponent )
+    {
+        return ( value: string ) =>
+        {
+            if( value.indexOf( '%' ) === -1 ) { return value }
+
+            try
+            {
+                return decodeURIComponent( value );
+            }
+            catch
+            {
+                throw new BadRequestError( `Malformed percent-encoding in path parameter "${name}"` );
+            }
+        };
+    }
+
     return ( value: string ) =>
     {
         try

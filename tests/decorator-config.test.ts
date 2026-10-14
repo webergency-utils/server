@@ -15,7 +15,7 @@ import
     hasSeoDecorator,
     hasInternalDecorator
 }
-from '../src/compiler/decorator-config.js';
+    from '../src/compiler/decorator-config.js';
 
 function parseSource( source: string )
 {
@@ -60,7 +60,7 @@ function methodDecorators( source: string )
     return { decorators : ts.getDecorators( method! ), sourceFile };
 }
 
-function firstArgExpression( source: string ): { expr: ts.Expression, sourceFile: ts.SourceFile }
+function firstArgExpression( source: string ): { expr : ts.Expression, sourceFile : ts.SourceFile }
 {
     const sourceFile = parseSource( `const x = ${source};` );
     let expr: ts.Expression | undefined;
@@ -176,8 +176,8 @@ describe( 'extractFileConfig', () =>
     it( 'should map @File field name and options into fields', () =>
     {
         // Arrange
-        const named = classDecorators( `@File('avatar') class C {}` );
-        const withOpts = classDecorators( `@File('avatar', { maxFileSize: '2mb' }) class C {}` );
+        const named = classDecorators( '@File(\'avatar\') class C {}' );
+        const withOpts = classDecorators( '@File(\'avatar\', { maxFileSize: \'2mb\' }) class C {}' );
 
         // Act
         const a = extractFileConfig( named.decorators, named.sourceFile );

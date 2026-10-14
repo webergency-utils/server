@@ -70,7 +70,7 @@ describe( 'TcpClient', () =>
         Object.defineProperty(( client as any ).socket, 'writable', { get : () => false });
 
         // Act / Assert
-        await expect( client.send( 'p', {} )).rejects.toThrow( /TcpClient is not connected/ );
+        await expect( client.send( 'p', {})).rejects.toThrow( /TcpClient is not connected/ );
     });
 
     it( 'should ignore non-JSON reply lines and accept a later success', async () =>
@@ -119,7 +119,7 @@ describe( 'TcpClient', () =>
         await client.connect();
 
         // Act / Assert
-        await expect( client.send( 'math', {} )).rejects.toThrow( /RPC failed/ );
+        await expect( client.send( 'math', {})).rejects.toThrow( /RPC failed/ );
     });
 
     it( 'should fail pending sends when closed mid-flight', async () =>
@@ -136,8 +136,8 @@ describe( 'TcpClient', () =>
         await client.connect();
 
         // Act
-        const pending = client.send( 'slow', {} );
-        await new Promise( ( r ) => setTimeout( r, 20 ));
+        const pending = client.send( 'slow', {});
+        await new Promise(( r ) => setTimeout( r, 20 ));
         await client.close();
         client = undefined;
 
@@ -162,7 +162,7 @@ describe( 'TcpClient', () =>
         await client.connect();
 
         // Act / Assert
-        await expect( client.send( 'p', {} )).rejects.toThrow( /exceeds/ );
+        await expect( client.send( 'p', {})).rejects.toThrow( /exceeds/ );
         client = undefined;
     });
 });

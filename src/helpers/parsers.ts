@@ -18,14 +18,56 @@ function createPlainObject(): Record<string | number, any>
  * Used by multipart `MultipartPayload.toObject()` (files are not query text).
  */
 export type FormBag =
+    {
+        assign( key: string | number, value: any ): void
+        [key: string] : any
+    };
+
+function assignLeafValue( obj: any, k: string | number, value: any ): void
 {
-    assign( key: string | number, value: any ): void
-    [key: string]: any
-};
+    if( obj[k] !== undefined )
+    {
+        if( Array.isArray( obj[k]))
+        {
+            obj[k].push( value );
+        }
+        else if(
+            typeof obj[k] === 'object'
+            && obj[k] !== null
+            && Object.getPrototypeOf( obj[k]) === Object.prototype
+        )
+        {
+            // Nested plain form object — append under a numeric key
+            // (e.g. items[name]=first&items=second → { name, 0: second }).
+            // Class instances (UploadedFile, …) array-coerce like scalars.
+            const nested = obj[k];
+            obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
+        }
+        else
+        {
+            ( obj[k] = [obj[k]]).push( value );
+        }
+    }
+    else
+    {
+        obj[k] = value;
+    }
+}
 
 function assignFormValue( query: any, key: string | number, value: any ): void
 {
-    const keys = key.toString().replace( /\]\[/g, '[' ).replace( /]$/, '' ).split( '[' );
+    const keyStr = typeof key === 'string' ? key : key.toString();
+
+    if( keyStr.length > 0 && keyStr.indexOf( '[' ) === -1 )
+    {
+        if( isUnsafeKey( keyStr )){ return }
+
+        assignLeafValue( query, keyStr, value );
+
+        return;
+    }
+
+    const keys = keyStr.replace( /\]\[/g, '[' ).replace( /]$/, '' ).split( '[' );
     let obj = query, parent, parent_key;
 
     for( let i = 0; i < keys.length; ++i )
@@ -65,33 +107,7 @@ function assignFormValue( query: any, key: string | number, value: any ): void
         }
         else
         {
-            if( obj[k] !== undefined )
-            {
-                if( Array.isArray( obj[k]))
-                {
-                    obj[k].push( value );
-                }
-                else if(
-                    typeof obj[k] === 'object'
-                    && obj[k] !== null
-                    && Object.getPrototypeOf( obj[k]) === Object.prototype
-                )
-                {
-                    // Nested plain form object — append under a numeric key
-                    // (e.g. items[name]=first&items=second → { name, 0: second }).
-                    // Class instances (UploadedFile, …) array-coerce like scalars.
-                    const nested = obj[k];
-                    obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
-                }
-                else
-                {
-                    ( obj[k] = [obj[k]]).push( value );
-                }
-            }
-            else
-            {
-                obj[k] = value;
-            }
+            assignLeafValue( obj, k, value );
         }
     }
 }

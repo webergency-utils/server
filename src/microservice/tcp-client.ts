@@ -1,25 +1,22 @@
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { NdjsonLineFramer, TCP_MAX_LINE_BYTES } from './ndjson-framer.js';
 
-/** Max incomplete newline-delimited JSON line held in memory. */
-const TCP_MAX_LINE_BYTES = 1024 * 1024;
-
-export type TcpClientOptions =
-{
+export interface TcpClientOptions {
     host? : string
     port  : number
-};
+}
 
 /**
  * Nest-style TCP microservice client: `send` (request/response) and `emit` (fire-and-forget).
  */
 export class TcpClient
 {
-    private socket? : net.Socket;
-    private buffer = '';
-    private readonly pending = new Map<string, { resolve: ( v: any ) => void; reject: ( e: Error ) => void }>();
-    private readonly host: string;
-    private readonly port: number;
+    private socket?       : net.Socket;
+    private readonly framer  = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
+    private readonly pending = new Map<string, { resolve : ( v: any ) => void, reject : ( e: Error ) => void }>();
+    private readonly host : string;
+    private readonly port : number;
 
     constructor( options: TcpClientOptions )
     {
@@ -47,6 +44,7 @@ export class TcpClient
             });
             socket.on( 'close', () =>
             {
+                this.framer.reset();
                 this.failAll( new Error( 'Connection closed' ));
                 this.socket = undefined;
             });
@@ -77,6 +75,7 @@ export class TcpClient
     {
         const socket = this.socket;
         this.socket = undefined;
+        this.framer.reset();
         this.failAll( new Error( 'Client closed' ));
 
         if( !socket ){ return }
@@ -101,25 +100,17 @@ export class TcpClient
 
     private onData( chunk: Buffer ): void
     {
-        this.buffer += chunk.toString( 'utf8' );
-        let index;
+        const { lines, oversized } = this.framer.push( chunk );
 
-        while(( index = this.buffer.indexOf( '\n' )) !== -1 )
+        if( oversized )
         {
-            const rawLine = this.buffer.substring( 0, index );
+            this.rejectOversizedLine();
 
-            if( Buffer.byteLength( rawLine, 'utf8' ) > TCP_MAX_LINE_BYTES )
-            {
-                this.rejectOversizedLine();
+            return;
+        }
 
-                return;
-            }
-
-            const line = rawLine.trim();
-            this.buffer = this.buffer.substring( index + 1 );
-
-            if( !line ){ continue }
-
+        for( const line of lines )
+        {
             let response: any;
 
             try
@@ -146,16 +137,11 @@ export class TcpClient
                 waiter.reject( new Error( response.message || 'RPC Error' ));
             }
         }
-
-        if( Buffer.byteLength( this.buffer, 'utf8' ) > TCP_MAX_LINE_BYTES )
-        {
-            this.rejectOversizedLine();
-        }
     }
 
     private rejectOversizedLine(): void
     {
-        this.buffer = '';
+        this.framer.reset();
         this.failAll( new Error( `TCP response line exceeds ${TCP_MAX_LINE_BYTES} bytes` ));
         this.socket?.destroy();
     }
@@ -169,3 +155,4 @@ export class TcpClient
         this.pending.clear();
     }
 }
+

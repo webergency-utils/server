@@ -1,91 +1,53 @@
 import crypto from 'node:crypto';
+import { MultiBuffer } from './multibuffer.js';
+
+export { MultiBuffer, MultiBuffer as SimpleMultibuffer };
 
 export function maskPayload( mask: Uint8Array | Buffer, payload: Uint8Array | Buffer ): void 
 {
-    for( let i = 0; i < payload.length; ++i ) 
+    const len = payload.length;
+    let i = 0;
+
+    if( len >= 32 )
     {
-        payload[i] ^= mask[i % 4];
+        const align = ( 4 - ( payload.byteOffset & 3 )) & 3;
+
+        while( i < align )
+        {
+            payload[i] ^= mask[i & 3];
+            ++i;
+        }
+
+        const m0 = mask[align & 3];
+        const m1 = mask[( align + 1 ) & 3];
+        const m2 = mask[( align + 2 ) & 3];
+        const m3 = mask[( align + 3 ) & 3];
+        const mask32 = new Uint32Array( new Uint8Array([ m0, m1, m2, m3 ]).buffer )[0];
+        const wordCount = ( len - i ) >>> 2;
+        const words = new Uint32Array( payload.buffer, payload.byteOffset + i, wordCount );
+
+        for( let w = 0; w < wordCount; ++w )
+        {
+            words[w] ^= mask32;
+        }
+
+        i += wordCount << 2;
+    }
+
+    for( ; i < len; ++i ) 
+    {
+        payload[i] ^= mask[i & 3];
     }
 }
 
-export class SimpleMultibuffer 
-{
-    private buffers : Buffer[] = [];
-    public length = 0;
-
-    append( buffer: Buffer ): void 
-    {
-        this.buffers.push( buffer );
-        this.length += buffer.length;
-    }
-
-    get( index: number ): number 
-    {
-        let offset = 0;
-
-        for( const buf of this.buffers ) 
-        {
-            if( index < offset + buf.length ) 
-            {
-                return buf[index - offset];
-            }
-            offset += buf.length;
-        }
-        throw new Error( 'Index out of bounds' );
-    }
-
-    spliceConcat( start: number, count: number ): Buffer 
-    {
-        if( start !== 0 ) 
-        {
-            throw new Error( 'Only spliceConcat starting at 0 is supported' );
-        }
-
-        if( count > this.length ) 
-        {
-            throw new Error( 'Not enough bytes in buffer' );
-        }
-
-        const result = Buffer.alloc( count );
-        let bytesWritten = 0;
-
-        while( bytesWritten < count ) 
-        {
-            const first = this.buffers[0];
-            const bytesToCopy = Math.min( count - bytesWritten, first.length );
-            first.copy( result, bytesWritten, 0, bytesToCopy );
-            bytesWritten += bytesToCopy;
-
-            if( bytesToCopy === first.length ) 
-            {
-                this.buffers.shift();
-            }
-            else 
-            {
-                this.buffers[0] = first.subarray( bytesToCopy );
-            }
-        }
-
-        this.length -= count;
-
-        return result;
-    }
-
-    clear(): void 
-    {
-        this.buffers = [];
-        this.length = 0;
-    }
-}
-
-function readUint32BE( buf: SimpleMultibuffer, offset: number ): number
+function readUint32BE( buf: MultiBuffer, offset: number ): number
 {
     // Multiply to avoid JS signed 32-bit overflow from `<< 24`.
     return (
-        ( buf.get( offset ) & 0xff ) * 0x1000000
-        + ( buf.get( offset + 1 ) & 0xff ) * 0x10000
-        + ( buf.get( offset + 2 ) & 0xff ) * 0x100
-        + ( buf.get( offset + 3 ) & 0xff )
+        (( buf.get( offset ) ?? 0 ) & 0xff ) * 0x1000000
+        + (( buf.get( offset + 1 ) ?? 0 ) & 0xff ) * 0x10000
+        + (( buf.get( offset + 2 ) ?? 0 ) & 0xff ) * 0x100
+        + (( buf.get( offset + 3 ) ?? 0 ) & 0xff )
     );
 }
 
@@ -223,37 +185,47 @@ function emitControl( opcode: number, payload: Buffer, emit: Emit ): boolean
 
 export class WebsocketFrame 
 {
-    static write( tx_buffer: SimpleMultibuffer, payload: string | Buffer, options: { opcode? : number, mask? : boolean } = {}): void 
+    static write( tx_buffer: MultiBuffer, payload: string | Buffer, options: { opcode? : number, mask? : boolean } = {}): void 
     {
         const flag = 0x80 | ( options.opcode !== undefined ? options.opcode : ( typeof payload === 'string' ? 0x01 : 0x02 ));
         const bufPayload = typeof payload === 'string' ? Buffer.from( payload, 'utf8' ) : payload;
         const length = bufPayload.length;
-        const mask = options.mask ? crypto.randomBytes( 4 ) : null;
+        const maskBit = options.mask ? 0x80 : 0;
+        const baseHeaderLen = length < 126 ? 2 : ( length < 65536 ? 4 : 10 );
+        const header = Buffer.allocUnsafe( baseHeaderLen + ( options.mask ? 4 : 0 ));
+        header[0] = flag;
 
         if( length < 126 ) 
         {
-            tx_buffer.append( Buffer.from([flag, ( mask ? 0x80 : 0 ) | length]));
+            header[1] = maskBit | length;
         }
         else if( length < 65536 ) 
         {
-            tx_buffer.append( Buffer.from([flag, ( mask ? 0x80 : 0 ) | 126, ( length >> 8 ) & 255, length & 255]));
+            header[1] = maskBit | 126;
+            header[2] = ( length >> 8 ) & 255;
+            header[3] = length & 255;
         }
         else 
         {
-            tx_buffer.append( Buffer.from([
-                flag, ( mask ? 0x80 : 0 ) | 127,
-                0, 0, 0, 0,
-                ( length >> 24 ) & 255, ( length >> 16 ) & 255, ( length >> 8 ) & 255, length & 255
-            ]));
+            header[1] = maskBit | 127;
+            header[2] = 0;
+            header[3] = 0;
+            header[4] = 0;
+            header[5] = 0;
+            header[6] = ( length >> 24 ) & 255;
+            header[7] = ( length >> 16 ) & 255;
+            header[8] = ( length >> 8 ) & 255;
+            header[9] = length & 255;
         }
 
-        if( mask ) 
+        if( options.mask ) 
         {
-            tx_buffer.append( mask );
+            const mask = header.subarray( baseHeaderLen, baseHeaderLen + 4 );
+            crypto.randomFillSync( mask );
             maskPayload( mask, bufPayload );
         }
 
-        tx_buffer.append( bufPayload );
+        tx_buffer.append( header, bufPayload );
     }
 
     /**
@@ -262,7 +234,7 @@ export class WebsocketFrame
      * once the stream is misframed.
      */
     static read(
-        rx_buffer: SimpleMultibuffer,
+        rx_buffer: MultiBuffer,
         emit: Emit,
         options?: { maxPayload? : number },
         state: FrameReadState = {}
@@ -270,8 +242,8 @@ export class WebsocketFrame
     {
         while( rx_buffer.length >= 2 ) 
         {
-            const b0 = rx_buffer.get( 0 );
-            const b1 = rx_buffer.get( 1 );
+            const b0 = rx_buffer.get( 0 )!;
+            const b1 = rx_buffer.get( 1 )!;
             const fin = ( b0 & 0x80 ) !== 0;
             const opcode = b0 & 0x0f;
             const lengthByte = b1 & 0x7f;
@@ -316,7 +288,7 @@ export class WebsocketFrame
             }
             else if( lengthByte === 126 && rx_buffer.length >= 4 ) 
             {
-                payload_length = ( rx_buffer.get( 2 ) << 8 ) + rx_buffer.get( 3 );
+                payload_length = ( rx_buffer.get( 2 )! << 8 ) + rx_buffer.get( 3 )!;
                 header_length = 8;
             }
             else if( lengthByte === 127 && rx_buffer.length >= 10 ) 

@@ -30,6 +30,6 @@ describe( 'Exports & Config', () =>
     {
         expect( index.Server ).toBeDefined();
         expect( index.Context ).toBeDefined();
-        expect( ( index as any ).MetadataStore ).toBeUndefined();
+        expect(( index as any ).MetadataStore ).toBeUndefined();
     });
 });

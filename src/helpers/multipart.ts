@@ -8,16 +8,16 @@ import
     parseHeaders,
     parseContentDisposition
 }
-from './http-header-parse.js';
+    from './http-header-parse.js';
 import { createFormBag } from './parsers.js';
 
 const Step =
-{
-    PREAMBLE    : 0,
-    PART_HEADER : 1,
-    PART_BODY   : 2,
-    DONE        : 3
-} as const;
+    {
+        PREAMBLE    : 0,
+        PART_HEADER : 1,
+        PART_BODY   : 2,
+        DONE        : 3
+    } as const;
 
 const CRLF = Buffer.from( '\r\n', 'utf8' );
 const CRLF_CRLF = Buffer.from( '\r\n\r\n', 'utf8' );
@@ -86,14 +86,14 @@ export class UploadedFile
     path? : string;
     size = 0;
 
-    private fileMode: UploadedFileMode = 'buffer';
-    private chunks: Buffer[] = [];
-    private writeStream?: WriteStream;
+    private fileMode     : UploadedFileMode = 'buffer';
+    private chunks       : Buffer[] = [];
+    private writeStream? : WriteStream;
     private ended = false;
-    private endWaiters?: Array<() => void>;
-    private error?: Error;
-    private maxSize?: number;
-    private cleaning?: Promise<void>;
+    private endWaiters?  : Array<() => void>;
+    private error?       : Error;
+    private maxSize?     : number;
+    private cleaning?    : Promise<void>;
 
     constructor( field: string, filename: string, mime: string, headers: Record<string, string> )
     {
@@ -296,7 +296,7 @@ export class UploadedFile
         {
             await new Promise<void>( resolve =>
             {
-                if( stream.destroyed || ( stream as { closed?: boolean }).closed )
+                if( stream.destroyed || ( stream as { closed? : boolean }).closed )
                 {
                     resolve();
 
@@ -552,18 +552,18 @@ export function throwIfAborted( signal?: AbortSignal )
 }
 
 /** Best-effort unlink of any disk-backed parts (e.g. after a failed parse). */
-export async function cleanupUploadedFiles( files: UploadedFile[] )
+export async function cleanupUploadedFiles( files: UploadedFile[])
 {
     await Promise.all( files.map( f => f.cleanup()));
 }
 
 type BoundaryHit =
-{
-    start    : number
-    length?  : number
-    last?    : boolean
-    partial? : boolean
-};
+    {
+        start    : number
+        length?  : number
+        last?    : boolean
+        partial? : boolean
+    };
 
 function isPromise( value: void | Promise<void> ): value is Promise<void>
 {
@@ -576,26 +576,26 @@ function isPromise( value: void | Promise<void> ): value is Promise<void>
  */
 export class MultipartParser
 {
-    private boundary : Buffer;
-    private buffer   : MultiBuffer;
-    private step     : number = Step.PREAMBLE;
-    private headers  : Record<string, string> = {};
+    private boundary        : Buffer;
+    private buffer          : MultiBuffer;
+    private step            : number = Step.PREAMBLE;
+    private headers         : Record<string, string> = {};
     private partName = '';
-    private file?    : UploadedFile;
+    private file?           : UploadedFile;
     private fieldSize = 0;
-    private fieldChunks: Buffer[] = [];
-    private files: UploadedFile[] = [];
-    private fields: Record<string, MultipartFieldValue> = {};
-    private parts: MultipartPartEntry[] = [];
+    private fieldChunks     : Buffer[] = [];
+    private files           : UploadedFile[] = [];
+    private fields          : Record<string, MultipartFieldValue> = {};
+    private parts           : MultipartPartEntry[] = [];
     private fileCount = 0;
     private fieldCount = 0;
     private totalSize = 0;
-    private options: MultipartParseOptions;
-    private pending: Promise<void> = Promise.resolve();
+    private options         : MultipartParseOptions;
+    private pending         : Promise<void> = Promise.resolve();
     private finished = false;
-    private hit: BoundaryHit = { start : -1 };
+    private hit             : BoundaryHit = { start : -1 };
     /** When set, current part body is a nested multipart to re-parse. */
-    private nestedBoundary?: string;
+    private nestedBoundary? : string;
 
     constructor( boundary: string, options: MultipartParseOptions = {})
     {
@@ -686,14 +686,14 @@ export class MultipartParser
                 this.headers = parseHeaders( headerRaw );
                 this.step = Step.PART_BODY;
 
-                const disposition = parseContentDisposition( this.headers['content-disposition'] );
+                const disposition = parseContentDisposition( this.headers['content-disposition']);
                 const rawName = disposition.name || '';
                 this.partName = nestFieldName( this.options.namePrefix || '', rawName );
 
                 const nestDepth = this.options.nestDepth ?? 0;
                 const nestedBoundary = nestDepth < MAX_MULTIPART_NEST_DEPTH
-                    && isMultipartMime( this.headers['content-type'] )
-                    ? extractMultipartBoundary( this.headers['content-type'] )
+                    && isMultipartMime( this.headers['content-type'])
+                    ? extractMultipartBoundary( this.headers['content-type'])
                     : undefined;
 
                 if( nestedBoundary )
@@ -1108,7 +1108,8 @@ export async function parseMultipartStream(
     }
     catch( err )
     {
-        try { reader.cancel(); } catch { /* ignore */ }
+        try { reader.cancel() }
+        catch{ /* ignore */ }
         await cleanupUploadedFiles( parser.result.files );
 
         throw err;

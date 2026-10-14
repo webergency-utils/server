@@ -90,12 +90,61 @@ export function parseExpression( expr: ts.Expression, sourceFile: ts.SourceFile 
     return { __raw_code__ : code };
 }
 
-/** Name of the decorator being applied, whether or not it is called. */
-export function decoratorName( decorator: ts.Decorator ): string
+/** Unwrapped expression of a decorator (`@Foo()` -> `Foo`, `@Foo` -> `Foo`). */
+export function decoratorIdent( decorator: ts.Decorator ): ts.Expression
 {
     const expr = decorator.expression;
 
-    return ts.isCallExpression( expr ) ? expr.expression.getText() : expr.getText();
+    return ts.isCallExpression( expr ) ? expr.expression : expr;
+}
+
+/** Name of the decorator being applied, whether or not it is called. */
+export function decoratorName( decorator: ts.Decorator ): string
+{
+    return decoratorIdent( decorator ).getText();
+}
+
+/** Find the first decorator whose unwrapped identifier matches `name`. */
+export function findDecoratorNamed( decorators: readonly ts.Decorator[] | undefined, name: string ): ts.Decorator | null
+{
+    if( !decorators ){ return null }
+
+    for( const d of decorators )
+    {
+        const ident = decoratorIdent( d );
+
+        if( ts.isIdentifier( ident ) && ident.text === name )
+        {
+            return d;
+        }
+    }
+
+    return null;
+}
+
+/** True when any decorator on the node matches `name` (either `@Name` or `@Name(...)`). */
+export function hasDecoratorNamed( decorators: readonly ts.Decorator[] | undefined, name: string ): boolean
+{
+    if( !decorators ){ return false }
+
+    for( const d of decorators )
+    {
+        const ident = decoratorIdent( d );
+
+        if( ts.isIdentifier( ident ) && ident.text === name )
+        {
+            return true;
+        }
+
+        const text = d.expression.getText();
+
+        if( text === name || text.startsWith( `${name}(` ))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -271,27 +320,90 @@ export function hasPublicDecorator( decorators: readonly ts.Decorator[] | undefi
     return false;
 }
 
-/** Paren-free `@Seo` / `@Internal` — identifier or call expression. */
-function hasNamedDecorator( decorators: readonly ts.Decorator[] | undefined, name: string ): boolean
+export function hasSeoDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
 {
-    if( !decorators ){ return false }
+    return hasDecoratorNamed( decorators, 'Seo' );
+}
 
-    for( const d of decorators )
+export function hasInternalDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
+{
+    return hasDecoratorNamed( decorators, 'Internal' );
+}
+
+/** True when a class declaration implements an interface by name (e.g. `Guard` or `Interceptor`). */
+export function classImplementsInterface( node: ts.ClassDeclaration, interfaceName: string ): boolean
+{
+    if( !node.heritageClauses ){ return false }
+
+    for( const clause of node.heritageClauses )
     {
-        const text = d.expression.getText();
+        if( clause.token !== ts.SyntaxKind.ImplementsKeyword ){ continue }
 
-        if( text === name || text.startsWith( `${name}(` )){ return true }
+        for( const typeNode of clause.types )
+        {
+            const text = typeNode.expression.getText();
+
+            if( text === interfaceName || text.endsWith( `.${interfaceName}` ))
+            {
+                return true;
+            }
+        }
     }
 
     return false;
 }
 
-export function hasSeoDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
+/**
+ * True when a class is a standalone Guard (`implements Guard` or has a `use` method with
+ * parameter decorators) even if it omits `@Injectable()`.
+ */
+export function isStandaloneGuardClass( node: ts.ClassDeclaration ): boolean
 {
-    return hasNamedDecorator( decorators, 'Seo' );
+    if( classImplementsInterface( node, 'Guard' ))
+    {
+        return true;
+    }
+
+    const useMethod = node.members.find(
+        m => ts.isMethodDeclaration( m ) && m.name.getText() === 'use'
+    ) as ts.MethodDeclaration | undefined;
+
+    if( !useMethod ){ return false }
+
+    for( const param of useMethod.parameters )
+    {
+        const decs = ts.getDecorators( param );
+
+        if( decs && decs.length > 0 )
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
-export function hasInternalDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
+/**
+ * True when a class declaration carries a framework decorator (`@Controller`, `@Injectable`,
+ * `@Module`) or is a standalone `Guard` / `Interceptor`.
+ */
+export function isRelevantSourceClass( node: ts.ClassDeclaration ): boolean
 {
-    return hasNamedDecorator( decorators, 'Internal' );
+    const decorators = ts.getDecorators( node );
+
+    if( decorators )
+    {
+        for( const d of decorators )
+        {
+            const text = d.expression.getText();
+
+            if( text.includes( 'Controller' ) || text.includes( 'Injectable' ) || text.includes( 'Module' ))
+            {
+                return true;
+            }
+        }
+    }
+
+    return isStandaloneGuardClass( node ) || classImplementsInterface( node, 'Interceptor' );
 }
+

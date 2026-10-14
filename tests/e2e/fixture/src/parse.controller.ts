@@ -1,34 +1,34 @@
 import { Controller, Get, Post, Query, Body, Param, Header } from '@webergency-utils/server';
 
 export type SearchQuery =
-{
-    apiKey? : string
-    page?   : number
-    active? : boolean
-};
+    {
+        apiKey? : string
+        page?   : number
+        active? : boolean
+    };
 
 export type CreateUser =
-{
-    name  : string
-    age?  : number
-    tags? : string[]
-};
+    {
+        name  : string
+        age?  : number
+        tags? : string[]
+    };
 
 export type NestedBody =
-{
-    user : { name : string, age? : number }
-    tags : string[]
-};
+    {
+        user : { name : string, age? : number }
+        tags : string[]
+    };
 
 export type Tagged =
     | { type : 'a', a : string }
     | { type : 'b', b : number };
 
 export type NestedQuery =
-{
-    user? : { name : string }
-    q?    : string
-};
+    {
+        user? : { name : string }
+        q?    : string
+    };
 
 @Controller( '/parse' )
 export class ParseController
@@ -102,7 +102,7 @@ export class ParseController
     }
 
     @Post( '/list' )
-    listBody( @Body() body: CreateUser[] )
+    listBody( @Body() body: CreateUser[])
     {
         return body;
     }

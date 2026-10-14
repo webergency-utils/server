@@ -5,6 +5,8 @@ import type { ValidationMode } from '@webergency-utils/typechecker';
 import { ProjectRegistry, ModuleGraphInfo } from './registry.js';
 import {
     HTTP_METHOD_DECORATORS,
+    decoratorIdent,
+    findDecoratorNamed,
     extractCorsConfig,
     extractSecurityConfig,
     extractFileConfig,
@@ -13,6 +15,8 @@ import {
     hasPublicDecorator,
     hasSeoDecorator,
     hasInternalDecorator,
+    isStandaloneGuardClass,
+    isRelevantSourceClass,
     parseExpression
 } from './decorator-config.js';
 import { mergeFileConfigs } from '../helpers/file-upload.js';
@@ -22,11 +26,6 @@ import { MetadataCollector, applyDirectives, byName, guardName } from './metadat
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
 
 const MODULE_GRAPH_KEYS = [ 'controllers', 'providers', 'guards', 'interceptors', 'imports', 'exports' ] as const;
-
-function decoratorIdent( dec: ts.Decorator ): ts.Expression
-{
-    return ts.isCallExpression( dec.expression ) ? dec.expression.expression : dec.expression;
-}
 
 function extractClassReferences( expr: ts.Expression ): ts.Expression[]
 {
@@ -110,7 +109,7 @@ function collectModuleGraph( statement: ts.ClassDeclaration, sourceFile: ts.Sour
 
             const key = prop.name.text;
 
-            if(( MODULE_GRAPH_KEYS as readonly string[] ).includes( key ))
+            if(( MODULE_GRAPH_KEYS as readonly string[]).includes( key ))
             {
                 ( graph as any )[key] = extractClassReferences( prop.initializer );
             }
@@ -388,25 +387,8 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                 if( ts.isClassDeclaration( statement )) 
                 {
                     const decorators = ts.getDecorators( statement );
-                    let controllerDec: ts.Decorator | null = null;
-
-                    if( decorators ) { for( const d of decorators ) { if( ts.isCallExpression( d.expression ) && ts.isIdentifier( d.expression.expression ) && d.expression.expression.text === 'Controller' ) { controllerDec = d; break } } }
-
-                    let injectableDec: ts.Decorator | null = null;
-
-                    if( decorators ) 
-                    {
-                        for( const d of decorators ) 
-                        {
-                            const ident = ts.isCallExpression( d.expression ) ? d.expression.expression : d.expression;
-
-                            if( ts.isIdentifier( ident ) && ident.text === 'Injectable' ) 
-                            {
-                                injectableDec = d;
-                                break;
-                            }
-                        }
-                    }
+                    const controllerDec = findDecoratorNamed( decorators, 'Controller' );
+                    const injectableDec = findDecoratorNamed( decorators, 'Injectable' );
 
                     if( injectableDec && statement.name ) 
                     {
@@ -725,7 +707,7 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                         const params = collector.resolveParamsMetadata( useMethod.parameters );
                         const prev = registry.guards.get( possibleGuardName );
 
-                        if( prev || params.length > 0 )
+                        if( prev || params.length > 0 || isStandaloneGuardClass( statement ))
                         {
                             registry.guards.set( possibleGuardName, {
                                 path    : sourceFile.fileName,
@@ -774,28 +756,9 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                         const isGuard = registry.guards.has( className );
                         const isInterceptor = registry.interceptors.has( className );
 
-                        const decorators = ts.getDecorators( node );
-                        let hasInjectableDec = false;
-                        let hasControllerDec = false;
-                        let hasModuleDec = false;
-
-                        if( decorators ) 
-                        {
-                            for( const d of decorators ) 
-                            {
-                                const text = d.expression.getText();
-
-                                if( text.includes( 'Injectable' )) { hasInjectableDec = true }
-
-                                if( text.includes( 'Controller' )) { hasControllerDec = true }
-
-                                if( text.includes( 'Module' )) { hasModuleDec = true }
-                            }
-                        }
-
                         const updatedMembers = node.members.map( member => ts.visitNode( member, visit ) as ts.ClassElement );
 
-                        if( isController || isProvider || isModule || isGuard || isInterceptor || hasInjectableDec || hasControllerDec || hasModuleDec ) 
+                        if( isController || isProvider || isModule || isGuard || isInterceptor || isRelevantSourceClass( node )) 
                         {
                             const constructorDeps = findConstructorDeps( node, checker ) || [];
                             const propertyDeps = resolvePropertyDeps( node, checker ) || {};

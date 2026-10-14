@@ -16,7 +16,7 @@ describe( 'collectBeforePluginIds', () =>
     it( 'should always include the typechecker transformer first', () =>
     {
         // Arrange / Act
-        const ids = collectBeforePluginIds( [] );
+        const ids = collectBeforePluginIds([]);
 
         // Assert
         expect( ids ).toEqual([ TYPECHECKER_TRANSFORM ]);
@@ -65,9 +65,9 @@ describe( 'readTsPatchPlugins', () =>
 {
     it( 'should return an empty list when compilerOptions is missing plugins', () =>
     {
-        expect( readTsPatchPlugins( undefined )).toEqual( [] );
-        expect( readTsPatchPlugins({}) ).toEqual( [] );
-        expect( readTsPatchPlugins({ plugins : 'nope' }) ).toEqual( [] );
+        expect( readTsPatchPlugins( undefined )).toEqual([]);
+        expect( readTsPatchPlugins({})).toEqual([]);
+        expect( readTsPatchPlugins({ plugins : 'nope' })).toEqual([]);
     });
 
     it( 'should return object plugin entries from compilerOptions', () =>
@@ -110,7 +110,7 @@ describe( 'createBeforeTransformers', () =>
             let emitted = '';
             const host = ts.createCompilerHost( options );
             host.writeFile = ( _name, data ) => { emitted = data };
-            const program = ts.createProgram( [file], options, host );
+            const program = ts.createProgram([file], options, host );
 
             // Act
             program.emit(

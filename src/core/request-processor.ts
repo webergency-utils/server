@@ -1,6 +1,5 @@
 import { Context } from './context.js';
-import { MetadataStore } from './metadata.js';
-import { DIContainer } from './container.js';
+import { ApplicationRegistry, getRegistry } from './registry.js';
 import { isMultipartContentType } from '../helpers/request-reader.js';
 import { EndpointMetadata, ParamMetadata, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
 import { ServerRequest, resolveRequestFileOptions } from './server-request.js';
@@ -70,6 +69,107 @@ function serializationErrorCode( err: SerializationError ): string
     return err.message;
 }
 
+const reversedInterceptorsCache = new WeakMap<EndpointMetadata, string[]>();
+const rpcRequestTemplateCache = new WeakMap<EndpointMetadata, Request>();
+
+interface EndpointPlan {
+    controllerModule      : any
+    moduleFiles           : FileOptions | undefined
+    moduleReviver         : Reviver | null | undefined
+    reversedInterceptors  : string[]
+    needsResponseInParams : boolean
+    hasMiddlewares        : boolean
+    hasGuards             : boolean
+}
+
+const endpointPlanCache = new WeakMap<ApplicationRegistry, WeakMap<EndpointMetadata, EndpointPlan>>();
+
+function getReversedInterceptors( metadata: EndpointMetadata ): string[]
+{
+    if( metadata.interceptors.length === 0 ) { return metadata.interceptors }
+
+    let reversed = reversedInterceptorsCache.get( metadata );
+
+    if( !reversed )
+    {
+        reversed = [ ...metadata.interceptors ].reverse();
+        reversedInterceptorsCache.set( metadata, reversed );
+    }
+
+    return reversed;
+}
+
+function getEndpointPlan( registry: ApplicationRegistry, metadata: EndpointMetadata ): EndpointPlan
+{
+    let byMeta = endpointPlanCache.get( registry );
+
+    if( !byMeta )
+    {
+        byMeta = new WeakMap();
+        endpointPlanCache.set( registry, byMeta );
+    }
+
+    let plan = byMeta.get( metadata );
+
+    if( !plan )
+    {
+        const controllerModule = registry.getTokenModule( metadata.controller );
+        plan = {
+            controllerModule,
+            moduleFiles           : resolveModuleFileOptions( controllerModule ),
+            moduleReviver         : resolveModuleReviver( controllerModule ),
+            reversedInterceptors  : getReversedInterceptors( metadata ),
+            needsResponseInParams : metadata.params.some( p => p.source === 'Response' ),
+            hasMiddlewares        : Boolean( metadata.middlewares && metadata.middlewares.length > 0 ),
+            hasGuards             : metadata.guards.length > 0
+        };
+        byMeta.set( metadata, plan );
+    }
+
+    return plan;
+}
+
+function getRpcTemplateRequest( metadata: EndpointMetadata ): Request
+{
+    let req = rpcRequestTemplateCache.get( metadata );
+
+    if( !req )
+    {
+        req = new Request( 'rpc://localhost/' + metadata.path );
+        rpcRequestTemplateCache.set( metadata, req );
+    }
+
+    return req;
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+    Param     : 'param',
+    Body      : 'body',
+    RawBody   : 'rawbody',
+    Query     : 'query',
+    Header    : 'header',
+    Headers   : 'headers',
+    Request   : 'request',
+    Response  : 'response',
+    Ip        : 'ip',
+    Url       : 'url',
+    Hostname  : 'hostname',
+    Path      : 'path',
+    Context   : 'context',
+    Inject    : 'inject',
+    WebSocket : 'websocket',
+    Peer      : 'peer',
+    Cookies   : 'cookies',
+    Cookie    : 'cookie',
+    File      : 'file',
+    Files     : 'files'
+};
+
+function getParamLabel( p: ParamMetadata ): string
+{
+    return p.name || SOURCE_LABELS[p.source] || p.source.toLowerCase();
+}
+
 export class RequestProcessor 
 {
     public static applyReviver(
@@ -96,14 +196,14 @@ export class RequestProcessor
         }
     }
 
-    private static assertForwardCompatible( bag: ServerResponse, result: unknown ): void
+    private static assertForwardCompatible( bag: ServerResponse | undefined, result: unknown ): void
     {
-        if( bag.bodySet )
+        if( bag?.bodySet )
         {
             throw Object.assign( new Error( 'Cannot forward after streaming a response body' ), { status : 500 });
         }
 
-        if( bag.toResponse().headers.has( 'Location' ))
+        if( bag && bag.toResponse().headers.has( 'Location' ))
         {
             throw Object.assign( new Error( 'Cannot combine redirect and forward' ), { status : 500 });
         }
@@ -284,7 +384,7 @@ export class RequestProcessor
             case 'Hostname': val = sreq.hostname; break;
             case 'Path': val = sreq.path; break;
             case 'Context': val = Context.get(); break;
-            case 'Inject': val = await MetadataStore.getInjectable( p.name!, contextModule ); break;
+            case 'Inject': val = await getRegistry().getInjectable( p.name!, contextModule ); break;
             case 'WebSocket': val = ws; break;
             case 'Peer': {
                 val = sreq.peer;
@@ -345,11 +445,13 @@ export class RequestProcessor
 
             if( parserFn )
             {
+                const paramLabel = getParamLabel( p );
+
                 try
                 {
                     const parseArg = sreq.reviver
                         ? { reviver : sreq.reviver }
-                        : ( p.name || p.source.toLowerCase());
+                        : paramLabel;
                     val = parserFn( val, parseArg as any );
 
                     // Cache validated body so a later body() call does not re-parse.
@@ -364,7 +466,7 @@ export class RequestProcessor
                     {
                         ctx.success = false;
                         ctx.errors.push({
-                            path  : parseErrorPath( p.name || p.source.toLowerCase(), e.path ),
+                            path  : parseErrorPath( paramLabel, e.path ),
                             error : parseErrorCode( e )
                         });
 
@@ -398,7 +500,7 @@ export class RequestProcessor
                 ctx.from = ( bodyIsUrlencoded || bodyIsMultipart ) ? 'query' : 'json';
             }
 
-            val = p.validator( val, p.name || p.source.toLowerCase(), ctx );
+            val = p.validator( val, getParamLabel( p ), ctx );
 
             ctx.mode = oldMode;
             ctx.from = oldFrom;
@@ -420,55 +522,77 @@ export class RequestProcessor
             sreq.securityOptions = securityConfig;
         }
 
-        return Context.run({
-            request          : sreq,
+        const registry = getRegistry();
+        const requestCtx = {
+            request   : sreq,
             metadata,
-            requestId        : sreq.requestID,
-            requestInstances : new Map<string, any>()
-        }, async () => 
+            requestId : sreq.requestID,
+            registry
+        };
+
+        return Context.run( requestCtx, async () => 
         {
-            const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-            const controller = await MetadataStore.getController( metadata.controller, controllerModule );
+            const plan = getEndpointPlan( registry, metadata );
+            const { controllerModule } = plan;
+            const controller = await registry.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            this.applyReviver( sreq, metadata, controllerModule );
+            sreq.reviver = resolveReviver(
+                metadata.reviver,
+                plan.moduleReviver,
+                sreq.globalReviver
+            );
 
             const ctx = { success : true, errors : [], mode : 'strict' };
-            const middlewareResponse = new ServerResponse();
-            const moduleFiles = resolveModuleFileOptions( controllerModule );
-            sreq.fileOptions = resolveRequestFileOptions( sreq, moduleFiles );
+            let middlewareResponse: ServerResponse | undefined =
+                ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
+            const getResponseBag = (): ServerResponse =>
+                middlewareResponse ?? ( middlewareResponse = new ServerResponse());
+
+            if( sreq.globalFiles !== undefined || plan.moduleFiles !== undefined || sreq.routeFiles !== undefined )
+            {
+                sreq.fileOptions = resolveRequestFileOptions( sreq, plan.moduleFiles );
+            }
 
             const finalHandler = async () => 
             {
                 this.throwIfAborted( sreq );
 
-                // 2. Resolve parameters (Parsing & Validation)
-                const args: any[] = [];
+                // 2. Resolve parameters (Parsing & Validation) & Execute Method
+                let result: any;
 
-                for( const p of metadata.params ) 
+                if( metadata.params.length === 0 )
                 {
-                    args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, undefined, middlewareResponse ));
+                    result = await controller[metadata.methodName]();
                 }
-
-                this.throwIfAborted( sreq );
-
-                if( !ctx.success ) 
+                else
                 {
-                    return new Response( JSON.stringify({ success : false, message : 'request validation failed', errors : ctx.errors }), { 
-                        status  : 400,
-                        headers : { 'Content-Type' : 'application/json' }
-                    });
-                }
+                    const args: any[] = [];
 
-                // 3. Execute Method
-                const result = await controller[metadata.methodName]( ...args );
+                    for( const p of metadata.params ) 
+                    {
+                        args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, undefined, middlewareResponse ));
+                    }
+
+                    this.throwIfAborted( sreq );
+
+                    if( !ctx.success ) 
+                    {
+                        return new Response( JSON.stringify({ success : false, message : 'request validation failed', errors : ctx.errors }), { 
+                            status  : 400,
+                            headers : { 'Content-Type' : 'application/json' }
+                        });
+                    }
+
+                    result = await controller[metadata.methodName]( ...args );
+                }
 
                 this.throwIfAborted( sreq );
 
                 const pending =
                     ( result instanceof ServerResponse ? result.pendingForward : undefined )
-                    || middlewareResponse.pendingForward;
+                    || middlewareResponse?.pendingForward;
 
                 if( metadata.seo )
                 {
@@ -534,7 +658,7 @@ export class RequestProcessor
                     const validator = !serializer && typeof metadata.returnTypeValidator === 'function'
                         ? metadata.returnTypeValidator
                         : undefined;
-                    const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+                    const mode = metadata.returnTypeMode || registry.getDefaultResponseMode();
 
                     let bodyStream: any;
 
@@ -618,7 +742,7 @@ export class RequestProcessor
 
                 if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
                 {
-                    const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+                    const mode = metadata.returnTypeMode || registry.getDefaultResponseMode();
                     const responseCtx = { success : true, errors : [], mode };
                     validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
 
@@ -641,14 +765,12 @@ export class RequestProcessor
                 return new Response( validatedResult == null ? '' : String( validatedResult ));
             };
 
-
-
             // 4. Wrap in Interceptor Chain
             let chain = finalHandler;
 
-            for( const iName of [...metadata.interceptors].reverse()) 
+            for( const iName of plan.reversedInterceptors ) 
             {
-                const interceptor = await MetadataStore.getInterceptor( iName );
+                const interceptor = await registry.getInterceptor( iName );
                 const next = chain;
                 chain = () => interceptor.intercept( sreq, next );
             }
@@ -658,13 +780,15 @@ export class RequestProcessor
                 this.throwIfAborted( sreq );
 
                 // Run Middlewares before guards
-                if( metadata.middlewares && metadata.middlewares.length > 0 ) 
+                if( plan.hasMiddlewares ) 
                 {
-                    for( const mName of metadata.middlewares ) 
+                    const resBag = getResponseBag();
+
+                    for( const mName of metadata.middlewares! ) 
                     {
                         this.throwIfAborted( sreq );
 
-                        const middlewareInstance = await MetadataStore.getInjectable( mName, controllerModule );
+                        const middlewareInstance = await registry.getInjectable( mName, controllerModule );
 
                         if( !middlewareInstance ) 
                         {
@@ -673,7 +797,7 @@ export class RequestProcessor
 
                         if( typeof middlewareInstance.use === 'function' ) 
                         {
-                            await middlewareInstance.use( sreq, middlewareResponse );
+                            await middlewareInstance.use( sreq, resBag );
                         }
                         else if( typeof middlewareInstance.useCallback === 'function' ) 
                         {
@@ -692,7 +816,7 @@ export class RequestProcessor
                                             resolve();
                                         }
                                     };
-                                    const res = middlewareInstance.useCallback( sreq, middlewareResponse, next );
+                                    const res = middlewareInstance.useCallback( sreq, resBag, next );
 
                                     if( res instanceof Promise ) 
                                     {
@@ -709,18 +833,24 @@ export class RequestProcessor
                 }
 
                 // 1. Run Guards FIRST (Security gate)
-                await invokeGuards( metadata, sreq, {
-                    ctx,
-                    controller,
-                    controllerModule,
-                    securityConfig,
-                    response   : middlewareResponse,
-                    beforeEach : () => this.throwIfAborted( sreq )
-                });
+                if( plan.hasGuards )
+                {
+                    await invokeGuards( metadata, sreq, {
+                        ctx,
+                        controller,
+                        controllerModule,
+                        securityConfig,
+                        response    : middlewareResponse,
+                        getResponse : getResponseBag,
+                        beforeEach  : () => this.throwIfAborted( sreq )
+                    });
+                }
 
                 this.throwIfAborted( sreq );
 
-                return middlewareResponse.applyTo( await chain());
+                const outResponse = await chain();
+
+                return middlewareResponse ? middlewareResponse.applyTo( outResponse ) : outResponse;
             }
             catch ( err: any ) 
             {
@@ -731,7 +861,7 @@ export class RequestProcessor
 
                 if( err instanceof Response ) 
                 {
-                    return middlewareResponse.applyTo( err );
+                    return middlewareResponse ? middlewareResponse.applyTo( err ) : err;
                 }
                 const status = httpStatusFromError( err );
 
@@ -740,12 +870,17 @@ export class RequestProcessor
                     headers : { 'Content-Type' : 'application/json' } 
                 });
 
-                return middlewareResponse.applyTo( response );
+                return middlewareResponse ? middlewareResponse.applyTo( response ) : response;
             }
             finally
             {
-                await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
-                Context.get()?.requestInstances?.clear();
+                const scoped = ( requestCtx as any ).requestInstances;
+
+                if( scoped && scoped.size > 0 )
+                {
+                    await ApplicationRegistry.destroyInstances( scoped.values());
+                    scoped.clear();
+                }
             }
         });
     }
@@ -783,19 +918,27 @@ export class RequestProcessor
             sreq.params = ws.params;
         }
 
-        return Context.run({
-            request          : sreq,
+        const registry = getRegistry();
+        const requestCtx = {
+            request   : sreq,
             metadata,
-            requestId        : sreq.requestID,
-            requestInstances : new Map<string, any>()
-        }, async () => 
+            requestId : sreq.requestID,
+            registry
+        };
+
+        return Context.run( requestCtx, async () => 
         {
-            const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-            const controller = await MetadataStore.getController( metadata.controller, controllerModule );
+            const plan = getEndpointPlan( registry, metadata );
+            const { controllerModule } = plan;
+            const controller = await registry.getController( metadata.controller, controllerModule );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            this.applyReviver( sreq, metadata, controllerModule );
+            sreq.reviver = resolveReviver(
+                metadata.reviver,
+                plan.moduleReviver,
+                sreq.globalReviver
+            );
 
             const ctx = { success : true, errors : [], mode : 'strict' };
 
@@ -832,8 +975,13 @@ export class RequestProcessor
             }
             finally
             {
-                await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
-                Context.get()?.requestInstances?.clear();
+                const scoped = ( requestCtx as any ).requestInstances;
+
+                if( scoped && scoped.size > 0 )
+                {
+                    await ApplicationRegistry.destroyInstances( scoped.values());
+                    scoped.clear();
+                }
             }
         });
     }
@@ -844,28 +992,35 @@ export class RequestProcessor
     ): Promise<any> 
     {
         const sreq = new ServerRequest(
-            new Request( 'rpc://localhost/' + metadata.path ),
+            getRpcTemplateRequest( metadata ),
             { preParsedBody : payload }
         );
 
-        return Context.run({
-            request          : sreq,
+        const registry = getRegistry();
+        const requestCtx = {
+            request   : sreq,
             metadata,
-            requestId        : sreq.requestID,
-            requestInstances : new Map<string, any>()
-        }, async () => 
+            requestId : sreq.requestID,
+            registry
+        };
+
+        return Context.run( requestCtx, async () => 
         {
             try
             {
-                const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-                const controller = await MetadataStore.getController( metadata.controller, controllerModule );
+                const plan = getEndpointPlan( registry, metadata );
+                const { controllerModule } = plan;
+                const controller = await registry.getController( metadata.controller, controllerModule );
 
                 if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
                 const ctx = { success : true, errors : [], mode : 'strict' };
 
                 // 1. Run Guards
-                await invokeGuards( metadata, sreq, { ctx, controller, controllerModule });
+                if( plan.hasGuards )
+                {
+                    await invokeGuards( metadata, sreq, { ctx, controller, controllerModule });
+                }
 
                 // 2. Resolve parameters (Validation)
                 const args: any[] = [];
@@ -887,7 +1042,7 @@ export class RequestProcessor
 
                     if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
                     {
-                        const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+                        const mode = metadata.returnTypeMode || registry.getDefaultResponseMode();
                         const responseCtx = { success : true, errors : [], mode };
                         const validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
 
@@ -904,9 +1059,9 @@ export class RequestProcessor
 
                 let chain = finalHandler;
 
-                for( const iName of [...metadata.interceptors].reverse()) 
+                for( const iName of plan.reversedInterceptors ) 
                 {
-                    const interceptor = await MetadataStore.getInterceptor( iName );
+                    const interceptor = await registry.getInterceptor( iName );
                     const next = chain;
                     chain = () => interceptor.intercept( sreq, next );
                 }
@@ -915,8 +1070,13 @@ export class RequestProcessor
             }
             finally
             {
-                await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
-                Context.get()?.requestInstances?.clear();
+                const scoped = ( requestCtx as any ).requestInstances;
+
+                if( scoped && scoped.size > 0 )
+                {
+                    await ApplicationRegistry.destroyInstances( scoped.values());
+                    scoped.clear();
+                }
             }
         });
     }

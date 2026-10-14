@@ -22,7 +22,7 @@ function isWs( c: number ): boolean
  * Scan one semicolon-delimited part starting at `i` (O(n) over the slice).
  * Quoted segments may contain `;`. Returns null at end-of-string after whitespace.
  */
-function scanHeaderPart( value: string, i: number ): { token: string, next: number } | null
+function scanHeaderPart( value: string, i: number ): { token : string, next : number } | null
 {
     const n = value.length;
 
@@ -89,7 +89,7 @@ function scanHeaderPart( value: string, i: number ): { token: string, next: numb
 /**
  * Split `key=value` with optional quotes (O(n)). Returns null when no `=` outside quotes.
  */
-function splitParameter( token: string ): { key: string, val: string } | null
+function splitParameter( token: string ): { key : string, val : string } | null
 {
     const n = token.length;
     let i = 0;
@@ -164,7 +164,7 @@ function splitParameter( token: string ): { key: string, val: string } | null
 
     if( vend <= v ){ return null }
 
-    return { key: token.slice( keyStart, keyEnd ), val: token.slice( v, vend ) };
+    return { key : token.slice( keyStart, keyEnd ), val : token.slice( v, vend ) };
 }
 
 export function parseHeaders( headerBlock: string ): Record<string, string>
@@ -254,10 +254,10 @@ export function parseHeaderValueParameter( value: string | undefined, parameter:
 }
 
 export type ContentDisposition =
-{
-    name?     : string
-    filename? : string
-};
+    {
+        name?     : string
+        filename? : string
+    };
 
 /** One pass for the multipart hot path (`name` + `filename`). */
 export function parseContentDisposition( value: string | undefined ): ContentDisposition
@@ -304,15 +304,20 @@ export function extractMultipartBoundary( contentType: string | null | undefined
 
     if( type.length !== 9 ){ return undefined } // 'multipart'.length
 
-    if( type.toLowerCase() !== 'multipart' ){ return undefined }
+    if( type !== 'multipart' && type.toLowerCase() !== 'multipart' ){ return undefined }
 
     // Common unquoted form: boundary=----WebKit...
     const marker = 'boundary=';
-    const idx = contentType.toLowerCase().indexOf( marker );
+    let idx = contentType.indexOf( marker, slash );
+
+    if( idx === -1 )
+    {
+        idx = contentType.toLowerCase().indexOf( marker, slash );
+    }
 
     if( idx === -1 ){ return undefined }
 
-    let start = idx + marker.length;
+    const start = idx + marker.length;
     let end = contentType.length;
 
     if( contentType[start] === '"' )

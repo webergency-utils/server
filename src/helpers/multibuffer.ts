@@ -4,21 +4,20 @@
  * search / splice across boundaries without concatenating until needed.
  */
 
-type Range =
-{
+interface Range {
     buffers : Buffer[]
     start   : number
     end     : number
     index   : number
     length  : number
-};
+}
 
 export class MultiBuffer
 {
     private buffers : Buffer[] = [];
     private totalLength = 0;
 
-    constructor( ...buffers: Buffer[] )
+    constructor( ...buffers: Buffer[])
     {
         for( const buffer of buffers )
         {
@@ -35,7 +34,7 @@ export class MultiBuffer
         return this.totalLength;
     }
 
-    append( ...buffers: Buffer[] )
+    append( ...buffers: Buffer[])
     {
         for( const buffer of buffers )
         {
@@ -97,8 +96,37 @@ export class MultiBuffer
         return start < end ? this.getRange( start, end ).buffers : [];
     }
 
-    splice( start = 0, deleteCount = 0, ...buffers: Buffer[] ): Buffer[]
+    splice( start = 0, deleteCount = 0, ...buffers: Buffer[]): Buffer[]
     {
+        if( start === 0 && buffers.length === 0 && deleteCount > 0 && this.buffers.length > 0 )
+        {
+            const first = this.buffers[0];
+
+            if( deleteCount <= first.length )
+            {
+                this.totalLength -= deleteCount;
+
+                if( deleteCount === first.length )
+                {
+                    if( this.totalLength === 0 )
+                    {
+                        this.buffers = [];
+                    }
+                    else
+                    {
+                        this.buffers.shift();
+                    }
+
+                    return [ first ];
+                }
+
+                const head = first.subarray( 0, deleteCount );
+                this.buffers[0] = first.subarray( deleteCount );
+
+                return [ head ];
+            }
+        }
+
         if( start < 0 )
         {
             start = this.totalLength + start;
@@ -106,7 +134,7 @@ export class MultiBuffer
 
         const end = deleteCount < 0 ? this.totalLength + deleteCount : start + deleteCount;
         const range = this.getRange( start, end );
-        let spliceStart = 0;
+        let spliceStart: number;
 
         if( range.buffers.length && start !== end )
         {
@@ -201,7 +229,7 @@ export class MultiBuffer
         return start !== end ? range.buffers : [];
     }
 
-    spliceConcat( start: number, deleteCount: number, ...buffers: Buffer[] ): Buffer
+    spliceConcat( start: number, deleteCount: number, ...buffers: Buffer[]): Buffer
     {
         const removed = this.splice( start, deleteCount, ...buffers );
 
@@ -217,9 +245,23 @@ export class MultiBuffer
             index = this.totalLength + index;
         }
 
-        const range = this.getRange( index );
+        if( index < 0 || index >= this.totalLength )
+        {
+            return undefined;
+        }
 
-        return range.buffers.length ? range.buffers[0][0] : undefined;
+        let offset = 0;
+
+        for( const buf of this.buffers )
+        {
+            if( index < offset + buf.length )
+            {
+                return buf[index - offset];
+            }
+            offset += buf.length;
+        }
+
+        return undefined;
     }
 
     equals( buffer: Buffer, offset = 0, length = Infinity ): boolean
@@ -338,7 +380,7 @@ export class MultiBuffer
 
     private getRange( start: number, end = 0 ): Range
     {
-        let head = start;
+        const head = start;
         const buffers = this.buffers;
         let i = 0;
         let length = end - start;

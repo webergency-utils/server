@@ -132,11 +132,11 @@ describe( 'ResponseBag / ServerResponse', () =>
         expect( plain.headers.get( 'Set-Cookie' )).toBe( 'a=b' );
         expect( intent.name ).toBe( 'ForwardIntent' );
         expect( isSeoForward( null )).toBe( false );
-        expect( isSeoForward( { method : 'GET' } )).toBe( false );
-        expect( isSeoForward( { method : 'GET', path : '/x', query : [] } )).toBe( false );
-        expect( isSeoForward( { method : 'GET', path : '/x', query : null } )).toBe( false );
-        expect( isSeoForward( { method : 'GET', path : '/x', body : [] } )).toBe( false );
-        expect( isSeoForward( { method : 'GET', path : '/x', body : null } )).toBe( false );
-        expect( isSeoForward( { method : 'GET', path : '/x', query : { a : '1' }, body : { b : 2 } })).toBe( true );
+        expect( isSeoForward({ method : 'GET' })).toBe( false );
+        expect( isSeoForward({ method : 'GET', path : '/x', query : [] })).toBe( false );
+        expect( isSeoForward({ method : 'GET', path : '/x', query : null })).toBe( false );
+        expect( isSeoForward({ method : 'GET', path : '/x', body : [] })).toBe( false );
+        expect( isSeoForward({ method : 'GET', path : '/x', body : null })).toBe( false );
+        expect( isSeoForward({ method : 'GET', path : '/x', query : { a : '1' }, body : { b : 2 } })).toBe( true );
     });
 });

@@ -5,10 +5,10 @@ export const SECRET_KEYS = [ 'password', 'confirmPassword' ];
 
 export function redactSecrets<T>( value: T ): T
 {
-    return redact( value, new WeakSet() ) as T;
+    return redact( value, new WeakSet()) as T;
 }
 
-export function clientErrorBody( err: unknown, status = httpStatusFromError( err ) ): Record<string, any>
+export function clientErrorBody( err: unknown, status = httpStatusFromError( err )): Record<string, any>
 {
     const e = asErrorRecord( err );
     const data = e.data && typeof e.data === 'object' && !Array.isArray( e.data )
@@ -37,13 +37,13 @@ export function clientErrorBody( err: unknown, status = httpStatusFromError( err
 }
 
 export type ErrorLogFields =
-{
-    name    : string
-    message : string
-    status  : number
-    data?   : unknown
-    stack?  : string
-}
+    {
+        name    : string
+        message : string
+        status  : number
+        data?   : unknown
+        stack?  : string
+    };
 
 export function errorLogFields( err: unknown ): ErrorLogFields
 {
@@ -53,16 +53,16 @@ export function errorLogFields( err: unknown ): ErrorLogFields
         name    : typeof e.name === 'string' && e.name ? e.name : 'Error',
         message : typeof e.message === 'string' ? e.message : '',
         status  : httpStatusFromError( err ),
-        data    : e.data !== undefined ? redactSecrets( cloneJson( e.data ) ) : undefined,
+        data    : e.data !== undefined ? redactSecrets( cloneJson( e.data )) : undefined,
         stack   : e.stack
     };
 }
 
-function asErrorRecord( err: unknown ): { name?: string, message?: string, data?: any, stack?: string }
+function asErrorRecord( err: unknown ): { name? : string, message? : string, data? : any, stack? : string }
 {
     if( err && typeof err === 'object' )
     {
-        return err as { name?: string, message?: string, data?: any, stack?: string };
+        return err as { name? : string, message? : string, data? : any, stack? : string };
     }
 
     return { message : err === undefined || err === null ? '' : String( err ) };
@@ -72,7 +72,7 @@ function cloneJson( value: unknown ): unknown
 {
     try
     {
-        return JSON.parse( JSON.stringify( value ) );
+        return JSON.parse( JSON.stringify( value ));
     }
     catch
     {
@@ -87,23 +87,23 @@ function redact( value: unknown, seen: WeakSet<object> ): unknown
         return value;
     }
 
-    if( seen.has( value ) )
+    if( seen.has( value ))
     {
         return value;
     }
 
     seen.add( value );
 
-    if( Array.isArray( value ) )
+    if( Array.isArray( value ))
     {
-        return value.map( ( item ) => redact( item, seen ) );
+        return value.map(( item ) => redact( item, seen ));
     }
 
     const out: Record<string, unknown> = {};
 
-    for( const [ key, nested ] of Object.entries( value ) )
+    for( const [ key, nested ] of Object.entries( value ))
     {
-        if( SECRET_KEYS.includes( key ) )
+        if( SECRET_KEYS.includes( key ))
         {
             out[key] = REDACTED;
 

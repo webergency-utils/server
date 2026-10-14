@@ -17,39 +17,67 @@ export const TRUST_PROXY_LOOPBACK: TrustProxy =
     '::ffff:127.0.0.0/104'
 ];
 
-type IpBytes =
+interface IpBytes
 {
     kind  : 'v4' | 'v6'
     bytes : Uint8Array
-};
+}
 
-type Cidr =
+interface Cidr
 {
     kind : 'v4' | 'v6'
     net  : Uint8Array
     bits : number
-};
+}
 
 function parseIpv4( ip: string ): Uint8Array | null
 {
-    const parts = ip.split( '.' );
+    const len = ip.length;
 
-    if( parts.length !== 4 ){ return null }
+    if( len < 7 || len > 15 ){ return null }
 
     const bytes = new Uint8Array( 4 );
+    let part = 0;
+    let val = 0;
+    let digits = 0;
 
-    for( let i = 0; i < 4; i++ )
+    for( let i = 0; i < len; i++ )
     {
-        if( !/^\d+$/.test( parts[i])){ return null }
+        const code = ip.charCodeAt( i );
 
-        const n = Number( parts[i]);
+        if( code === 46 /* . */ )
+        {
+            if( digits === 0 || part === 3 ){ return null }
 
-        if( n > 255 ){ return null }
+            bytes[part++] = val;
+            val = 0;
+            digits = 0;
+        }
+        else if( code >= 48 && code <= 57 )
+        {
+            val = val * 10 + ( code - 48 );
+            digits++;
 
-        bytes[i] = n;
+            if( val > 255 ){ return null }
+        }
+        else
+        {
+            return null;
+        }
     }
 
+    if( digits === 0 || part !== 3 ){ return null }
+
+    bytes[3] = val;
+
     return bytes;
+}
+
+function hasMappedV4Prefix( ip: string ): boolean
+{
+    if( ip.length < 14 || ip.length > 22 ){ return false }
+
+    return ip.startsWith( '::ffff:' ) || ip.slice( 0, 7 ).toLowerCase() === '::ffff:';
 }
 
 function parseIpv6( ip: string ): Uint8Array | null
@@ -61,11 +89,9 @@ function parseIpv6( ip: string ): Uint8Array | null
         input = input.slice( 1, -1 );
     }
 
-    const mapped = input.match( /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i );
-
-    if( mapped )
+    if( hasMappedV4Prefix( input ))
     {
-        const v4 = parseIpv4( mapped[1]);
+        const v4 = parseIpv4( input.slice( 7 ));
 
         if( !v4 ){ return null }
 
@@ -85,7 +111,7 @@ function parseIpv6( ip: string ): Uint8Array | null
     if( halves.length > 2 ){ return null }
 
     const head = halves[0] ? halves[0].split( ':' ) : [];
-    const tail = halves.length === 2 && halves[1] ? halves[1].split( ':' ) : ( halves.length === 1 ? [] : [] );
+    const tail = halves.length === 2 && halves[1] ? halves[1].split( ':' ) : [];
     const mid = 8 - head.length - ( halves.length === 2 ? tail.length : 0 );
 
     if( halves.length === 2 && mid < 0 ){ return null }
@@ -131,6 +157,10 @@ export function normalizeIp( raw?: string | null ): string | null
 {
     if( !raw ){ return null }
 
+    if( raw === '127.0.0.1' || raw === '::1' ){ return raw }
+
+    if( raw === '::ffff:127.0.0.1' ){ return '127.0.0.1' }
+
     let ip = raw.trim();
 
     if( !ip ){ return null }
@@ -146,9 +176,12 @@ export function normalizeIp( raw?: string | null ): string | null
 
     if( zone !== -1 ){ ip = ip.slice( 0, zone ) }
 
-    const mapped = ip.match( /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i );
+    if( hasMappedV4Prefix( ip ))
+    {
+        const v4Str = ip.slice( 7 );
 
-    if( mapped ){ return mapped[1] }
+        if( parseIpv4( v4Str )){ return v4Str }
+    }
 
     if( parseIpv4( ip )){ return ip }
 
@@ -282,23 +315,44 @@ export function ipInCidr( ip: string, cidr: string ): boolean
     return ipMatchesCidr( parsed, range );
 }
 
-export function compileTrustProxy( trustProxy?: TrustProxy ): Cidr[] | null
+export type CompiledTrustProxy = readonly Cidr[];
+
+const trustProxyCache = new WeakMap<TrustProxy, Cidr[] | null>();
+
+export function compileTrustProxy( trustProxy?: TrustProxy | CompiledTrustProxy | null ): Cidr[] | null
 {
     if( !Array.isArray( trustProxy ) || trustProxy.length === 0 ){ return null }
 
+    const first = trustProxy[0] as string | Cidr;
+
+    if( typeof first === 'object' && first !== null && 'net' in first )
+    {
+        return trustProxy as unknown as Cidr[];
+    }
+
+    const raw = trustProxy as TrustProxy;
+
+    if( trustProxyCache.has( raw ))
+    {
+        return trustProxyCache.get( raw )!;
+    }
+
     const ranges: Cidr[] = [];
 
-    for( const entry of trustProxy )
+    for( const entry of raw )
     {
         const cidr = parseCidr( entry );
 
         if( cidr ){ ranges.push( cidr ) }
     }
 
-    return ranges.length > 0 ? ranges : null;
+    const compiled = ranges.length > 0 ? ranges : null;
+    trustProxyCache.set( raw, compiled );
+
+    return compiled;
 }
 
-function isTrusted( ip: string, ranges: Cidr[]): boolean
+function isTrusted( ip: string, ranges: readonly Cidr[]): boolean
 {
     const parsed = parseIpBytes( ip );
 
@@ -312,22 +366,25 @@ function isTrusted( ip: string, ranges: Cidr[]): boolean
     return false;
 }
 
-export type ClientIpRequest =
+export interface ClientIpRequest
 {
-    headers        : Headers
-    remoteAddress? : string | null
-    trustProxy?    : TrustProxy
-};
+    headers             : Headers
+    remoteAddress?      : string | null
+    trustProxy?         : TrustProxy
+    compiledTrustProxy? : CompiledTrustProxy | null
+}
 
 /**
  * Resolve the client IP for @Ip and rate limiting.
  *
  * @param trustProxy - omit/`[]`: never trust XFF; otherwise CIDR allowlist of immediate peers that may set XFF.
  */
-export function resolveClientIp( req: ClientIpRequest, trustProxy?: TrustProxy ): string
+export function resolveClientIp( req: ClientIpRequest, trustProxy?: TrustProxy | CompiledTrustProxy | null ): string
 {
     const remote = normalizeIp( req.remoteAddress ) || '127.0.0.1';
-    const ranges = compileTrustProxy( trustProxy !== undefined ? trustProxy : req.trustProxy );
+    const ranges = trustProxy !== undefined
+        ? compileTrustProxy( trustProxy )
+        : ( req.compiledTrustProxy !== undefined ? req.compiledTrustProxy : compileTrustProxy( req.trustProxy ));
 
     if( !ranges || !isTrusted( remote, ranges ))
     {
@@ -335,27 +392,35 @@ export function resolveClientIp( req: ClientIpRequest, trustProxy?: TrustProxy )
     }
 
     const header = req.headers.get( 'x-forwarded-for' );
-    const hops: string[] = [];
 
-    if( header )
+    if( !header )
     {
-        for( const part of header.split( ',' ))
-        {
-            const hop = normalizeIp( part );
-
-            if( hop ){ hops.push( hop ) }
-        }
+        return remote;
     }
 
-    const chain = hops.length > 0 ? [ ...hops, remote ] : [ remote ];
+    let end = header.length;
+    let lastValidHop = remote;
 
-    for( let i = chain.length - 1; i >= 0; i-- )
+    while( end > 0 )
     {
-        if( !isTrusted( chain[i], ranges ))
+        const comma = header.lastIndexOf( ',', end - 1 );
+        const part = header.slice( comma + 1, end );
+        const hop = normalizeIp( part );
+
+        if( hop )
         {
-            return chain[i];
+            if( !isTrusted( hop, ranges ))
+            {
+                return hop;
+            }
+
+            lastValidHop = hop;
         }
+
+        if( comma === -1 ){ break }
+
+        end = comma;
     }
 
-    return chain[0];
+    return lastValidHop;
 }

@@ -76,6 +76,6 @@ describe( 'ApplicationRegistry', () =>
             expect( tryGetRegistry()).toBe( registry );
         });
         expect( tryGetRegistry()).toBeUndefined();
-        expect( () => getRegistry()).toThrow( /No ApplicationRegistry in context/ );
+        expect(() => getRegistry()).toThrow( /No ApplicationRegistry in context/ );
     });
 });

@@ -9,6 +9,7 @@ export class Microservice
 {
     public readonly registry = new ApplicationRegistry();
     private bootstrapped = false;
+    private readonly rpcHandlers = new Map<string, any>();
 
     constructor(
         private adapter: MicroserviceAdapter,
@@ -24,6 +25,17 @@ export class Microservice
             bootstrapRegistry( this.registry, this.options );
             await this.registry.resolveAll();
         });
+
+        this.rpcHandlers.clear();
+
+        for( const ep of this.registry.getEndpoints())
+        {
+            if( ep.httpMethod === 'RPC' )
+            {
+                this.rpcHandlers.set( ep.path, ep );
+            }
+        }
+
         this.bootstrapped = true;
     }
 
@@ -35,9 +47,7 @@ export class Microservice
         {
             return runWithRegistry( this.registry, async () =>
             {
-                const endpoint = this.registry.getEndpoints().find(
-                    ( ep: any ) => ep.httpMethod === 'RPC' && ep.path === pattern
-                );
+                const endpoint = this.rpcHandlers.get( pattern );
 
                 if( !endpoint ) 
                 {
@@ -78,9 +88,11 @@ export class Microservice
     async shutdown(): Promise<void> 
     {
         await this.adapter.close();
+        this.rpcHandlers.clear();
         await runWithRegistry( this.registry, async () =>
         {
             await this.registry.destroyAll();
         });
     }
 }
+

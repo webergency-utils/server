@@ -12,8 +12,8 @@ export function detachGeneratedExpression( expr: ts.Expression ): ts.Expression
 {
     const walk = ( node: ts.Node ): void =>
     {
-        ( node as { original?: ts.Node } ).original = undefined;
-        ( node as { emitNode?: unknown } ).emitNode = undefined;
+        ( node as { original? : ts.Node }).original = undefined;
+        ( node as { emitNode? : unknown }).emitNode = undefined;
         ts.setTextRange( node, { pos : -1, end : -1 });
         ts.setEmitFlags( node, NO_COMMENTS );
         ts.forEachChild( node, walk, arr =>

@@ -17,12 +17,12 @@ describe( 'createFormBag', () =>
 {
     it( 'should start empty', () =>
     {
-        expect( createFormBag() ).toEqual({});
+        expect( createFormBag()).toEqual({});
     });
 
     it( 'should assign simple keys', () =>
     {
-        expect( bagFrom([[ 'name', 'John' ], [ 'age', '30' ]]) ).toEqual({
+        expect( bagFrom([[ 'name', 'John' ], [ 'age', '30' ]])).toEqual({
             name : 'John',
             age  : '30'
         });
@@ -30,14 +30,14 @@ describe( 'createFormBag', () =>
 
     it( 'should parse square bracket array notation', () =>
     {
-        expect( bagFrom([[ 'colors[]', 'red' ], [ 'colors[]', 'blue' ]]) ).toEqual({
+        expect( bagFrom([[ 'colors[]', 'red' ], [ 'colors[]', 'blue' ]])).toEqual({
             colors : [ 'red', 'blue' ]
         });
     });
 
     it( 'should parse nested object structures', () =>
     {
-        expect( bagFrom([[ 'user[name]', 'Alice' ], [ 'user[role]', 'admin' ]]) ).toEqual({
+        expect( bagFrom([[ 'user[name]', 'Alice' ], [ 'user[role]', 'admin' ]])).toEqual({
             user : {
                 name : 'Alice',
                 role : 'admin'
@@ -47,21 +47,21 @@ describe( 'createFormBag', () =>
 
     it( 'should convert duplicate keys without brackets to an array', () =>
     {
-        expect( bagFrom([[ 'item', 'apple' ], [ 'item', 'banana' ]]) ).toEqual({
+        expect( bagFrom([[ 'item', 'apple' ], [ 'item', 'banana' ]])).toEqual({
             item : [ 'apple', 'banana' ]
         });
     });
 
     it( 'should push subsequent values to an already converted array', () =>
     {
-        expect( bagFrom([[ 'item', 'apple' ], [ 'item', 'banana' ], [ 'item', 'cherry' ]]) ).toEqual({
+        expect( bagFrom([[ 'item', 'apple' ], [ 'item', 'banana' ], [ 'item', 'cherry' ]])).toEqual({
             item : [ 'apple', 'banana', 'cherry' ]
         });
     });
 
     it( 'should dynamically convert array to object when a non-numeric key is assigned', () =>
     {
-        expect( bagFrom([[ 'items[]', 'first' ], [ 'items[name]', 'second' ]]) ).toEqual({
+        expect( bagFrom([[ 'items[]', 'first' ], [ 'items[name]', 'second' ]])).toEqual({
             items : {
                 0    : 'first',
                 name : 'second'
@@ -71,7 +71,7 @@ describe( 'createFormBag', () =>
 
     it( 'should append a value under a numeric key to an existing object', () =>
     {
-        expect( bagFrom([[ 'items[name]', 'first' ], [ 'items', 'second' ]]) ).toEqual({
+        expect( bagFrom([[ 'items[name]', 'first' ], [ 'items', 'second' ]])).toEqual({
             items : {
                 name : 'first',
                 0    : 'second'
@@ -81,7 +81,7 @@ describe( 'createFormBag', () =>
 
     it( 'should index nested object appends from the nested keys, not the parent', () =>
     {
-        expect( bagFrom([[ '0', 'keep' ], [ 'items[name]', 'first' ], [ 'items', 'second' ]]) ).toEqual({
+        expect( bagFrom([[ '0', 'keep' ], [ 'items[name]', 'first' ], [ 'items', 'second' ]])).toEqual({
             0     : 'keep',
             items : {
                 name : 'first',
@@ -92,7 +92,7 @@ describe( 'createFormBag', () =>
 
     it( 'should parse explicit numeric keys inside brackets', () =>
     {
-        expect( bagFrom([[ 'user[0][name]', 'John' ]]) ).toEqual({
+        expect( bagFrom([[ 'user[0][name]', 'John' ]])).toEqual({
             user : [
                 { name : 'John' }
             ]
@@ -101,7 +101,7 @@ describe( 'createFormBag', () =>
 
     it( 'should handle bracket assignments on mixed numeric/non-numeric objects', () =>
     {
-        expect( bagFrom([[ 'user[name]', 'Alice' ], [ 'user[0]', 'Bob' ], [ 'user[]', 'Charlie' ]]) ).toEqual({
+        expect( bagFrom([[ 'user[name]', 'Alice' ], [ 'user[0]', 'Bob' ], [ 'user[]', 'Charlie' ]])).toEqual({
             user : {
                 name : 'Alice',
                 0    : 'Bob',
@@ -112,7 +112,7 @@ describe( 'createFormBag', () =>
 
     it( 'should merge multiple properties under the same object bracket item', () =>
     {
-        expect( bagFrom([[ 'a[][name]', 'Alice' ], [ 'a[][age]', '30' ]]) ).toEqual({
+        expect( bagFrom([[ 'a[][name]', 'Alice' ], [ 'a[][age]', '30' ]])).toEqual({
             a : [
                 { name : 'Alice', age : '30' }
             ]
@@ -121,7 +121,7 @@ describe( 'createFormBag', () =>
 
     it( 'should push a new object to a brackets array if the property already exists', () =>
     {
-        expect( bagFrom([[ 'a[][name]', 'Alice' ], [ 'a[][name]', 'Bob' ]]) ).toEqual({
+        expect( bagFrom([[ 'a[][name]', 'Alice' ], [ 'a[][name]', 'Bob' ]])).toEqual({
             a : [
                 { name : 'Alice' },
                 { name : 'Bob' }
@@ -131,7 +131,7 @@ describe( 'createFormBag', () =>
 
     it( 'should append under nested numeric index 0 when the nested object has no int keys', () =>
     {
-        expect( bagFrom([[ '0[name]', 'first' ], [ '0', 'second' ]]) ).toEqual({
+        expect( bagFrom([[ '0[name]', 'first' ], [ '0', 'second' ]])).toEqual({
             0 : {
                 name : 'first',
                 0    : 'second'
@@ -163,8 +163,8 @@ describe( 'createFormBag', () =>
 
         expect( Object.prototype ).not.toHaveProperty( marker );
         expect( Object.prototype ).not.toHaveProperty( 'K' );
-        expect( bagFrom([[ '__proto__', 'x' ]]) ).not.toHaveProperty( '__proto__' );
-        expect( bagFrom([[ 'safe', '1' ], [ '__proto__[x]', '2' ]]) ).toEqual({ safe : '1' });
+        expect( bagFrom([[ '__proto__', 'x' ]])).not.toHaveProperty( '__proto__' );
+        expect( bagFrom([[ 'safe', '1' ], [ '__proto__[x]', '2' ]])).toEqual({ safe : '1' });
     });
 
     it( 'should return ordinary objects (not null-prototype)', () =>

@@ -93,8 +93,8 @@ Runtime bridge that turns Web Standard `Request` / `Response` into `Bun.serve`, 
 _Avoid_: Transport, platform
 
 **ApplicationRegistry**:
-Per-**Server** (and per-**Microservice**) store of endpoints, DI bindings, and modules. Never process-global. Route uniqueness keys include the group (`seo` / `public` / `internal`).
-_Avoid_: MetadataStore (deprecated facade), container (the DI engine inside it)
+Per-**Server** (and per-**Microservice**) store and DI resolution engine for endpoints, DI bindings, and modules. Never process-global. Route uniqueness keys include the group (`seo` / `public` / `internal`).
+_Avoid_: MetadataStore (removed), DIContainer (thin compatibility facade)
 
 ### Validation
 

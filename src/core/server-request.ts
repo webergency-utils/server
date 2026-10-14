@@ -4,6 +4,7 @@ import { PeerCert } from './types.js';
 import { SecurityOptions } from '../decorators.js';
 import
 {
+    DEFAULT_MAX_BODY_BYTES,
     DEFAULT_MAX_BODY_SIZE,
     decodeBodyText,
     getContentType,
@@ -16,9 +17,9 @@ import
     unsupportedMediaType
 }
     from '../helpers/request-reader.js';
-import { resolveClientIp, type TrustProxy } from '../helpers/client-ip.js';
+import { compileTrustProxy, resolveClientIp, type CompiledTrustProxy, type TrustProxy } from '../helpers/client-ip.js';
 import { parseSize } from '../helpers/security.js';
-import { queryStringFromUrl } from '../helpers/query-string.js';
+import { pathnameFromUrl, queryStringFromUrl } from '../helpers/query-string.js';
 import { parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js';
 import
 {
@@ -39,29 +40,56 @@ export interface TransportRequest extends Request
 
 export interface ServerRequestInit extends SecurityOptions
 {
-    params?        : Record<string, string>
-    query?         : Record<string, string>
-    queryString?   : string
-    requestId?     : string
-    remoteAddress? : string
-    trustProxy?    : TrustProxy
-    peer?          : PeerCert
-    signal?        : AbortSignal
-    security?      : SecurityOptions
-    globalFiles?   : FileOptions
-    routeFiles?    : FileOptions
-    files?         : FileOptions
-    globalReviver? : Reviver | null
-    reviver?       : Reviver
-    forwardBody?   : Record<string, unknown>
-    hasJson?       : boolean
-    json?          : unknown
-    preParsedBody? : unknown
-    raw?           : ArrayBuffer
-    preReadRaw?    : ArrayBuffer
+    params?             : Record<string, string>
+    query?              : Record<string, string>
+    queryString?        : string
+    requestId?          : string
+    remoteAddress?      : string
+    trustProxy?         : TrustProxy
+    compiledTrustProxy? : CompiledTrustProxy | null
+    peer?               : PeerCert
+    signal?             : AbortSignal
+    security?           : SecurityOptions
+    globalFiles?        : FileOptions
+    routeFiles?         : FileOptions
+    files?              : FileOptions
+    globalReviver?      : Reviver | null
+    reviver?            : Reviver
+    forwardBody?        : Record<string, unknown>
+    hasJson?            : boolean
+    json?               : unknown
+    preParsedBody?      : unknown
+    raw?                : ArrayBuffer
+    preReadRaw?         : ArrayBuffer
 }
 
 const requestFacadeMap = new WeakMap<object, ServerRequest>();
+
+const EMPTY_PARAMS_BAG: Record<string, string> = {};
+
+function hasDirectSecurityOption( obj: ServerRequestInit ): boolean
+{
+    return obj.maxBodySize !== undefined
+        || obj.timeout !== undefined
+        || obj.rateLimit !== undefined
+        || obj.allowedContentTypes !== undefined
+        || obj.hsts !== undefined
+        || obj.frameguard !== undefined
+        || obj.noSniff !== undefined
+        || obj.downloadOptions !== undefined
+        || obj.permittedCrossDomainPolicies !== undefined
+        || obj.referrerPolicy !== undefined
+        || obj.xssFilter !== undefined
+        || obj.csp !== undefined
+        || obj.coep !== undefined
+        || obj.coop !== undefined
+        || obj.corp !== undefined
+        || obj.permissionsPolicy !== undefined
+        || ( obj as any ).csrf !== undefined
+        || ( obj as any ).xss !== undefined
+        || ( obj as any ).contentSecurityPolicy !== undefined
+        || ( obj as any ).frameOptions !== undefined;
+}
 
 /**
  * Sealed request carrier and facade for controllers, middleware, guards, and interceptors.
@@ -69,34 +97,37 @@ const requestFacadeMap = new WeakMap<object, ServerRequest>();
  */
 export class ServerRequest
 {
-    #req              : Request;
-    #url?             : URL;
-    #params           : Record<string, string>;
-    #queryString?     : string;
-    #query?           : Record<string, string>;
-    #requestId?       : string;
-    #remoteAddress?   : string;
-    #trustProxy?      : TrustProxy;
-    #peer?            : PeerCert;
-    #signal?          : AbortSignal;
-    #security         : SecurityOptions | undefined;
-    #globalFiles?     : FileOptions;
-    #routeFiles?      : FileOptions;
-    #files            : FileOptions | undefined;
-    #globalReviver?   : Reviver | null;
-    #reviver?         : Reviver;
-    #forwardStack?    : string[];
-    #forwardBody?     : Record<string, unknown>;
-    #headers?         : Record<string, string>;
-    #cookies?         : Record<string, string>;
-    #raw?             : ArrayBuffer;
-    #hasJson          = false;
-    #json?            : unknown;
-    #bodyContentType? : 'application/json' | 'application/x-www-form-urlencoded';
-    #form?            : FormData;
-    #multipart?       : MultipartParseResult;
-    #payload?         : MultipartPayload;
-    #bodyMode?        : 'raw' | 'text' | 'form' | 'stream' | 'multipart';
+    #req                : Request;
+    #url?               : URL;
+    #path?              : string;
+    #params             : Record<string, string>;
+    #queryString?       : string;
+    #query?             : Record<string, string>;
+    #requestId?         : string;
+    #remoteAddress?     : string;
+    #trustProxy?        : TrustProxy;
+    #compiledTrustProxy : CompiledTrustProxy | null | undefined;
+    #ip?                : string;
+    #peer?              : PeerCert;
+    #signal?            : AbortSignal;
+    #security           : SecurityOptions | undefined;
+    #globalFiles?       : FileOptions;
+    #routeFiles?        : FileOptions;
+    #files              : FileOptions | undefined;
+    #globalReviver?     : Reviver | null;
+    #reviver?           : Reviver;
+    #forwardStack?      : string[];
+    #forwardBody?       : Record<string, unknown>;
+    #headers?           : Record<string, string>;
+    #cookies?           : Record<string, string>;
+    #raw?               : ArrayBuffer;
+    #hasJson            = false;
+    #json?              : unknown;
+    #bodyContentType?   : 'application/json' | 'application/x-www-form-urlencoded';
+    #form?              : FormData;
+    #multipart?         : MultipartParseResult;
+    #payload?           : MultipartPayload;
+    #bodyMode?          : 'raw' | 'text' | 'form' | 'stream' | 'multipart';
 
     constructor(
         req             : Request,
@@ -107,56 +138,58 @@ export class ServerRequest
     {
         this.#req = req;
 
-        const opts: ServerRequestInit = {
-            ...securityOrInit,
-            ...init
-        };
-        const securityFromArg = (
-            securityOrInit !== undefined && (
-                'maxBodySize' in securityOrInit
-                || 'timeout' in securityOrInit
-                || 'rateLimit' in securityOrInit
-                || 'allowedContentTypes' in securityOrInit
-                || 'csrf' in securityOrInit
-                || 'xss' in securityOrInit
-                || 'hsts' in securityOrInit
-                || 'contentSecurityPolicy' in securityOrInit
-                || 'frameOptions' in securityOrInit
-                || 'referrerPolicy' in securityOrInit
-            )
-        )
-            ? ( securityOrInit as SecurityOptions )
-            : undefined;
+        const opts: ServerRequestInit | undefined = init !== undefined
+            ? { ...securityOrInit, ...init }
+            : securityOrInit;
 
-        this.#security = opts.security ?? securityFromArg;
-        this.#globalFiles = opts.globalFiles;
-        this.#routeFiles = opts.routeFiles ?? opts.files ?? files;
-        this.#files = files ?? opts.files ?? (
-            ( this.#globalFiles || this.#routeFiles )
-                ? mergeFileConfigs([ this.#globalFiles, this.#routeFiles ])
-                : undefined
-        );
-        this.#params = opts.params ?? {};
-        this.#queryString = opts.queryString;
-        this.#query = opts.query;
-        this.#requestId = opts.requestId;
-        this.#remoteAddress = opts.remoteAddress;
-        this.#trustProxy = opts.trustProxy;
-        this.#peer = opts.peer;
-        this.#signal = opts.signal;
-        this.#globalReviver = opts.globalReviver;
-        this.#reviver = opts.reviver;
-        this.#forwardBody = opts.forwardBody;
-
-        if( opts.hasJson || 'json' in opts || 'preParsedBody' in opts )
+        if( opts === undefined )
         {
-            this.#hasJson = true;
-            this.#json = 'preParsedBody' in opts ? opts.preParsedBody : opts.json;
+            this.#security = undefined;
+            this.#files = files;
+            this.#routeFiles = files;
+            this.#params = {};
         }
-
-        if( opts.raw !== undefined || opts.preReadRaw !== undefined )
+        else
         {
-            this.#raw = opts.preReadRaw ?? opts.raw;
+            const securityFromArg = (
+                securityOrInit !== undefined
+                && opts.security === undefined
+                && hasDirectSecurityOption( securityOrInit )
+            )
+                ? ( securityOrInit as SecurityOptions )
+                : undefined;
+
+            this.#security = opts.security ?? securityFromArg;
+            this.#globalFiles = opts.globalFiles;
+            this.#routeFiles = opts.routeFiles ?? opts.files ?? files;
+            this.#files = files ?? opts.files ?? (
+                ( this.#globalFiles || this.#routeFiles )
+                    ? mergeFileConfigs([ this.#globalFiles, this.#routeFiles ])
+                    : undefined
+            );
+            this.#params = opts.params ?? {};
+            this.#queryString = opts.queryString;
+            this.#query = opts.query;
+            this.#requestId = opts.requestId;
+            this.#remoteAddress = opts.remoteAddress;
+            this.#trustProxy = opts.trustProxy;
+            this.#compiledTrustProxy = opts.compiledTrustProxy;
+            this.#peer = opts.peer;
+            this.#signal = opts.signal;
+            this.#globalReviver = opts.globalReviver;
+            this.#reviver = opts.reviver;
+            this.#forwardBody = opts.forwardBody;
+
+            if( opts.hasJson || opts.json !== undefined || opts.preParsedBody !== undefined || 'json' in opts || 'preParsedBody' in opts )
+            {
+                this.#hasJson = true;
+                this.#json = 'preParsedBody' in opts ? opts.preParsedBody : opts.json;
+            }
+
+            if( opts.raw !== undefined || opts.preReadRaw !== undefined )
+            {
+                this.#raw = opts.preReadRaw ?? opts.raw;
+            }
         }
 
         if( req && typeof req === 'object' && !requestFacadeMap.has( req ))
@@ -226,7 +259,7 @@ export class ServerRequest
 
     get path(): string
     {
-        return this.#getUrl().pathname;
+        return this.#path ?? ( this.#path = pathnameFromUrl( this.#req.url ));
     }
 
     get hostname(): string
@@ -242,6 +275,7 @@ export class ServerRequest
     set remoteAddress( val: string | undefined )
     {
         this.#remoteAddress = val;
+        this.#ip = undefined;
     }
 
     get trustProxy(): TrustProxy | undefined
@@ -252,15 +286,25 @@ export class ServerRequest
     set trustProxy( val: TrustProxy | undefined )
     {
         this.#trustProxy = val;
+        this.#compiledTrustProxy = compileTrustProxy( val );
+        this.#ip = undefined;
     }
 
     get ip(): string
     {
-        return resolveClientIp({
-            headers       : this.#req.headers,
-            remoteAddress : this.remoteAddress,
-            trustProxy    : this.#trustProxy
+        if( this.#ip !== undefined )
+        {
+            return this.#ip;
+        }
+
+        this.#ip = resolveClientIp({
+            headers            : this.#req.headers,
+            remoteAddress      : this.remoteAddress,
+            trustProxy         : this.#trustProxy,
+            compiledTrustProxy : this.#compiledTrustProxy
         });
+
+        return this.#ip;
     }
 
     get requestID(): string | undefined
@@ -284,7 +328,19 @@ export class ServerRequest
     {
         if( !this.#headers )
         {
-            this.#headers = Object.fromEntries( this.#req.headers.entries());
+            if( typeof this.#req.headers.forEach === 'function' )
+            {
+                const map: Record<string, string> = {};
+                this.#req.headers.forEach(( val, key ) =>
+                {
+                    map[key] = val;
+                });
+                this.#headers = map;
+            }
+            else
+            {
+                this.#headers = Object.fromEntries( this.#req.headers.entries());
+            }
         }
 
         return this.#headers;
@@ -833,7 +889,7 @@ function resolveMultipartTotalLimit( security?: SecurityOptions, files?: FileOpt
 
     if( configured === undefined )
     {
-        return parseSize( DEFAULT_MAX_BODY_SIZE );
+        return DEFAULT_MAX_BODY_BYTES;
     }
 
     if( configured === 0 || configured === Infinity )
@@ -856,20 +912,29 @@ export function parseCookieHeader( cookieHeader: string | null ): Record<string,
 
     if( !cookieHeader ){ return cookies }
 
-    const pairs = cookieHeader.split( ';' );
+    const len = cookieHeader.length;
+    let start = 0;
 
-    for( const pair of pairs )
+    while( start < len )
     {
-        const idx = pair.indexOf( '=' );
+        let end = cookieHeader.indexOf( ';', start );
 
-        if( idx === -1 ){ continue }
-        const key = pair.substring( 0, idx ).trim();
-        const val = pair.substring( idx + 1 ).trim();
+        if( end === -1 ) { end = len }
 
-        if( cookies[key] === undefined )
+        const eqIdx = cookieHeader.indexOf( '=', start );
+
+        if( eqIdx !== -1 && eqIdx < end )
         {
-            cookies[key] = val;
+            const key = cookieHeader.slice( start, eqIdx ).trim();
+            const val = cookieHeader.slice( eqIdx + 1, end ).trim();
+
+            if( cookies[key] === undefined )
+            {
+                cookies[key] = val;
+            }
         }
+
+        start = end + 1;
     }
 
     return cookies;

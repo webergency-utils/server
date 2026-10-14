@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { joinQueryStrings, queryStringFromBag, queryStringFromUrl } from '../src/helpers/query-string.js';
+import { joinQueryStrings, pathnameFromUrl, queryStringFromBag, queryStringFromUrl } from '../src/helpers/query-string.js';
 
 describe( 'queryStringFromUrl', () =>
 {
@@ -25,6 +25,19 @@ describe( 'queryStringFromUrl', () =>
     });
 });
 
+describe( 'pathnameFromUrl', () =>
+{
+    it( 'should extract pathname from full URLs and origin-relative URLs without new URL()', () =>
+    {
+        expect( pathnameFromUrl( 'http://localhost:3000/users/42?expand=1#top' )).toBe( '/users/42' );
+        expect( pathnameFromUrl( 'https://example.com' )).toBe( '/' );
+        expect( pathnameFromUrl( 'https://example.com?foo=bar' )).toBe( '/' );
+        expect( pathnameFromUrl( '/api/v1/items?page=2' )).toBe( '/api/v1/items' );
+        expect( pathnameFromUrl( '/api/v1/items#section' )).toBe( '/api/v1/items' );
+        expect( pathnameFromUrl( '' )).toBe( '/' );
+    });
+});
+
 describe( 'joinQueryStrings', () =>
 {
     it( 'should join, skip empty sides, and never emit a leading ?', () =>
@@ -44,3 +57,4 @@ describe( 'queryStringFromBag', () =>
         expect( queryStringFromBag({ skip : undefined, q : 'ada' })).toBe( 'q=ada' );
     });
 });
+

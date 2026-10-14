@@ -9,7 +9,7 @@ import
     openFileStorage,
     processMultipartUpload
 }
-from '../src/helpers/file-upload.js';
+    from '../src/helpers/file-upload.js';
 import { UploadedFile } from '../src/helpers/multipart.js';
 
 function multipartBody( boundary: string, parts: string[]): Buffer
@@ -77,7 +77,7 @@ describe( 'resolveFieldOptions', () =>
         {
             dest     : '/base',
             maxFiles : 4,
-            fields   :
+            fields :
             {
                 avatar : { maxFileSize : '2mb', dest : '/avatars' }
             }
@@ -272,7 +272,7 @@ describe( 'processMultipartUpload', () =>
             {
                 storage     : 'memory',
                 maxFileSize : 3,
-                fields      :
+                fields :
                 {
                     big : { maxFileSize : 10 }
                 }
@@ -288,7 +288,7 @@ describe( 'processMultipartUpload', () =>
             {
                 storage     : 'memory',
                 maxFileSize : 3,
-                fields      :
+                fields :
                 {
                     big : { maxFileSize : 4 }
                 }
@@ -313,7 +313,7 @@ describe( 'processMultipartUpload', () =>
                 streamFrom( body ),
                 `multipart/form-data; boundary=${boundary}`,
                 {
-                    dest   : dir,
+                    dest : dir,
                     fields :
                     {
                         skipme : { filter : () => false },

@@ -51,7 +51,7 @@ export function resolveTokenFromType( typeNode: ts.TypeNode | undefined, type: t
 
                 if( aliased ) { targetSymbol = aliased }
             }
-            catch {}
+            catch{}
         }
 
         name = targetSymbol.getName();

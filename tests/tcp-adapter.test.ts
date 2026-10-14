@@ -168,7 +168,7 @@ describe( 'TcpMessageAdapter', () =>
         await adapter.listen( async ( _pattern, _payload, connection ) =>
         {
             connection.close();
-            await new Promise( ( r ) => setTimeout( r, 20 ));
+            await new Promise(( r ) => setTimeout( r, 20 ));
 
             try
             {
@@ -192,7 +192,7 @@ describe( 'TcpMessageAdapter', () =>
         const replyP = readLine( client, 150 );
         client.write( JSON.stringify({ id : 'nw1', pattern : 'nowrite', payload : null }) + '\n' );
         const line = await replyP;
-        await new Promise( ( r ) => setTimeout( r, 80 ));
+        await new Promise(( r ) => setTimeout( r, 80 ));
         client.destroy();
 
         // Assert
@@ -205,7 +205,6 @@ describe( 'TcpMessageAdapter', () =>
         // Arrange
         const port = await freePort();
         adapter = new TcpMessageAdapter( port );
-        let peer: net.Socket | undefined;
         await adapter.listen( async () => 'ok' );
 
         const client = net.connect( port, '127.0.0.1' );
@@ -216,10 +215,10 @@ describe( 'TcpMessageAdapter', () =>
         });
 
         // Wait until adapter tracked the socket
-        await new Promise( ( r ) => setTimeout( r, 30 ));
+        await new Promise(( r ) => setTimeout( r, 30 ));
         const connections: Set<net.Socket> = ( adapter as any ).connections;
         expect( connections.size ).toBe( 1 );
-        peer = [...connections][0];
+        const peer = [ ...connections ][0];
 
         // Act — force an error on the server-side socket
         peer.emit( 'error', new Error( 'boom' ));

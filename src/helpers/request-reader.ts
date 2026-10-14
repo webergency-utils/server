@@ -55,7 +55,16 @@ export function getContentType( req: HeaderCarrier ): string | null
 
     if( !raw ){ return null }
 
-    return raw.split( ';' )[0]?.trim()?.toLowerCase() || null;
+    if( raw === 'application/json' || raw === 'application/x-www-form-urlencoded' || raw === 'text/plain' )
+    {
+        return raw;
+    }
+
+    const semi = raw.indexOf( ';' );
+    const slice = semi === -1 ? raw : raw.slice( 0, semi );
+    const trimmed = slice.trim().toLowerCase();
+
+    return trimmed || null;
 }
 
 /** `application/json` and structured suffixes (`application/vnd.api+json`, …). */
@@ -195,24 +204,44 @@ function payloadTooLarge( maxSize: string | number ): never
  */
 export const DEFAULT_MAX_BODY_SIZE = '1mb';
 
-const DEFAULT_MAX_BODY_BYTES = parseSize( DEFAULT_MAX_BODY_SIZE );
+export const DEFAULT_MAX_BODY_BYTES = parseSize( DEFAULT_MAX_BODY_SIZE );
+
+interface BodyLimitDescriptor
+{
+    limit : number | undefined
+    label : string | number
+}
+
+const DEFAULT_BODY_LIMIT: BodyLimitDescriptor = {
+    limit : DEFAULT_MAX_BODY_BYTES,
+    label : DEFAULT_MAX_BODY_SIZE
+};
+
+const bodyLimitCache = new WeakMap<SecurityOptions, BodyLimitDescriptor>();
 
 /** `0` and `Infinity` opt out of the cap entirely. */
-function resolveBodyLimit( securityConfig?: SecurityOptions ): { limit : number | undefined, label : string | number }
+function resolveBodyLimit( securityConfig?: SecurityOptions ): BodyLimitDescriptor
 {
-    const configured = securityConfig?.maxBodySize;
-
-    if( configured === undefined )
+    if( !securityConfig || securityConfig.maxBodySize === undefined )
     {
-        return { limit : DEFAULT_MAX_BODY_BYTES, label : DEFAULT_MAX_BODY_SIZE };
+        return DEFAULT_BODY_LIMIT;
     }
 
-    if( configured === 0 || configured === Infinity )
+    const cached = bodyLimitCache.get( securityConfig );
+
+    if( cached !== undefined )
     {
-        return { limit : undefined, label : configured };
+        return cached;
     }
 
-    return { limit : parseSize( configured ), label : configured };
+    const configured = securityConfig.maxBodySize;
+    const resolved: BodyLimitDescriptor = ( configured === 0 || configured === Infinity )
+        ? { limit : undefined, label : configured }
+        : { limit : parseSize( configured ), label : configured };
+
+    bodyLimitCache.set( securityConfig, resolved );
+
+    return resolved;
 }
 
 /**
@@ -224,17 +253,54 @@ function parseContentLength( raw: string | null ): number | undefined
     if( raw === null ){ return undefined }
 
     const trimmed = raw.trim();
+    const len = trimmed.length;
 
-    if( !/^\d+$/.test( trimmed ) || !Number.isSafeInteger( Number( trimmed )))
+    if( len === 0 )
     {
         throw Object.assign( new Error( `Invalid Content-Length: ${raw}` ), { status : 400 });
     }
 
-    return Number( trimmed );
+    let val = 0;
+
+    for( let i = 0; i < len; i++ )
+    {
+        const code = trimmed.charCodeAt( i );
+
+        if( code < 48 || code > 57 )
+        {
+            throw Object.assign( new Error( `Invalid Content-Length: ${raw}` ), { status : 400 });
+        }
+
+        val = val * 10 + ( code - 48 );
+    }
+
+    if( !Number.isSafeInteger( val ))
+    {
+        throw Object.assign( new Error( `Invalid Content-Length: ${raw}` ), { status : 400 });
+    }
+
+    return val;
 }
+
+const EMPTY_ARRAY_BUFFER = new ArrayBuffer( 0 );
 
 function concatChunks( chunks: Uint8Array[], total: number ): ArrayBuffer
 {
+    if( chunks.length === 0 )
+    {
+        return EMPTY_ARRAY_BUFFER;
+    }
+
+    if( chunks.length === 1 )
+    {
+        const single = chunks[0];
+
+        if( single.byteOffset === 0 && single.byteLength === single.buffer.byteLength && single.buffer instanceof ArrayBuffer )
+        {
+            return single.buffer;
+        }
+    }
+
     const out = new Uint8Array( total );
     let offset = 0;
 

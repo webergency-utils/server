@@ -41,6 +41,8 @@ export interface GuardRunOptions {
     securityConfig?  : SecurityOptions
     /** Backs `@Response`; absent for the WS upgrade and RPC paths, which have no bag. */
     response?        : ServerResponse
+    /** Lazy factory for `@Response` when not pre-allocated. */
+    getResponse?     : () => ServerResponse
     /** Backs `@ConnectedSocket`. Guards always run before a socket exists, so this is null. */
     websocket?       : any
     /** Runs before each guard, e.g. to abort a timed-out request. */
@@ -81,6 +83,10 @@ export async function invokeGuards(
         {
             if( GUARD_PARAM_SOURCES.has( p.source ))
             {
+                const resBag = p.source === 'Response'
+                    ? ( options.response ?? options.getResponse?.())
+                    : options.response;
+
                 args.push( await RequestProcessor.resolveParam(
                     p,
                     sreq,
@@ -88,7 +94,7 @@ export async function invokeGuards(
                     options.securityConfig,
                     guardModule,
                     websocket,
-                    options.response
+                    resBag
                 ));
             }
             else

@@ -9,7 +9,7 @@ import {
     EndpointDefinition,
     ControllerAotMeta
 }
-from '../../src/core/symbols.js';
+    from '../../src/core/symbols.js';
 import { ApplicationRegistry, runWithRegistry } from '../../src/core/registry.js';
 import type { EndpointMetadata } from '../../src/core/types.js';
 
@@ -23,7 +23,7 @@ export {
     WEBERGENCY_INJECTABLE,
     WEBERGENCY_METADATA
 }
-from '../../src/core/symbols.js';
+    from '../../src/core/symbols.js';
 
 /** Attach controller endpoint meta as the AOT transformer would. */
 export function defineController(

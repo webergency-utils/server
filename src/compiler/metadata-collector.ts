@@ -33,7 +33,7 @@ function paramIsOptional( param: ts.ParameterDeclaration, type: ts.Type ): boole
 
     if( type.flags & ts.TypeFlags.Undefined ){ return true }
 
-    if( type.isUnion() )
+    if( type.isUnion())
     {
         return type.types.some( t => !!( t.flags & ts.TypeFlags.Undefined ));
     }

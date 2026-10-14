@@ -1,12 +1,14 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { EndpointMetadata } from './types.js';
 import type { ServerRequest } from './server-request.js';
+import type { ApplicationRegistry } from './registry.js';
 
 export interface RequestContext {
     request           : ServerRequest
     metadata          : EndpointMetadata
     requestId?        : string
     requestInstances? : Map<string, any>
+    registry?         : ApplicationRegistry
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

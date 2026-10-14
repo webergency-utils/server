@@ -14,6 +14,47 @@ export function queryStringFromUrl( url: string ): string
     return hash === -1 ? url.slice( q + 1 ) : url.slice( q + 1, hash );
 }
 
+/**
+ * Extract the URL pathname without allocating a `new URL(...)` object.
+ * Handles both full URLs (`http://host/path?x=1`) and origin-relative paths (`/path?x=1`).
+ */
+export function pathnameFromUrl( url: string ): string
+{
+    let start = 0;
+    const schemeIdx = url.indexOf( '://' );
+
+    if( schemeIdx !== -1 )
+    {
+        const slashIdx = url.indexOf( '/', schemeIdx + 3 );
+
+        if( slashIdx === -1 )
+        {
+            return '/';
+        }
+
+        start = slashIdx;
+    }
+
+    let end = url.length;
+    const q = url.indexOf( '?', start );
+
+    if( q !== -1 )
+    {
+        end = q;
+    }
+
+    const hash = url.indexOf( '#', start );
+
+    if( hash !== -1 && hash < end )
+    {
+        end = hash;
+    }
+
+    const path = url.slice( start, end );
+
+    return path || '/';
+}
+
 /** Concatenate two search strings (neither may start with `?`). */
 export function joinQueryStrings( left: string, right: string ): string
 {

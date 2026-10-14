@@ -29,15 +29,19 @@ export type MyUnion =
     | { type : 'simple', val : string }
     | { type : 'complex', data : { id : number, tags : string[] } };
 
-export class GlobalErrorSanitizer {
-    async intercept(req: any, next: any) {
+export class GlobalErrorSanitizer 
+{
+    async intercept( req: any, next: any ) 
+    {
         const response = await next();
+
         if( response.status === 400 ) 
         {
             const clone = response.clone();
             try 
             {
                 const data = await clone.json();
+
                 if( data.success === false && data.errors ) 
                 {
                     return new Response( JSON.stringify({ 
@@ -51,6 +55,7 @@ export class GlobalErrorSanitizer {
             }
             catch ( e ) {}
         }
+
         return response;
     }
 }
@@ -435,7 +440,7 @@ export class RealtimeController
     }
 
     @Sse( '/sse' )
-    async *handleSse(): AsyncGenerator<{ event : string; data : { val : number } }> 
+    async *handleSse(): AsyncGenerator<{ event : string, data : { val : number } }> 
     {
         yield { event : 'update', data : { val : 1 } };
         yield { event : 'update', data : { val : 2 } };
@@ -443,14 +448,14 @@ export class RealtimeController
 
     @Sse( '/sse-strip' )
     @ResponseMode( 'strip' )
-    async *handleSseStrip(): AsyncGenerator<{ event : string; data : { val : number } }> 
+    async *handleSseStrip(): AsyncGenerator<{ event : string, data : { val : number } }> 
     {
         yield { event : 'update', data : { val : 1, extra : 'gone' } as any };
     }
 
     @Sse( '/sse-invalid' )
     @ResponseMode( 'strict' )
-    async *handleSseInvalid(): AsyncGenerator<{ event : string; data : { val : number } }> 
+    async *handleSseInvalid(): AsyncGenerator<{ event : string, data : { val : number } }> 
     {
         yield { event : 'update', data : { val : 'nope' } as any };
     }
@@ -464,7 +469,7 @@ export interface SumPayload {
 @Controller()
 export class MathMicroserviceController 
 {
-    lastNotify: string | undefined;
+    lastNotify : string | undefined;
 
     @MessagePattern( 'math.sum' )
     sum( @Payload() data: SumPayload ) 
@@ -649,12 +654,14 @@ export class UnprotectedMethodController
     }
 }
 
-export class SimpleInterceptor {
-    intercept(req: any, next: any) { return next(); }
+export class SimpleInterceptor 
+{
+    intercept( req: any, next: any ) { return next() }
 }
 
-export class AnotherInterceptor {
-    intercept(req: any, next: any) { return next(); }
+export class AnotherInterceptor 
+{
+    intercept( req: any, next: any ) { return next() }
 }
 
 @Controller( '/unintercepted-class-base' )
@@ -719,7 +726,7 @@ export class SimpleTestMiddleware implements Middleware
 @Injectable()
 export class CallbackTestMiddleware implements Middleware 
 {
-    async useCallback( req: EndpointRequest, res: EndpointResponse, next: (error?: any) => Promise<void> | void ) 
+    async useCallback( req: EndpointRequest, res: EndpointResponse, next: ( error?: any ) => Promise<void> | void ) 
     {
         req.headers['x-middleware-two'] = 'callback-active';
         res.header( 'x-middleware-res-two', 'response-callback-active' );
@@ -733,6 +740,7 @@ export class MiddlewareCheckingGuard implements Guard
     use( req: EndpointRequest ) 
     {
         const one = req.headers['x-middleware-one'];
+
         if( !one ) 
         {
             throw { status : 403, message : 'Middleware did not run before Guard' };
@@ -746,7 +754,7 @@ export class MiddlewareTestController
 {
     @Get( '/both' )
     @Protect( MiddlewareCheckingGuard )
-    both( req: EndpointRequest ): { one: string | null, two: string | null }
+    both( req: EndpointRequest ): { one : string | null, two : string | null }
     {
         return {
             one : req.headers['x-middleware-one'] ?? null,
@@ -756,7 +764,7 @@ export class MiddlewareTestController
 
     @Get( '/override' )
     @OverrideUse( SimpleTestMiddleware )
-    override( req: EndpointRequest ): { one: string | null, two: string | null }
+    override( req: EndpointRequest ): { one : string | null, two : string | null }
     {
         return {
             one : req.headers['x-middleware-one'] ?? null,
@@ -771,7 +779,7 @@ export class MiddlewareUnmiddlewareController
 {
     @Get( '/remove-one' )
     @Unuse( SimpleTestMiddleware )
-    removeOne( req: EndpointRequest ): { one: string | null, two: string | null }
+    removeOne( req: EndpointRequest ): { one : string | null, two : string | null }
     {
         return {
             one : req.headers['x-middleware-one'] ?? null,
@@ -781,7 +789,7 @@ export class MiddlewareUnmiddlewareController
 
     @Get( '/remove-all' )
     @Unuse
-    removeAll( req: EndpointRequest ): { one: string | null, two: string | null }
+    removeAll( req: EndpointRequest ): { one : string | null, two : string | null }
     {
         return {
             one : req.headers['x-middleware-one'] ?? null,
@@ -805,6 +813,7 @@ export class CountingInterceptor
     async intercept( req: any, next: any ) 
     {
         CountingInterceptor.callCount++;
+
         return next();
     }
 }

@@ -510,9 +510,9 @@ describe( 'E2E webergency-tsc HTTP parse', () =>
             const res = await httpJson( base, '/parse/json', {
                 method  : 'OPTIONS',
                 headers : {
-                    Origin                             : 'http://localhost:5173',
-                    'Access-Control-Request-Method'    : 'POST',
-                    'Access-Control-Request-Headers'   : 'content-type'
+                    Origin                           : 'http://localhost:5173',
+                    'Access-Control-Request-Method'  : 'POST',
+                    'Access-Control-Request-Headers' : 'content-type'
                 }
             });
 

@@ -948,14 +948,14 @@ describe( 'Actual AOT Integration Test', () =>
         {
             const res = await server.fetch( new Request( 'http://localhost/class-public/test' ));
             expect( res.status ).toBe( 200 );
-            expect( await res.text() ).toBe( '"ok"' );
+            expect( await res.text()).toBe( '"ok"' );
         });
 
         it( 'should bypass all class and method guards if method has @Public', async () => 
         {
             const res = await server.fetch( new Request( 'http://localhost/method-public/test' ));
             expect( res.status ).toBe( 200 );
-            expect( await res.text() ).toBe( '"ok"' );
+            expect( await res.text()).toBe( '"ok"' );
         });
     });
 
@@ -1005,7 +1005,7 @@ describe( 'Actual AOT Integration Test', () =>
         it( 'should throw compile error if @Peer is called with parentheses', async () => 
         {
             const { transformer, createRegistry } = await import( '../../src/compiler/transformer.js' );
-            const ts = (await import( '../../src/compiler/ts.js' )).default;
+            const ts = ( await import( '../../src/compiler/ts.js' )).default;
             const fs = await import( 'fs' );
             const path = await import( 'path' );
 
