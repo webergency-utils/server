@@ -1,18 +1,16 @@
 import { Context } from './context.js';
 import { MetadataStore } from './metadata.js';
 import { DIContainer } from './container.js';
-import { RequestReader, getEffectiveBodyContentType, isMultipartContentType } from '../helpers/request-reader.js';
-import { EndpointMetadata, ParamMetadata, AugmentedRequest, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
-import { ServerRequest, parseCookieHeader, resolveRequestFileOptions } from './server-request.js';
+import { isMultipartContentType } from '../helpers/request-reader.js';
+import { EndpointMetadata, ParamMetadata, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
+import { ServerRequest, resolveRequestFileOptions } from './server-request.js';
 import { SecurityOptions, type FileOptions } from '../decorators.js';
 import { getModuleMeta, getBranchSerializers } from './symbols.js';
 import { httpStatusFromError } from '../errors.js';
 import { clientErrorBody } from '../helpers/error-response.js';
-import { resolveClientIp } from '../helpers/client-ip.js';
 import { invokeGuards } from './guard-runner.js';
 import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
 import { isBinaryOrStreamBody, toStreamOrBinaryBody } from '../helpers/response-body.js';
-import { queryStringFromUrl } from '../helpers/query-string.js';
 import { resolveReviver, parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js';
 
 function parseErrorPath( sourcePath: string, inner: string ): string
@@ -75,21 +73,24 @@ function serializationErrorCode( err: SerializationError ): string
 export class RequestProcessor 
 {
     public static applyReviver(
-        req            : AugmentedRequest,
+        req            : ServerRequest | Request,
         metadata       : EndpointMetadata,
         moduleInstance?: any
-    )
+    ): ServerRequest
     {
-        req.reviver = resolveReviver(
+        const sreq = ServerRequest.from( req );
+        sreq.reviver = resolveReviver(
             metadata.reviver,
             resolveModuleReviver( moduleInstance ),
-            req.globalReviver
+            sreq.globalReviver
         );
+
+        return sreq;
     }
 
-    private static throwIfAborted( req: AugmentedRequest )
+    private static throwIfAborted( req: ServerRequest )
     {
-        if( req.abortSignal?.aborted )
+        if( req.signal?.aborted )
         {
             throw Object.assign( new Error( 'Request Timeout' ), { status : 408 });
         }
@@ -185,26 +186,28 @@ export class RequestProcessor
 
     public static async resolveParam(
         p: ParamMetadata,
-        req: AugmentedRequest,
+        req: ServerRequest | Request,
         ctx: any,
         securityConfig?: SecurityOptions,
         contextModule?: any,
         ws?: any,
-        responseBag?: ServerResponse,
-        serverRequest?: ServerRequest
+        responseBag?: ServerResponse
     ): Promise<any> 
     {
-        this.throwIfAborted( req );
+        const sreq = ServerRequest.from( req, { security : securityConfig });
 
+        this.throwIfAborted( sreq );
+
+        const bodyIsPreparsed = p.source === 'Body' && sreq.hasCachedBody;
         let val: any;
+
         switch ( p.source ) 
         {
-            case 'Param': val = req.params[p.name!]; break;
+            case 'Param': val = sreq.params[p.name!]; break;
             case 'Body': {
-                if( isMultipartContentType( getEffectiveBodyContentType( req )))
+                if( isMultipartContentType( sreq.effectiveContentType ))
                 {
-                    const facade = serverRequest ?? new ServerRequest( req, securityConfig );
-                    const payload = await facade.payload();
+                    const payload = await sreq.payload();
                     // Query-shaped bag: text fields + UploadedFile / UploadedFile[].
                     // Validated below via assert-style validator with from: 'query'.
                     val = payload.toObject();
@@ -213,87 +216,86 @@ export class RequestProcessor
                 {
                     // Typed urlencoded / JSON: raw text → one parse(text).
                     // With forwardBody, structurally parse once, merge, then assert (not parse).
-                    const urlenc = await RequestReader.tryGetUrlEncodedText( req, securityConfig );
+                    const urlenc = await sreq.tryGetUrlEncodedText( securityConfig );
 
                     if( urlenc !== undefined )
                     {
-                        val = req.forwardBody
-                            ? { ...parseAnyQuery( urlenc, req.reviver ), ...req.forwardBody }
+                        val = sreq.forwardBody
+                            ? { ...parseAnyQuery( urlenc, sreq.reviver ), ...sreq.forwardBody }
                             : urlenc;
                     }
                     else
                     {
-                        const jsonText = await RequestReader.tryGetJsonText( req, securityConfig );
+                        const jsonText = await sreq.tryGetJsonText( securityConfig );
 
                         if( jsonText !== undefined )
                         {
-                            val = req.forwardBody
-                                ? { ...parseAnyJson( jsonText, req.reviver ), ...req.forwardBody }
+                            val = sreq.forwardBody
+                                ? { ...parseAnyJson( jsonText, sreq.reviver ), ...sreq.forwardBody }
                                 : jsonText;
                         }
                         else
                         {
-                            val = await RequestReader.getBody( req, securityConfig );
+                            val = await sreq.body( securityConfig );
                         }
                     }
                 }
                 else
                 {
-                    val = await RequestReader.getBody( req, securityConfig );
+                    val = await sreq.body( securityConfig );
                 }
 
                 // Object bags (JSON / multipart / merged urlencoded): apply forwardBody before validate.
                 // Raw urlencoded text (no forwardBody) stays a string for parserQuery.
-                if( req.forwardBody && val && typeof val === 'object' && !Array.isArray( val ))
+                if( sreq.forwardBody && val && typeof val === 'object' && !Array.isArray( val ))
                 {
-                    val = { ...val, ...req.forwardBody };
+                    val = { ...val, ...sreq.forwardBody };
                 }
-                else if( req.forwardBody && ( val === undefined || val === null ))
+                else if( sreq.forwardBody && ( val === undefined || val === null ))
                 {
-                    val = { ...req.forwardBody };
+                    val = { ...sreq.forwardBody };
                 }
 
                 break;
             }
-            case 'RawBody': val = await RequestReader.getRawBody( req, securityConfig ); break;
+            case 'RawBody': val = await sreq.rawBody( securityConfig ); break;
             case 'Query': {
                 if( p.name )
                 {
-                    val = req.query[p.name];
+                    val = sreq.query[p.name];
                 }
                 else if( p.parser || p.parserQuery )
                 {
-                    val = req.queryString ?? queryStringFromUrl( req.url );
+                    val = sreq.queryString;
                 }
                 else
                 {
-                    val = req.query;
+                    val = { ...sreq.query };
                 }
 
                 break;
             }
-            case 'Header': val = req.headers.get( p.name! ); break;
-            case 'Headers': val = Object.fromEntries( req.headers.entries()); break;
-            case 'Request': val = serverRequest ?? new ServerRequest( req, securityConfig ); break;
+            case 'Header': val = sreq.header( p.name! ); break;
+            case 'Headers': val = { ...sreq.headers }; break;
+            case 'Request': val = sreq; break;
             case 'Response': val = responseBag; break;
-            case 'Ip': val = resolveClientIp( req ); break;
-            case 'Url': val = req.url; break;
-            case 'Hostname': val = new URL( req.url ).hostname; break;
-            case 'Path': val = new URL( req.url ).pathname; break;
+            case 'Ip': val = sreq.ip; break;
+            case 'Url': val = sreq.url; break;
+            case 'Hostname': val = sreq.hostname; break;
+            case 'Path': val = sreq.path; break;
             case 'Context': val = Context.get(); break;
             case 'Inject': val = await MetadataStore.getInjectable( p.name!, contextModule ); break;
             case 'WebSocket': val = ws; break;
             case 'Peer': {
-                val = ( req as any ).clientCert;
+                val = sreq.peer;
                 break;
             }
             case 'Cookies': {
-                val = parseCookieHeader( req.headers.get( 'cookie' ));
+                val = { ...sreq.cookies };
                 break;
             }
             case 'Cookie': {
-                const cookies = parseCookieHeader( req.headers.get( 'cookie' ));
-                val = p.name ? cookies[p.name] : { ...cookies };
+                val = p.name ? sreq.cookie( p.name ) : { ...sreq.cookies };
                 break;
             }
             case 'File': {
@@ -302,14 +304,11 @@ export class RequestProcessor
                     throw Object.assign( new Error( '@File parameter requires a field name' ), { status : 500 });
                 }
 
-                const facade = serverRequest ?? new ServerRequest( req, securityConfig );
-                const file = await facade.upload( p.name );
-                val = file;
+                val = await sreq.upload( p.name );
                 break;
             }
             case 'Files': {
-                const facade = serverRequest ?? new ServerRequest( req, securityConfig );
-                val = await facade.uploads( p.name || undefined );
+                val = await sreq.uploads( p.name || undefined );
                 break;
             }
         }
@@ -319,13 +318,12 @@ export class RequestProcessor
             return undefined;
         }
 
-        const bodyContentType = p.source === 'Body' ? getEffectiveBodyContentType( req ) : null;
+        const bodyContentType = p.source === 'Body' ? sreq.effectiveContentType : null;
         const bodyIsMultipart = p.source === 'Body' && isMultipartContentType( bodyContentType );
         const bodyIsUrlencoded = p.source === 'Body' && bodyContentType === 'application/x-www-form-urlencoded';
 
         // parse() is wire text only. Objects (multipart, forward merge, header/cookie maps)
-        // and already-structured RPC `_json` stay on the assert/validator channel.
-        const bodyIsPreparsed = p.source === 'Body' && ( '_json' in req );
+        // and already-structured pre-cached bodies stay on the assert/validator channel.
         const canParse = !bodyIsMultipart
             && !bodyIsPreparsed
             && ( p.parser || p.parserQuery )
@@ -349,15 +347,15 @@ export class RequestProcessor
             {
                 try
                 {
-                    const parseArg = req.reviver
-                        ? { reviver : req.reviver }
-                        : ( p.name || p.source.toLowerCase() );
+                    const parseArg = sreq.reviver
+                        ? { reviver : sreq.reviver }
+                        : ( p.name || p.source.toLowerCase());
                     val = parserFn( val, parseArg as any );
 
-                    // Cache validated body so a later getBody does not re-parse.
-                    if( p.source === 'Body' && !( '_json' in req ))
+                    // Cache validated body so a later body() call does not re-parse.
+                    if( p.source === 'Body' && !sreq.hasCachedBody )
                     {
-                        req._json = val;
+                        sreq.cacheParsedBody( val );
                     }
                 }
                 catch( e: any )
@@ -411,14 +409,21 @@ export class RequestProcessor
 
     public static async execute(
         metadata: EndpointMetadata,
-        req: AugmentedRequest,
+        req: ServerRequest | Request,
         securityConfig?: SecurityOptions
     ): Promise<Response> 
     {
+        const sreq = ServerRequest.from( req, { security : securityConfig });
+
+        if( securityConfig !== undefined )
+        {
+            sreq.securityOptions = securityConfig;
+        }
+
         return Context.run({
-            request          : req,
+            request          : sreq,
             metadata,
-            requestId        : req.requestId,
+            requestId        : sreq.requestID,
             requestInstances : new Map<string, any>()
         }, async () => 
         {
@@ -427,27 +432,26 @@ export class RequestProcessor
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            this.applyReviver( req, metadata, controllerModule );
+            this.applyReviver( sreq, metadata, controllerModule );
 
             const ctx = { success : true, errors : [], mode : 'strict' };
             const middlewareResponse = new ServerResponse();
             const moduleFiles = resolveModuleFileOptions( controllerModule );
-            const filesConfig = resolveRequestFileOptions( req, moduleFiles );
-            const serverRequest = new ServerRequest( req, securityConfig, filesConfig );
+            sreq.fileOptions = resolveRequestFileOptions( sreq, moduleFiles );
 
             const finalHandler = async () => 
             {
-                this.throwIfAborted( req );
+                this.throwIfAborted( sreq );
 
                 // 2. Resolve parameters (Parsing & Validation)
                 const args: any[] = [];
 
                 for( const p of metadata.params ) 
                 {
-                    args.push( await this.resolveParam( p, req, ctx, securityConfig, controllerModule, undefined, middlewareResponse, serverRequest ));
+                    args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, undefined, middlewareResponse ));
                 }
 
-                this.throwIfAborted( req );
+                this.throwIfAborted( sreq );
 
                 if( !ctx.success ) 
                 {
@@ -460,7 +464,7 @@ export class RequestProcessor
                 // 3. Execute Method
                 const result = await controller[metadata.methodName]( ...args );
 
-                this.throwIfAborted( req );
+                this.throwIfAborted( sreq );
 
                 const pending =
                     ( result instanceof ServerResponse ? result.pendingForward : undefined )
@@ -555,7 +559,10 @@ export class RequestProcessor
                                         {
                                             if( err instanceof SerializationError ) 
                                             {
-                                                throw new Error( `Response validation failed: ${JSON.stringify([{ path : err.path, error : serializationErrorCode( err ) }])}` );
+                                                throw new Error(
+                                                    `Response validation failed: ${JSON.stringify([{ path : err.path, error : serializationErrorCode( err ) }])}`,
+                                                    { cause : err }
+                                                );
                                             }
 
                                             throw err;
@@ -643,19 +650,19 @@ export class RequestProcessor
             {
                 const interceptor = await MetadataStore.getInterceptor( iName );
                 const next = chain;
-                chain = () => interceptor.intercept( req, next );
+                chain = () => interceptor.intercept( sreq, next );
             }
 
             try 
             {
-                this.throwIfAborted( req );
+                this.throwIfAborted( sreq );
 
                 // Run Middlewares before guards
                 if( metadata.middlewares && metadata.middlewares.length > 0 ) 
                 {
                     for( const mName of metadata.middlewares ) 
                     {
-                        this.throwIfAborted( req );
+                        this.throwIfAborted( sreq );
 
                         const middlewareInstance = await MetadataStore.getInjectable( mName, controllerModule );
 
@@ -666,7 +673,7 @@ export class RequestProcessor
 
                         if( typeof middlewareInstance.use === 'function' ) 
                         {
-                            await middlewareInstance.use( serverRequest, middlewareResponse );
+                            await middlewareInstance.use( sreq, middlewareResponse );
                         }
                         else if( typeof middlewareInstance.useCallback === 'function' ) 
                         {
@@ -685,7 +692,7 @@ export class RequestProcessor
                                             resolve();
                                         }
                                     };
-                                    const res = middlewareInstance.useCallback( serverRequest, middlewareResponse, next );
+                                    const res = middlewareInstance.useCallback( sreq, middlewareResponse, next );
 
                                     if( res instanceof Promise ) 
                                     {
@@ -702,17 +709,16 @@ export class RequestProcessor
                 }
 
                 // 1. Run Guards FIRST (Security gate)
-                await invokeGuards( metadata, req, {
+                await invokeGuards( metadata, sreq, {
                     ctx,
                     controller,
                     controllerModule,
                     securityConfig,
-                    response      : middlewareResponse,
-                    serverRequest,
-                    beforeEach    : () => this.throwIfAborted( req )
+                    response   : middlewareResponse,
+                    beforeEach : () => this.throwIfAborted( sreq )
                 });
 
-                this.throwIfAborted( req );
+                this.throwIfAborted( sreq );
 
                 return middlewareResponse.applyTo( await chain());
             }
@@ -729,7 +735,7 @@ export class RequestProcessor
                 }
                 const status = httpStatusFromError( err );
 
-                const response = new Response( JSON.stringify( clientErrorBody( err, status ) ), { 
+                const response = new Response( JSON.stringify( clientErrorBody( err, status )), { 
                     status, 
                     headers : { 'Content-Type' : 'application/json' } 
                 });
@@ -748,7 +754,7 @@ export class RequestProcessor
     public static runWs(
         metadata: EndpointMetadata,
         ws: any,
-        req: AugmentedRequest
+        req: ServerRequest | Request
     ): void
     {
         void this.executeWs( metadata, ws, req ).catch(( err: any ) =>
@@ -767,13 +773,20 @@ export class RequestProcessor
     public static async executeWs(
         metadata: EndpointMetadata,
         ws: any,
-        req: AugmentedRequest
+        req: ServerRequest | Request
     ): Promise<void> 
     {
+        const sreq = ServerRequest.from( req );
+
+        if( ws?.params && Object.keys( sreq.params ).length === 0 )
+        {
+            sreq.params = ws.params;
+        }
+
         return Context.run({
-            request          : req,
+            request          : sreq,
             metadata,
-            requestId        : req.requestId,
+            requestId        : sreq.requestID,
             requestInstances : new Map<string, any>()
         }, async () => 
         {
@@ -782,7 +795,7 @@ export class RequestProcessor
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            this.applyReviver( req, metadata, controllerModule );
+            this.applyReviver( sreq, metadata, controllerModule );
 
             const ctx = { success : true, errors : [], mode : 'strict' };
 
@@ -793,7 +806,7 @@ export class RequestProcessor
 
                 for( const p of metadata.params ) 
                 {
-                    args.push( await this.resolveParam( p, req, ctx, undefined, controllerModule, ws, undefined, new ServerRequest( req )));
+                    args.push( await this.resolveParam( p, sreq, ctx, undefined, controllerModule, ws ));
                 }
 
                 if( !ctx.success ) 
@@ -830,79 +843,75 @@ export class RequestProcessor
         payload: any
     ): Promise<any> 
     {
-        const req: any = {
-      _json   : payload,
-      headers : new Headers(),
-      url     : 'rpc://localhost/' + metadata.path,
-      params  : {},
-      query   : {},
-      meta    : {}
-    };
+        const sreq = new ServerRequest(
+            new Request( 'rpc://localhost/' + metadata.path ),
+            { preParsedBody : payload }
+        );
 
         return Context.run({
-            request          : req,
+            request          : sreq,
             metadata,
-            requestId        : req.requestId,
+            requestId        : sreq.requestID,
             requestInstances : new Map<string, any>()
         }, async () => 
         {
             try
             {
-            const controllerModule = MetadataStore.getTokenModule( metadata.controller );
-            const controller = await MetadataStore.getController( metadata.controller, controllerModule );
+                const controllerModule = MetadataStore.getTokenModule( metadata.controller );
+                const controller = await MetadataStore.getController( metadata.controller, controllerModule );
 
-            if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
+                if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            const ctx = { success : true, errors : [], mode : 'strict' };
+                const ctx = { success : true, errors : [], mode : 'strict' };
 
-            // 1. Run Guards
-            await invokeGuards( metadata, req, { ctx, controller, controllerModule });
+                // 1. Run Guards
+                await invokeGuards( metadata, sreq, { ctx, controller, controllerModule });
 
-            // 2. Resolve parameters (Validation)
-            const args: any[] = [];
+                // 2. Resolve parameters (Validation)
+                const args: any[] = [];
 
-            for( const p of metadata.params ) 
-            {
-                args.push( await this.resolveParam( p, req, ctx, undefined, controllerModule ));
-            }
-
-            if( !ctx.success ) 
-            {
-                throw Object.assign( new Error( 'Validation failed' ), { status : 400, data : { success : false, message : 'request validation failed', errors : ctx.errors } });
-            }
-
-            // 3. Wrap in Interceptor Chain
-            const finalHandler = async () => 
-            {
-                const result = await controller[metadata.methodName]( ...args );
-
-                if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
+                for( const p of metadata.params ) 
                 {
-                    const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
-                    const responseCtx = { success : true, errors : [], mode };
-                    const validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
-
-                    if( !responseCtx.success ) 
-                    {
-                        throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
-                    }
-
-                    return validatedResult;
+                    args.push( await this.resolveParam( p, sreq, ctx, undefined, controllerModule ));
                 }
 
-                return result;
-            };
+                if( !ctx.success ) 
+                {
+                    throw Object.assign( new Error( 'Validation failed' ), { status : 400, data : { success : false, message : 'request validation failed', errors : ctx.errors } });
+                }
 
-            let chain = finalHandler;
+                // 3. Wrap in Interceptor Chain
+                const finalHandler = async () => 
+                {
+                    const result = await controller[metadata.methodName]( ...args );
 
-            for( const iName of [...metadata.interceptors].reverse()) 
-            {
-                const interceptor = await MetadataStore.getInterceptor( iName );
-                const next = chain;
-                chain = () => interceptor.intercept( req, next );
-            }
+                    if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
+                    {
+                        const mode = metadata.returnTypeMode || MetadataStore.getDefaultResponseMode();
+                        const responseCtx = { success : true, errors : [], mode };
+                        const validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
 
-            return await chain();
+                        if( !responseCtx.success ) 
+                        {
+                            throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
+                        }
+
+                        return validatedResult;
+                    }
+
+                    return result;
+                };
+
+                let chain = finalHandler;
+
+                for( const iName of [...metadata.interceptors].reverse()) 
+                {
+                    const interceptor = await MetadataStore.getInterceptor( iName );
+                    const next = chain;
+                    chain = () => interceptor.intercept( sreq, next );
+                }
+
+                return await chain();
             }
             finally
             {

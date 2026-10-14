@@ -1,10 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { Router, RouteMatch } from './core/router.js';
-import { parseQueryString } from '@webergency-utils/typechecker/runtime';
-import { joinQueryStrings, queryStringFromBag, queryStringFromUrl } from './helpers/query-string.js';
+import { joinQueryStrings, queryStringFromBag } from './helpers/query-string.js';
 import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/registry.js';
 import { bootstrapRegistry } from './core/bootstrap.js';
-import { EndpointMetadata, AugmentedRequest, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
+import { EndpointMetadata, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
+import { ServerRequest } from './core/server-request.js';
+import { Context } from './core/context.js';
+import { DIContainer } from './core/container.js';
 import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
 import { handleCors, isPreflight } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders } from './helpers/security.js';
@@ -18,10 +20,9 @@ export type { TlsOptions, NodeHttpOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
-import { RequestReader, getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
+import { getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
 import { httpStatusFromError } from './errors.js';
 import { clientErrorBody, errorLogFields } from './helpers/error-response.js';
-import { resolveClientIp } from './helpers/client-ip.js';
 import { resolveRequestId, REQUEST_ID_HEADER } from './helpers/request-id.js';
 
 /** Max internal rewrite hops per request (cycle detection is separate). */
@@ -122,11 +123,11 @@ export class Server extends EventEmitter
     /** Forward-only routes (`@Internal`). */
     private internalRouter = new Router();
     private activeRequests = 0;
-    private serverAdapter? : ServerAdapter;
+    private serverAdapter?   : ServerAdapter;
     private _isShuttingDown = false;
     private listening = false;
     private rateLimiter = new RateLimiter();
-    private events         : { [K in keyof ServerEvents]?: Set<any> } = {};
+    private events           : { [K in keyof ServerEvents]?: Set<any> } = {};
     private bootstrapped = false;
     /** Per-Server metadata / DI registry (no process-global store). */
     public readonly registry = new ApplicationRegistry();
@@ -154,25 +155,6 @@ export class Server extends EventEmitter
             this.serverAdapter = this.selectAdapter( 'Node' );
         }
         ( this.serverAdapter as any ).nodeServer = val;
-    }
-
-    public async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
-    {
-        const sec = securityConfig || ( typeof this.options.security === 'object' ? this.options.security : undefined );
-
-        if( req.reviver === undefined )
-        {
-            req.reviver = this.options.reviver ?? undefined;
-        }
-
-        return RequestReader.getBody( req, sec );
-    }
-
-    public async getRawBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<ArrayBuffer> 
-    {
-        const sec = securityConfig || ( typeof this.options.security === 'object' ? this.options.security : undefined );
-
-        return RequestReader.getRawBody( req, sec );
     }
 
     constructor( private options: ServerOptions ) 
@@ -536,36 +518,27 @@ export class Server extends EventEmitter
         return [ ...allowed ];
     }
 
-    private applyMatchBags( req: AugmentedRequest, match: RouteMatch ): void
+    private applyMatchBags( sreq: ServerRequest, match: RouteMatch ): void
     {
-        req.params = match.params;
-        req.queryString = queryStringFromUrl( req.url );
-        req.query = parseQueryString( req.queryString );
-        req.globalCors = this.options.cors;
-        req.cors = match.metadata.cors;
-        req.globalSecurity = this.options.security;
-        req.security = match.metadata.security;
-        req.globalFiles = this.options.files;
-        req.files = match.metadata.files;
-        req.meta = match.metadata.meta;
-        req.globalReviver = this.options.reviver;
+        sreq.params = match.params;
+        sreq.routeFiles = match.metadata.files;
     }
 
     private async runEndpoint(
         metadata: EndpointMetadata,
-        req: AugmentedRequest,
+        sreq: ServerRequest,
         securityConfig?: SecurityOptions
     ): Promise<Response>
     {
         try
         {
-            return await this.runEndpointTimed( metadata, req, securityConfig );
+            return await this.runEndpointTimed( metadata, sreq, securityConfig );
         }
         catch( err: any )
         {
             if( err instanceof ForwardIntent )
             {
-                return this.executeForward( err.target, req );
+                return this.executeForward( err.target, sreq );
             }
 
             throw err;
@@ -574,7 +547,7 @@ export class Server extends EventEmitter
 
     private async runEndpointTimed(
         metadata: EndpointMetadata,
-        req: AugmentedRequest,
+        sreq: ServerRequest,
         securityConfig?: SecurityOptions
     ): Promise<Response>
     {
@@ -582,9 +555,9 @@ export class Server extends EventEmitter
         {
             const timeoutMs = securityConfig.timeout;
             const controller = new AbortController();
-            req.abortSignal = controller.signal;
+            sreq.signal = controller.signal;
             const timer = setTimeout(() => controller.abort(), timeoutMs );
-            const work = RequestProcessor.execute( metadata, req, securityConfig );
+            const work = RequestProcessor.execute( metadata, sreq, securityConfig );
 
             try
             {
@@ -615,38 +588,20 @@ export class Server extends EventEmitter
             }
         }
 
-        return RequestProcessor.execute( metadata, req, securityConfig );
+        return RequestProcessor.execute( metadata, sreq, securityConfig );
     }
 
     /**
      * Internal rewrite: look up `method`+`path` on public ∪ internal (SEO skipped).
      * Nested forwards are allowed up to {@link MAX_FORWARD_DEPTH}; cycles are rejected.
      */
-    private async executeForward( target: SeoForward, req: AugmentedRequest ): Promise<Response>
+    private async executeForward( target: SeoForward, sreq: ServerRequest ): Promise<Response>
     {
         const method = target.method.toUpperCase();
         const path = target.path.startsWith( '/' ) ? target.path : `/${target.path}`;
         const hopKey = `${method} ${path}`;
-        const stack = req.forwardStack ?? ( req.forwardStack = []);
 
-        if( stack.includes( hopKey ))
-        {
-            throw Object.assign(
-                new Error( `Forward cycle detected: ${[ ...stack, hopKey ].join( ' -> ' )}` ),
-                { status : 500 }
-            );
-        }
-
-        if( stack.length >= MAX_FORWARD_DEPTH )
-        {
-            throw Object.assign(
-                new Error( `Forward depth exceeded (max ${MAX_FORWARD_DEPTH})` ),
-                { status : 500 }
-            );
-        }
-
-        stack.push( hopKey );
-        req.forwardDepth = stack.length;
+        sreq.recordForwardHop( hopKey, MAX_FORWARD_DEPTH );
 
         const match =
             this.router.lookup( method, path ).match
@@ -660,37 +615,26 @@ export class Server extends EventEmitter
             );
         }
 
-        req.params = match.params;
-        req.query = { ...req.query, ...( target.query || {}) };
+        sreq.params = match.params;
+        sreq.query = { ...sreq.query, ...( target.query || {}) };
 
         if( target.query )
         {
-            req.queryString = joinQueryStrings(
-                req.queryString ?? queryStringFromUrl( req.url ),
+            sreq.queryString = joinQueryStrings(
+                sreq.queryString,
                 queryStringFromBag( target.query as Record<string, unknown> )
             );
         }
 
-        req.cors = match.metadata.cors;
-        req.security = match.metadata.security;
-        req.files = match.metadata.files;
-        req.meta = match.metadata.meta;
-
-        if( target.body )
-        {
-            req.forwardBody = target.body;
-        }
-        else
-        {
-            delete req.forwardBody;
-        }
+        sreq.routeFiles = match.metadata.files;
+        sreq.forwardBody = target.body ? target.body : undefined;
 
         const securityConfig = mergeSecurityConfigs([ this.options.security, match.metadata.security ]);
 
         try
         {
             // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
-            return await this.runEndpoint( match.metadata, req, securityConfig );
+            return await this.runEndpoint( match.metadata, sreq, securityConfig );
         }
         catch( err: any )
         {
@@ -852,22 +796,20 @@ export class Server extends EventEmitter
 
         this.activeRequests++;
         const startTime = Date.now();
-        const url = new URL( request.url );
-        const path = url.pathname;
         const isUpgrade = request.headers.get( 'upgrade' )?.toLowerCase() === 'websocket';
         const method = isUpgrade ? 'WS' : request.method;
-        const augmented = request as AugmentedRequest;
-        augmented.trustProxy = this.options.trustProxy;
-        augmented.requestId = requestId;
-
-        if(( request as any ).remoteAddress !== undefined )
-        {
-            augmented.remoteAddress = ( request as any ).remoteAddress;
-        }
+        const sreq = new ServerRequest( request, {
+            requestId,
+            trustProxy    : this.options.trustProxy,
+            globalFiles   : this.options.files,
+            globalReviver : this.options.reviver
+        });
+        const path = sreq.path;
+        const rawSearch = sreq.queryString ? `?${sreq.queryString}` : '';
     
         if( this.options.logs ) 
         {
-            this.logger.info( `--> ${method} ${path}${url.search ? url.search : ''}`, {
+            this.logger.info( `--> ${method} ${path}${rawSearch}`, {
                 type : 'request_start',
                 method,
                 path,
@@ -1002,20 +944,32 @@ export class Server extends EventEmitter
                 if( !controller ) { throw new Error( `Controller ${finalMatch.metadata.controller} not registered` ) }
 
                 // Run Guards
-                const req = request as AugmentedRequest;
-                req.params = finalMatch.params;
-                req.queryString = queryStringFromUrl( req.url );
-                req.query = parseQueryString( req.queryString );
-                req.globalReviver = this.options.reviver;
-                RequestProcessor.applyReviver( req, finalMatch.metadata, controllerModule );
+                sreq.params = finalMatch.params;
+                RequestProcessor.applyReviver( sreq, finalMatch.metadata, controllerModule );
                 const ctx = { success : true, errors : [], mode : 'strict' };
 
-                // The socket does not exist until after the upgrade, so @ConnectedSocket is null.
-                await invokeGuards( finalMatch.metadata, req, {
-                    ctx,
-                    controller,
-                    controllerModule,
-                    websocket : null
+                await Context.run({
+                    request          : sreq,
+                    metadata         : wsMatch.metadata,
+                    requestId,
+                    requestInstances : new Map<string, any>()
+                }, async () =>
+                {
+                    try
+                    {
+                        // The socket does not exist until after the upgrade, so @ConnectedSocket is null.
+                        await invokeGuards( wsMatch.metadata, sreq, {
+                            ctx,
+                            controller,
+                            controllerModule,
+                            websocket : null
+                        });
+                    }
+                    finally
+                    {
+                        await DIContainer.destroyInstances( Context.get()?.requestInstances?.values() || []);
+                        Context.get()?.requestInstances?.clear();
+                    }
                 });
 
                 if( !ctx.success ) 
@@ -1040,7 +994,6 @@ export class Server extends EventEmitter
                 return withRequestId( new Response( 'WebSockets not supported by adapter', { status : 501 }));
             }
 
-            const req = request as AugmentedRequest;
             let response: Response | undefined;
             let activeSecurity = securityConfig;
             let activeCors = corsConfig;
@@ -1050,10 +1003,10 @@ export class Server extends EventEmitter
                 // Enforce allowedContentTypes (require a matching CT when a body is indicated)
                 if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
                 {
-                    const contentType = getContentType( req );
+                    const contentType = getContentType( request );
                     const allowed = cfg.allowedContentTypes.map( t => t.toLowerCase());
 
-                    if( requestLikelyHasBody( req ))
+                    if( requestLikelyHasBody( request ))
                     {
                         if( !contentType || !allowed.includes( contentType ))
                         {
@@ -1069,7 +1022,7 @@ export class Server extends EventEmitter
                 // Enforce rateLimit
                 if( cfg?.rateLimit ) 
                 {
-                    const ip = resolveClientIp( req, this.options.trustProxy );
+                    const ip = sreq.ip;
                     const limit = this.rateLimiter.consume( ip, path, cfg.rateLimit );
 
                     if( !limit.allowed ) 
@@ -1085,14 +1038,14 @@ export class Server extends EventEmitter
             // Try SEO matches in specificity order; void → next; forward → internal hop.
             for( const seoMatch of seoMatches )
             {
-                this.applyMatchBags( req, seoMatch );
+                this.applyMatchBags( sreq, seoMatch );
                 activeSecurity = mergeSecurityConfigs([ this.options.security, seoMatch.metadata.security ]);
                 activeCors = seoMatch.metadata.cors !== undefined ? seoMatch.metadata.cors : this.options.cors;
                 enforceSecurityGates( activeSecurity );
 
                 try
                 {
-                    response = await this.runEndpoint( seoMatch.metadata, req, activeSecurity );
+                    response = await this.runEndpoint( seoMatch.metadata, sreq, activeSecurity );
                     break;
                 }
                 catch( err: any )
@@ -1143,11 +1096,11 @@ export class Server extends EventEmitter
                     return withRequestId( res );
                 }
 
-                this.applyMatchBags( req, pubMatch );
+                this.applyMatchBags( sreq, pubMatch );
                 activeSecurity = mergeSecurityConfigs([ this.options.security, pubMatch.metadata.security ]);
                 activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
                 enforceSecurityGates( activeSecurity );
-                response = await this.runEndpoint( pubMatch.metadata, req, activeSecurity );
+                response = await this.runEndpoint( pubMatch.metadata, sreq, activeSecurity );
             }
 
             response = applyCors( response!, activeCors );
@@ -1230,7 +1183,7 @@ export class Server extends EventEmitter
                 }
             }
 
-            let res = new Response( JSON.stringify( clientErrorBody( err, statusCode ) ), {
+            let res = new Response( JSON.stringify( clientErrorBody( err, statusCode )), {
                 status  : statusCode,
                 headers : errHeaders
             });

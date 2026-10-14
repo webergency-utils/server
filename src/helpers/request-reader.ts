@@ -1,14 +1,57 @@
-import { AugmentedRequest } from '../core/types.js';
 import { SecurityOptions } from '../decorators.js';
 import { parseSize } from './security.js';
 import { parseHeaderValueParameter } from './http-header-parse.js';
-import { parseAnyJson, parseAnyQuery, reviveAny } from './reviver.js';
+import { parseAnyQuery, reviveAny } from './reviver.js';
 
 const UTF8_DECODER = new TextDecoder( 'utf-8' );
 
-export function getContentType( req: AugmentedRequest ): string | null
+export interface HeaderCarrier
 {
-    const raw = req.headers.get( 'content-type' );
+    headers? : {
+        get?( name: string ): string | null
+    } | Record<string, string>
+    header?( name: string ): string | null
+}
+
+export interface BodyCheckCarrier extends HeaderCarrier
+{
+    body?       : ReadableStream<Uint8Array> | null
+    bodyStream? : ReadableStream<Uint8Array> | null
+}
+
+export interface RawBodyCarrier extends BodyCheckCarrier
+{
+    headers : {
+        get( name: string ): string | null
+    }
+    arrayBuffer(): Promise<ArrayBuffer>
+}
+
+function getHeader( req: HeaderCarrier, name: string ): string | null
+{
+    if( typeof req.header === 'function' )
+    {
+        return req.header( name );
+    }
+
+    const h = req.headers as any;
+
+    if( h && typeof h.get === 'function' )
+    {
+        return h.get( name );
+    }
+
+    if( h && typeof h === 'object' )
+    {
+        return h[name.toLowerCase()] ?? h[name] ?? null;
+    }
+
+    return null;
+}
+
+export function getContentType( req: HeaderCarrier ): string | null
+{
+    const raw = getHeader( req, 'content-type' );
 
     if( !raw ){ return null }
 
@@ -66,19 +109,15 @@ export function decodeBodyText( raw: ArrayBuffer, charset?: string | null ): str
     }
 }
 
-/**
- * Declared Content-Type, or the type inferred when the header was missing and the body was sniffed.
- * Used for `@Body` `from` selection after `getBody`.
- */
-export function getEffectiveBodyContentType( req: AugmentedRequest ): string | null
-{
-    return getContentType( req ) ?? req._bodyContentType ?? null;
-}
-
 /** True when headers or the Request body stream indicate a non-empty body (without reading it). */
-export function requestLikelyHasBody( req: AugmentedRequest ): boolean
+export function requestLikelyHasBody( req: BodyCheckCarrier ): boolean
 {
-    const contentLength = req.headers.get( 'content-length' );
+    if( typeof ( req as { likelyHasBody? : boolean }).likelyHasBody === 'boolean' )
+    {
+        return ( req as { likelyHasBody : boolean }).likelyHasBody;
+    }
+
+    const contentLength = getHeader( req, 'content-length' );
 
     if( contentLength !== null )
     {
@@ -90,7 +129,7 @@ export function requestLikelyHasBody( req: AugmentedRequest ): boolean
         }
     }
 
-    const transferEncoding = req.headers.get( 'transfer-encoding' );
+    const transferEncoding = getHeader( req, 'transfer-encoding' );
 
     if( transferEncoding && transferEncoding.toLowerCase() !== 'identity' )
     {
@@ -98,7 +137,7 @@ export function requestLikelyHasBody( req: AugmentedRequest ): boolean
     }
 
     // Bun (and some undici paths) may omit Content-Length while still exposing a body stream.
-    if( req.body != null )
+    if(( req.body != null && typeof req.body !== 'function' ) || req.bodyStream != null )
     {
         return true;
     }
@@ -106,18 +145,18 @@ export function requestLikelyHasBody( req: AugmentedRequest ): boolean
     return false;
 }
 
-function unsupportedMediaType( contentType: string | null ): never
+export function unsupportedMediaType( contentType: string | null ): never
 {
     throw Object.assign( new Error( `Unsupported Media Type: ${contentType || 'missing'}` ), { status : 415 });
 }
 
-function looksLikeUrlEncoded( text: string ): boolean
+export function looksLikeUrlEncoded( text: string ): boolean
 {
     return /[=&]/.test( text );
 }
 
 /** When Content-Type is absent: try JSON, then urlencoded if the text looks like a form body. */
-function sniffBody( text: string, reviver?: ( key: string, value: any ) => any ): { value: any; contentType: 'application/json' | 'application/x-www-form-urlencoded' }
+export function sniffBody( text: string, reviver?: ( key: string, value: any ) => any ): { value : any, contentType : 'application/json' | 'application/x-www-form-urlencoded' }
 {
     let jsonValue: any;
     let isJson = false;
@@ -247,174 +286,33 @@ async function readStreamWithLimit( body: ReadableStream<Uint8Array>, limit: num
     return concatChunks( chunks, total );
 }
 
-export class RequestReader 
+/**
+ * Stateless raw-body stream reader enforcing `Content-Length` validation and `maxBodySize`.
+ */
+export async function readRawBody( req: RawBodyCarrier, securityConfig?: SecurityOptions ): Promise<ArrayBuffer>
 {
-    /**
-     * When the body is (or sniffs as) urlencoded, return decoded wire text without
-     * `parseQueryString` — for a single `parse(text, { from: 'query' })` pass.
-     * Sets `req._bodyContentType` when sniffing. Returns `undefined` when not urlencoded
-     * (caller should use {@link getBody}).
-     */
-    public static async tryGetUrlEncodedText(
-        req            : AugmentedRequest,
-        securityConfig?: SecurityOptions
-    ): Promise<string | undefined>
+    const { limit, label } = resolveBodyLimit( securityConfig );
+    const declared = parseContentLength( req.headers.get( 'content-length' ));
+
+    if( limit !== undefined && declared !== undefined && declared > limit )
     {
-        if( '_json' in req )
-        {
-            // Already consumed as a structured body — cannot recover wire text.
-            return undefined;
-        }
-
-        const declared = getContentType( req );
-        const raw = await this.getRawBody( req, securityConfig );
-
-        if( !raw.byteLength ){ return undefined }
-
-        if( declared === 'application/x-www-form-urlencoded' )
-        {
-            return decodeBodyText( raw );
-        }
-
-        if( declared )
-        {
-            return undefined;
-        }
-
-        // Sniff like getBody, but keep urlencoded as text for the typed parser path.
-        const text = decodeBodyText( raw );
-
-        try
-        {
-            JSON.parse( text );
-            req._bodyContentType = 'application/json';
-
-            return undefined;
-        }
-        catch
-        {
-            // fall through
-        }
-
-        if( looksLikeUrlEncoded( text ))
-        {
-            req._bodyContentType = 'application/x-www-form-urlencoded';
-
-            return text;
-        }
-
-        return undefined;
+        payloadTooLarge( label );
     }
 
-    /**
-     * When the body is (or sniffs as) JSON, return decoded wire text without
-     * `JSON.parse` — for a single `parse(text, { from: 'json' })` pass.
-     * Sets `req._bodyContentType` when sniffing. Returns `undefined` when not JSON.
-     */
-    public static async tryGetJsonText(
-        req            : AugmentedRequest,
-        securityConfig?: SecurityOptions
-    ): Promise<string | undefined>
+    // Prefer streaming when a size cap is set so chunked/omitted Content-Length
+    // cannot force the entire payload into memory before rejection.
+    if( limit !== undefined && req.body != null && typeof ( req.body as ReadableStream<Uint8Array> ).getReader === 'function' )
     {
-        if( '_json' in req )
-        {
-            return undefined;
-        }
-
-        const declared = getContentType( req );
-        const raw = await this.getRawBody( req, securityConfig );
-
-        if( !raw.byteLength ){ return undefined }
-
-        const text = decodeBodyText( raw );
-
-        if( isJsonContentType( declared ))
-        {
-            return text;
-        }
-
-        if( declared )
-        {
-            return undefined;
-        }
-
-        try
-        {
-            JSON.parse( text );
-            req._bodyContentType = 'application/json';
-
-            return text;
-        }
-        catch
-        {
-            return undefined;
-        }
+        return readStreamWithLimit( req.body as ReadableStream<Uint8Array>, limit, label );
     }
 
-    public static async getBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<any> 
+    const buffer = await req.arrayBuffer();
+
+    if( limit !== undefined && buffer.byteLength > limit )
     {
-        if( '_json' in req ) { return req._json }
-        const raw = await this.getRawBody( req, securityConfig );
-
-        if( !raw.byteLength ){ return req._json = undefined }
-
-        const contentType = getContentType( req );
-        const contentTypeHeader = req.headers.get( 'content-type' );
-
-        if( contentType === 'text/plain' )
-        {
-            return req._json = decodeBodyText( raw, getContentTypeCharset( contentTypeHeader ));
-        }
-
-        // JSON / urlencoded / sniff: UTF-8 (charset on those types is almost always utf-8)
-        const text = decodeBodyText( raw );
-
-        if( !contentType )
-        {
-            const sniffed = sniffBody( text, req.reviver );
-            req._bodyContentType = sniffed.contentType;
-
-            return req._json = sniffed.value;
-        }
-
-        if( contentType === 'application/x-www-form-urlencoded' )
-        {
-            return req._json = parseAnyQuery( text, req.reviver );
-        }
-
-        if( isJsonContentType( contentType ))
-        {
-            return req._json = parseAnyJson( text, req.reviver );
-        }
-
-        unsupportedMediaType( contentType );
+        payloadTooLarge( label );
     }
 
-    public static async getRawBody( req: AugmentedRequest, securityConfig?: SecurityOptions ): Promise<ArrayBuffer> 
-    {
-        if( req._raw !== undefined ) { return req._raw }
-        const { limit, label } = resolveBodyLimit( securityConfig );
-        const declared = parseContentLength( req.headers.get( 'content-length' ));
-
-        if( limit !== undefined && declared !== undefined && declared > limit ) 
-        {
-            payloadTooLarge( label );
-        }
-
-        // Prefer streaming when a size cap is set so chunked/omitted Content-Length
-        // cannot force the entire payload into memory before rejection.
-        if( limit !== undefined && req.body != null && typeof ( req.body as ReadableStream<Uint8Array> ).getReader === 'function' )
-        {
-            return req._raw = await readStreamWithLimit( req.body as ReadableStream<Uint8Array>, limit, label );
-        }
-
-        const buffer = await req.arrayBuffer();
-
-        if( limit !== undefined && buffer.byteLength > limit ) 
-        {
-            payloadTooLarge( label );
-        }
-
-        return req._raw = buffer;
-    }
+    return buffer;
 }
+

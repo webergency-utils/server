@@ -61,28 +61,28 @@ export interface GuardMetadata {
 }
 
 export interface EndpointMetadata {
-    controller           : string
-    methodName           : string
-    httpMethod           : Method
-    path                 : string
-    params               : ParamMetadata[]
-    guards               : GuardMetadata[]
-    interceptors         : string[]
-    middlewares          : string[]
-    cors?                : any
-    security?            : any
+    controller            : string
+    methodName            : string
+    httpMethod            : Method
+    path                  : string
+    params                : ParamMetadata[]
+    guards                : GuardMetadata[]
+    interceptors          : string[]
+    middlewares           : string[]
+    cors?                 : any
+    security?             : any
     /** Merged class + method `@File` config (runtime merges ServerOptions / Module). */
-    files?               : any
+    files?                : any
     /** Baked class + method `@Reviver` (`null` opts out of Module / Server). */
-    reviver?             : Reviver | null
-    meta                 : Record<string, any>
+    reviver?              : Reviver | null
+    meta                  : Record<string, any>
     /** High-priority SEO route group (`@Seo`). */
-    seo?                 : boolean
+    seo?                  : boolean
     /** Forward-only route; not reachable from external HTTP (`@Internal`). */
-    internal?            : boolean
-    returnTypeValidator? : string | Validator
-    returnTypeSerializer?: string | Serializer
-    returnTypeMode?      : 'strict' | 'relaxed' | 'strip'
+    internal?             : boolean
+    returnTypeValidator?  : string | Validator
+    returnTypeSerializer? : string | Serializer
+    returnTypeMode?       : 'strict' | 'relaxed' | 'strip'
 }
 
 /**
@@ -90,12 +90,12 @@ export interface EndpointMetadata {
  * Re-dispatched by HTTP method + path (public ∪ internal routers; SEO skipped).
  */
 export type SeoForward =
-{
-    method : string
-    path   : string
-    query? : Record<string, string>
-    body?  : Record<string, unknown>
-}
+    {
+        method : string
+        path   : string
+        query? : Record<string, string>
+        body?  : Record<string, unknown>
+    };
 
 /** Thrown (control flow) when an `@Seo` handler returns void / undefined. */
 export class SeoFallthrough extends Error
@@ -110,7 +110,7 @@ export class SeoFallthrough extends Error
 /** Thrown (control flow) when a handler requests an internal forward. */
 export class ForwardIntent extends Error
 {
-    public readonly target: SeoForward;
+    public readonly target : SeoForward;
 
     constructor( target: SeoForward )
     {
@@ -138,46 +138,6 @@ export function isSeoForward( value: unknown ): value is SeoForward
 export type Validator = ( v: any, path: string, ctx: any ) => any;
 export type Parser = ( input: any, path?: string ) => any;
 export type Serializer = ( v: any ) => string;
-
-
-export interface AugmentedRequest extends Request {
-    params            : Record<string, string>
-    query             : Record<string, string>
-    /** Raw search text (no leading `?`) for `@Query()` parse. */
-    queryString?      : string
-    globalCors?       : any
-    cors?             : any
-    globalSecurity?   : any
-    security?         : any
-    globalFiles?      : any
-    files?            : any
-    meta              : Record<string, any>
-    /** Set when `security.timeout` is active; aborted when the request times out. */
-    abortSignal?      : AbortSignal
-    /** TCP peer address attached by the runtime adapter (if available). */
-    remoteAddress?    : string
-    /** Copied from ServerOptions.trustProxy for @Ip resolution. */
-    trustProxy?       : string[]
-    /** Accept-or-generate `X-Request-Id` for this request. */
-    requestId?        : string
-    /** Incremented on each internal forward hop. */
-    forwardDepth?     : number
-    /** `METHOD path` keys already visited in this forward chain (cycle detection). */
-    forwardStack?     : string[]
-    /** Shallow-merged into `@Body` after parse when set by a forward. */
-    forwardBody?      : Record<string, unknown>
-    /** Server-wide `reviver`; Endpoint / Module overlay at execute. */
-    globalReviver?    : Reviver | null
-    /** Resolved reviver for this request (JSON + query parse). */
-    reviver?          : Reviver
-    _json?            : any
-    _raw?             : ArrayBuffer
-    /** Set by getBody when Content-Type was missing and the body was sniffed. */
-    _bodyContentType? : 'application/json' | 'application/x-www-form-urlencoded'
-    /** Cached streaming multipart parse result. */
-    _multipart?        : import( '../helpers/multipart.js' ).MultipartParseResult
-    _multipartPayload? : import( '../helpers/multipart.js' ).MultipartPayload
-}
 
 export interface LogContext {
     type          : 'server_start' | 'server_shutdown' | 'registration' | 'request_start' | 'request_end' | 'error'
@@ -228,8 +188,8 @@ export class ServerResponse
 {
     #status = 200;
     #statusSet = false;
-    #statusText? : string;
-    #body?      : StreamableBody;
+    #statusText?     : string;
+    #body?           : StreamableBody;
     #bodySet = false;
     #pendingForward? : SeoForward;
     readonly #headers = new Headers();

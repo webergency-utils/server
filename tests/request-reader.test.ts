@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import
 {
-    RequestReader,
     getContentType,
     getContentTypeCharset,
     isJsonContentType,
@@ -9,11 +8,16 @@ import
     requestLikelyHasBody,
     DEFAULT_MAX_BODY_SIZE
 }
-from '../src/helpers/request-reader.js';
+    from '../src/helpers/request-reader.js';
+import { ServerRequest } from '../src/core/server-request.js';
 import { mergeSecurityConfigs, parseSize } from '../src/helpers/security.js';
-import type { AugmentedRequest } from '../src/core/types.js';
 
 const DEFAULT_MAX_BODY_BYTES = parseSize( DEFAULT_MAX_BODY_SIZE );
+
+type TestServerRequest = ServerRequest & {
+    arrayBuffer      : ReturnType<typeof vi.fn>
+    arrayBufferCalls : () => number
+};
 
 function createRequest( options:
 {
@@ -23,7 +27,7 @@ function createRequest( options:
     _json?       : unknown
     withJsonKey? : boolean
     _raw?        : ArrayBuffer
-}): AugmentedRequest
+}): TestServerRequest
 {
     const headerMap = new Map<string, string>();
 
@@ -40,37 +44,41 @@ function createRequest( options:
         ? new TextEncoder().encode( options.body ).buffer
         : options.body;
 
-    const req =
+    const arrayBuffer = vi.fn( async () =>
     {
-        headers : {
-            get : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null
-        },
-        body : options.streamBody,
-        arrayBuffer : vi.fn( async () =>
-        {
-            arrayBufferCalls += 1;
+        arrayBufferCalls += 1;
 
-            return bodyBytes ?? new ArrayBuffer( 0 );
-        }),
-        params : {},
-        query  : {},
-        url    : 'http://localhost/',
-        meta   : {}
-    } as unknown as AugmentedRequest & { arrayBufferCalls: () => number };
+        return bodyBytes ?? new ArrayBuffer( 0 );
+    });
+
+    const raw =
+        {
+            headers : {
+                get     : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null,
+                entries : () => headerMap.entries()
+            },
+            body : options.streamBody,
+            arrayBuffer,
+            url  : 'http://localhost/'
+        } as unknown as Request;
+
+    const initOpts: ConstructorParameters<typeof ServerRequest>[1] = {};
 
     if( options.withJsonKey || '_json' in options )
     {
-        ( req as { _json?: unknown })._json = options._json;
+        initOpts.preParsedBody = options._json;
     }
 
     if( options._raw !== undefined )
     {
-        req._raw = options._raw;
+        initOpts.preReadRaw = options._raw;
     }
 
-    ( req as { arrayBufferCalls: () => number }).arrayBufferCalls = () => arrayBufferCalls;
+    const sreq = new ServerRequest( raw, initOpts ) as TestServerRequest;
+    sreq.arrayBuffer = arrayBuffer;
+    sreq.arrayBufferCalls = () => arrayBufferCalls;
 
-    return req;
+    return sreq;
 }
 
 function chunkedStream( chunks: string[]): ReadableStream<Uint8Array>
@@ -172,7 +180,7 @@ describe( 'requestLikelyHasBody', () =>
     });
 });
 
-describe( 'RequestReader.getRawBody', () =>
+describe( 'ServerRequest.rawBody', () =>
 {
     beforeEach(() =>
     {
@@ -182,11 +190,11 @@ describe( 'RequestReader.getRawBody', () =>
     it( 'should return and cache raw body without re-reading', async () =>
     {
         // Arrange
-        const req = createRequest({ body : 'hello' }) as AugmentedRequest & { arrayBufferCalls: () => number };
+        const req = createRequest({ body : 'hello' });
 
         // Act
-        const first = await RequestReader.getRawBody( req );
-        const second = await RequestReader.getRawBody( req );
+        const first = await req.rawBody();
+        const second = await req.rawBody();
 
         // Assert
         expect( new TextDecoder().decode( first )).toBe( 'hello' );
@@ -201,7 +209,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : large });
 
         // Act
-        const raw = await RequestReader.getRawBody( req );
+        const raw = await req.rawBody();
 
         // Assert
         expect( raw.byteLength ).toBe( 100 );
@@ -213,7 +221,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'x'.repeat( DEFAULT_MAX_BODY_BYTES + 1 ) });
 
         // Act
-        const act = RequestReader.getRawBody( req );
+        const act = req.rawBody();
 
         // Assert
         await expect( act ).rejects.toMatchObject({
@@ -231,7 +239,7 @@ describe( 'RequestReader.getRawBody', () =>
         });
 
         // Act
-        const act = RequestReader.getRawBody( req );
+        const act = req.rawBody();
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 413 });
@@ -244,7 +252,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'x'.repeat( DEFAULT_MAX_BODY_BYTES + 64 ) });
 
         // Act
-        const raw = await RequestReader.getRawBody( req, { maxBodySize : 0 });
+        const raw = await req.rawBody({ maxBodySize : 0 });
 
         // Assert
         expect( raw.byteLength ).toBe( DEFAULT_MAX_BODY_BYTES + 64 );
@@ -256,7 +264,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'x'.repeat( DEFAULT_MAX_BODY_BYTES + 8 ) });
 
         // Act
-        const raw = await RequestReader.getRawBody( req, mergeSecurityConfigs([false]));
+        const raw = await req.rawBody( mergeSecurityConfigs([false]));
 
         // Assert
         expect( raw.byteLength ).toBe( DEFAULT_MAX_BODY_BYTES + 8 );
@@ -268,7 +276,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'hello', headers : { 'content-length' : '5abc' } });
 
         // Act
-        const act = RequestReader.getRawBody( req );
+        const act = req.rawBody();
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 400 });
@@ -281,7 +289,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'hello', headers : { 'content-length' : '-1' } });
 
         // Act / Assert
-        await expect( RequestReader.getRawBody( req )).rejects.toMatchObject({ status : 400 });
+        await expect( req.rawBody()).rejects.toMatchObject({ status : 400 });
     });
 
     it( 'should reject duplicate content-length values with 400', async () =>
@@ -290,7 +298,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'hello', headers : { 'content-length' : '5, 5' } });
 
         // Act / Assert
-        await expect( RequestReader.getRawBody( req )).rejects.toMatchObject({ status : 400 });
+        await expect( req.rawBody()).rejects.toMatchObject({ status : 400 });
     });
 
     it( 'should reject early when content-length exceeds maxBodySize', async () =>
@@ -302,7 +310,7 @@ describe( 'RequestReader.getRawBody', () =>
         });
 
         // Act
-        const act = RequestReader.getRawBody( req, { maxBodySize : '10b' });
+        const act = req.rawBody({ maxBodySize : '10b' });
 
         // Assert
         await expect( act ).rejects.toMatchObject({
@@ -318,7 +326,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'abcdefghijklmnop' });
 
         // Act
-        const act = RequestReader.getRawBody( req, { maxBodySize : '10b' });
+        const act = req.rawBody({ maxBodySize : '10b' });
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 413 });
@@ -329,15 +337,14 @@ describe( 'RequestReader.getRawBody', () =>
         // Arrange — no Content-Length; stream would otherwise buffer everything via arrayBuffer()
         const req = createRequest({
             streamBody : chunkedStream([ 'aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc' ])
-        }) as AugmentedRequest & { arrayBufferCalls: () => number };
+        });
 
         // Act
-        const act = RequestReader.getRawBody( req, { maxBodySize : '15b' });
+        const act = req.rawBody({ maxBodySize : '15b' });
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 413 });
         expect( req.arrayBufferCalls()).toBe( 0 );
-        expect( req._raw ).toBeUndefined();
     });
 
     it( 'should stream-read bodies within maxBodySize without calling arrayBuffer', async () =>
@@ -345,10 +352,10 @@ describe( 'RequestReader.getRawBody', () =>
         // Arrange
         const req = createRequest({
             streamBody : chunkedStream([ 'hel', 'lo' ])
-        }) as AugmentedRequest & { arrayBufferCalls: () => number };
+        });
 
         // Act
-        const raw = await RequestReader.getRawBody( req, { maxBodySize : '10b' });
+        const raw = await req.rawBody({ maxBodySize : '10b' });
 
         // Assert
         expect( new TextDecoder().decode( raw )).toBe( 'hello' );
@@ -361,7 +368,7 @@ describe( 'RequestReader.getRawBody', () =>
         const req = createRequest({ body : 'ok' });
 
         // Act
-        const raw = await RequestReader.getRawBody( req, { maxBodySize : 10 });
+        const raw = await req.rawBody({ maxBodySize : 10 });
 
         // Assert
         expect( raw.byteLength ).toBe( 2 );
@@ -371,10 +378,10 @@ describe( 'RequestReader.getRawBody', () =>
     {
         // Arrange
         const cached = new TextEncoder().encode( 'cached' ).buffer;
-        const req = createRequest({ _raw : cached, body : 'ignored' }) as AugmentedRequest & { arrayBufferCalls: () => number };
+        const req = createRequest({ _raw : cached, body : 'ignored' });
 
         // Act
-        const raw = await RequestReader.getRawBody( req );
+        const raw = await req.rawBody();
 
         // Assert
         expect( raw ).toBe( cached );
@@ -382,7 +389,7 @@ describe( 'RequestReader.getRawBody', () =>
     });
 });
 
-describe( 'RequestReader.getBody', () =>
+describe( 'ServerRequest.body', () =>
 {
     beforeEach(() =>
     {
@@ -392,10 +399,10 @@ describe( 'RequestReader.getBody', () =>
     it( 'should return cached _json including undefined without reading the body', async () =>
     {
         // Arrange
-        const req = createRequest({ withJsonKey : true, _json : undefined, body : '{"a":1}' }) as AugmentedRequest & { arrayBufferCalls: () => number };
+        const req = createRequest({ withJsonKey : true, _json : undefined, body : '{"a":1}' });
 
         // Act
-        const body = await RequestReader.getBody( req );
+        const body = await req.body();
 
         // Assert
         expect( body ).toBeUndefined();
@@ -408,13 +415,13 @@ describe( 'RequestReader.getBody', () =>
         const req = createRequest({ body : '' });
 
         // Act
-        const first = await RequestReader.getBody( req );
-        const second = await RequestReader.getBody( req );
+        const first = await req.body();
+        const second = await req.body();
 
         // Assert
         expect( first ).toBeUndefined();
         expect( second ).toBeUndefined();
-        expect( '_json' in req ).toBe( true );
+        expect( req.hasCachedBody ).toBe( true );
     });
 
     it( 'should parse application/json bodies and cache the result', async () =>
@@ -426,8 +433,8 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act
-        const first = await RequestReader.getBody( req );
-        const second = await RequestReader.getBody( req );
+        const first = await req.body();
+        const second = await req.body();
 
         // Assert
         expect( first ).toEqual({ hello : 'world' });
@@ -447,8 +454,8 @@ describe( 'RequestReader.getBody', () =>
         const sniffed = createRequest({ body : JSON.stringify({ v : 'x' }) });
         sniffed.reviver = reviver;
 
-        expect( await RequestReader.getBody( typed ) ).toEqual({ v : 'y' });
-        expect( await RequestReader.getBody( sniffed ) ).toEqual({ v : 'y' });
+        expect( await typed.body()).toEqual({ v : 'y' });
+        expect( await sniffed.body()).toEqual({ v : 'y' });
     });
 
     it( 'should apply reviver to urlencoded and sniffed urlencoded bodies', async () =>
@@ -464,8 +471,8 @@ describe( 'RequestReader.getBody', () =>
         const sniffed = createRequest({ body : 'v=x' });
         sniffed.reviver = reviver;
 
-        expect( await RequestReader.getBody( typed ) ).toEqual({ v : 'y' });
-        expect( await RequestReader.getBody( sniffed ) ).toEqual({ v : 'y' });
+        expect( await typed.body()).toEqual({ v : 'y' });
+        expect( await sniffed.body()).toEqual({ v : 'y' });
     });
 
     it( 'should parse urlencoded bodies via parseQueryString', async () =>
@@ -477,7 +484,7 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act
-        const body = await RequestReader.getBody( req );
+        const body = await req.body();
 
         // Assert
         expect( body ).toEqual({ age : '25', tags : ['a', 'b'] });
@@ -490,10 +497,10 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
         });
 
-        const text = await RequestReader.tryGetUrlEncodedText( req );
+        const text = await req.tryGetUrlEncodedText();
 
         expect( text ).toBe( 'age=30&token=jpUllytbmQ=' );
-        expect( '_json' in req ).toBe( false );
+        expect( req.hasCachedBody ).toBe( false );
     });
 
     it( 'tryGetUrlEncodedText returns undefined for JSON bodies', async () =>
@@ -503,29 +510,29 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'application/json' }
         });
 
-        expect( await RequestReader.tryGetUrlEncodedText( req )).toBeUndefined();
+        expect( await req.tryGetUrlEncodedText()).toBeUndefined();
     });
 
     it( 'tryGetUrlEncodedText sniffs urlencoded when Content-Type is missing', async () =>
     {
         const req = createRequest({ body : 'a=1&b=2' });
 
-        expect( await RequestReader.tryGetUrlEncodedText( req )).toBe( 'a=1&b=2' );
-        expect( req._bodyContentType ).toBe( 'application/x-www-form-urlencoded' );
+        expect( await req.tryGetUrlEncodedText()).toBe( 'a=1&b=2' );
+        expect( req.effectiveContentType ).toBe( 'application/x-www-form-urlencoded' );
     });
 
     it( 'tryGetUrlEncodedText sniffs JSON without Content-Type and returns undefined', async () =>
     {
         const req = createRequest({ body : '{"a":1}' });
 
-        expect( await RequestReader.tryGetUrlEncodedText( req )).toBeUndefined();
-        expect( req._bodyContentType ).toBe( 'application/json' );
+        expect( await req.tryGetUrlEncodedText()).toBeUndefined();
+        expect( req.effectiveContentType ).toBe( 'application/json' );
     });
 
     it( 'tryGetUrlEncodedText returns undefined for empty and non-form sniff bodies', async () =>
     {
-        expect( await RequestReader.tryGetUrlEncodedText( createRequest({ body : '' }))).toBeUndefined();
-        expect( await RequestReader.tryGetUrlEncodedText( createRequest({ body : 'not-form' }))).toBeUndefined();
+        expect( await createRequest({ body : '' }).tryGetUrlEncodedText()).toBeUndefined();
+        expect( await createRequest({ body : 'not-form' }).tryGetUrlEncodedText()).toBeUndefined();
     });
 
     it( 'tryGetJsonText returns wire text without JSON.parse', async() =>
@@ -535,10 +542,10 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'application/json' }
         });
 
-        const text = await RequestReader.tryGetJsonText( req );
+        const text = await req.tryGetJsonText();
 
         expect( text ).toBe( '{"name":"Ada"}' );
-        expect( '_json' in req ).toBe( false );
+        expect( req.hasCachedBody ).toBe( false );
     });
 
     it( 'tryGetJsonText returns undefined for urlencoded bodies', async() =>
@@ -548,15 +555,15 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
         });
 
-        expect( await RequestReader.tryGetJsonText( req )).toBeUndefined();
+        expect( await req.tryGetJsonText()).toBeUndefined();
     });
 
     it( 'tryGetJsonText sniffs JSON when Content-Type is missing', async() =>
     {
         const req = createRequest({ body : '{"a":1}' });
 
-        expect( await RequestReader.tryGetJsonText( req )).toBe( '{"a":1}' );
-        expect( req._bodyContentType ).toBe( 'application/json' );
+        expect( await req.tryGetJsonText()).toBe( '{"a":1}' );
+        expect( req.effectiveContentType ).toBe( 'application/json' );
     });
 
     it( 'should treat urlencoded content-type with charset as form data', async () =>
@@ -568,7 +575,7 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act
-        const body = await RequestReader.getBody( req );
+        const body = await req.body();
 
         // Assert
         expect( body ).toEqual({ name : 'Ada' });
@@ -581,7 +588,7 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'application/vnd.api+json' }
         });
 
-        expect( await RequestReader.getBody( req )).toEqual({ data : { id : '1' } });
+        expect( await req.body()).toEqual({ data : { id : '1' } });
     });
 
     it( 'should return text/plain bodies as a string', async () =>
@@ -591,8 +598,8 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'text/plain' }
         });
 
-        const first = await RequestReader.getBody( req );
-        const second = await RequestReader.getBody( req );
+        const first = await req.body();
+        const second = await req.body();
 
         expect( first ).toBe( 'hello plain' );
         expect( first ).toBe( second );
@@ -605,7 +612,7 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'text/plain; charset=utf-8' }
         });
 
-        expect( await RequestReader.getBody( req )).toBe( 'café' );
+        expect( await req.body()).toBe( 'café' );
     });
 
     it( 'should decode text/plain with a non-utf8 charset', async () =>
@@ -617,7 +624,7 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'text/plain; charset=iso-8859-1' }
         });
 
-        expect( await RequestReader.getBody( req )).toBe( 'café' );
+        expect( await req.body()).toBe( 'café' );
     });
 
     it( 'should reject text/plain with an unknown charset', async () =>
@@ -627,7 +634,7 @@ describe( 'RequestReader.getBody', () =>
             headers : { 'Content-Type' : 'text/plain; charset=not-a-real-encoding' }
         });
 
-        await expect( RequestReader.getBody( req )).rejects.toMatchObject({ status : 415 });
+        await expect( req.body()).rejects.toMatchObject({ status : 415 });
     });
 
     it( 'should sniff JSON or urlencoded when Content-Type is missing', async () =>
@@ -635,11 +642,11 @@ describe( 'RequestReader.getBody', () =>
         const jsonReq = createRequest({ body : '{"x":1}' });
         const formReq = createRequest({ body : 'a=1&b=2' });
 
-        expect( await RequestReader.getBody( jsonReq )).toEqual({ x : 1 });
-        expect( jsonReq._bodyContentType ).toBe( 'application/json' );
+        expect( await jsonReq.body()).toEqual({ x : 1 });
+        expect( jsonReq.effectiveContentType ).toBe( 'application/json' );
 
-        expect( await RequestReader.getBody( formReq )).toEqual({ a : '1', b : '2' });
-        expect( formReq._bodyContentType ).toBe( 'application/x-www-form-urlencoded' );
+        expect( await formReq.body()).toEqual({ a : '1', b : '2' });
+        expect( formReq.effectiveContentType ).toBe( 'application/x-www-form-urlencoded' );
     });
 
     it( 'should reject unsupported Content-Types and unsniffable bodies', async () =>
@@ -654,9 +661,9 @@ describe( 'RequestReader.getBody', () =>
         });
         const garbage = createRequest({ body : 'not-json-or-form' });
 
-        await expect( RequestReader.getBody( other )).rejects.toMatchObject({ status : 415 });
-        await expect( RequestReader.getBody( multipart )).rejects.toMatchObject({ status : 415 });
-        await expect( RequestReader.getBody( garbage )).rejects.toMatchObject({ status : 400 });
+        await expect( other.body()).rejects.toMatchObject({ status : 415 });
+        await expect( multipart.body()).rejects.toMatchObject({ status : 415 });
+        await expect( garbage.body()).rejects.toMatchObject({ status : 400 });
     });
 
     it( 'should throw 400 for invalid JSON bodies', async () =>
@@ -668,7 +675,7 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act
-        const act = RequestReader.getBody( req );
+        const act = req.body();
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 400, message : 'Invalid JSON body' });
@@ -683,7 +690,7 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act
-        const act = RequestReader.getBody( req, { maxBodySize : '5b' });
+        const act = req.body({ maxBodySize : '5b' });
 
         // Assert
         await expect( act ).rejects.toMatchObject({ status : 413 });
@@ -717,16 +724,16 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act / Assert
-        expect( await RequestReader.tryGetUrlEncodedText( jsonReq )).toBeUndefined();
-        expect( jsonReq._bodyContentType ).toBe( 'application/json' );
+        expect( await jsonReq.tryGetUrlEncodedText()).toBeUndefined();
+        expect( jsonReq.effectiveContentType ).toBe( 'application/json' );
 
-        expect( await RequestReader.tryGetUrlEncodedText( formReq )).toBe( 'a=1&b=2' );
-        expect( formReq._bodyContentType ).toBe( 'application/x-www-form-urlencoded' );
+        expect( await formReq.tryGetUrlEncodedText()).toBe( 'a=1&b=2' );
+        expect( formReq.effectiveContentType ).toBe( 'application/x-www-form-urlencoded' );
 
-        expect( await RequestReader.tryGetUrlEncodedText( plainReq )).toBeUndefined();
-        expect( await RequestReader.tryGetUrlEncodedText( emptyReq )).toBeUndefined();
-        expect( await RequestReader.tryGetUrlEncodedText( already )).toBeUndefined();
-        expect( await RequestReader.tryGetUrlEncodedText( declared )).toBeUndefined();
+        expect( await plainReq.tryGetUrlEncodedText()).toBeUndefined();
+        expect( await emptyReq.tryGetUrlEncodedText()).toBeUndefined();
+        expect( await already.tryGetUrlEncodedText()).toBeUndefined();
+        expect( await declared.tryGetUrlEncodedText()).toBeUndefined();
     });
 
     it( 'should skip empty stream chunks and 413 when streaming exceeds maxBodySize', async () =>
@@ -746,7 +753,7 @@ describe( 'RequestReader.getBody', () =>
         });
 
         // Act / Assert
-        expect( await RequestReader.getBody( okReq )).toEqual({ ok : true });
+        expect( await okReq.body()).toEqual({ ok : true });
 
         const big = new ReadableStream<Uint8Array>({
             start( controller )
@@ -760,7 +767,7 @@ describe( 'RequestReader.getBody', () =>
             headers    : { 'Content-Type' : 'application/json' }
         });
 
-        await expect( RequestReader.getRawBody( bigReq, { maxBodySize : 4 })).rejects.toMatchObject({
+        await expect( bigReq.rawBody({ maxBodySize : 4 })).rejects.toMatchObject({
             status : 413
         });
     });

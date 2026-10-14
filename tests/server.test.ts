@@ -99,7 +99,8 @@ describe( 'Server & Metadata', () =>
     {
         it( 'should manage async context', async () => 
         {
-            const req = { url : 'http://test.com' } as any;
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
+            const req = new ServerRequest( new Request( 'http://test.com' ));
             const meta = { path : '/' } as any;
             const ctx = { request : req, metadata : meta };
             
@@ -114,7 +115,8 @@ describe( 'Server & Metadata', () =>
 
         it( 'should expose requestId from the request when the context omits it', async () =>
         {
-            const req = { url : 'http://test.com', requestId : 'from-req' } as any;
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
+            const req = new ServerRequest( new Request( 'http://test.com' ), undefined, undefined, { requestId : 'from-req' });
             const meta = { path : '/' } as any;
 
             await Context.run({ request : req, metadata : meta }, async () =>
@@ -814,10 +816,10 @@ describe( 'Server & Metadata', () =>
                 echo( body: any ){ return body }
             }
             defineController( EchoCtrl, [{
-                methodName   : 'echo',
-                httpMethod   : 'POST',
-                path         : '/echo',
-                params       : [{ source : 'Body' }]
+                methodName : 'echo',
+                httpMethod : 'POST',
+                path       : '/echo',
+                params     : [{ source : 'Body' }]
             }]);
             const AppMod = legacyModule({
                 controllers : [EchoCtrl],
@@ -943,15 +945,15 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle body caching', async () => 
         {
-            const server = new Server({ port : 3000, signals : false });
-            const req: any = new Request( 'http://localhost/', {
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
+            const req = new ServerRequest( new Request( 'http://localhost/', {
                 method  : 'POST',
                 body    : JSON.stringify({ hello : 'world' }),
                 headers : { 'Content-Type' : 'application/json' }
-            });
+            }));
             
-            const body1 = await ( server as any ).getBody( req );
-            const body2 = await ( server as any ).getBody( req );
+            const body1 = await req.body();
+            const body2 = await req.body();
             
             expect( body1 ).toEqual({ hello : 'world' });
             expect( body1 ).toBe( body2 ); // Should be the same reference (cached)
@@ -959,21 +961,21 @@ describe( 'Server & Metadata', () =>
 
         it( 'should return undefined for empty body instead of throwing JSON.parse error', async () => 
         {
-            const server = new Server({ port : 3000, signals : false });
-            const req: any = new Request( 'http://localhost/', { method : 'POST' });
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
+            const req = new ServerRequest( new Request( 'http://localhost/', { method : 'POST' }));
             
-            const body = await ( server as any ).getBody( req );
+            const body = await req.body();
 
             expect( body ).toBeUndefined();
         });
 
         it( 'should cache undefined body on repeated calls', async () => 
         {
-            const server = new Server({ port : 3000, signals : false });
-            const req: any = new Request( 'http://localhost/', { method : 'POST' });
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
+            const req = new ServerRequest( new Request( 'http://localhost/', { method : 'POST' }));
             
-            const body1 = await ( server as any ).getBody( req );
-            const body2 = await ( server as any ).getBody( req );
+            const body1 = await req.body();
+            const body2 = await req.body();
 
             expect( body1 ).toBeUndefined();
             expect( body2 ).toBeUndefined();
@@ -981,14 +983,14 @@ describe( 'Server & Metadata', () =>
 
         it( 'should parse application/x-www-form-urlencoded bodies', async () => 
         {
-            const server = new Server({ port : 3000, signals : false });
-            const req: any = new Request( 'http://localhost/', {
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
+            const req = new ServerRequest( new Request( 'http://localhost/', {
                 method  : 'POST',
                 body    : 'hello=world&count=2&count=3',
                 headers : { 'Content-Type' : 'application/x-www-form-urlencoded' }
-            });
+            }));
 
-            const body = await ( server as any ).getBody( req );
+            const body = await req.body();
 
             expect( body ).toEqual({ hello : 'world', count : ['2', '3'] });
         });
@@ -1413,15 +1415,15 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle raw body caching', async () => 
         {
-            const server = new Server({ port : 3000, signals : false });
+            const { ServerRequest } = await import( '../src/core/server-request.js' );
             const body = new TextEncoder().encode( JSON.stringify({ a : 1 }));
-            const req: any = new Request( 'http://localhost/', {
+            const req = new ServerRequest( new Request( 'http://localhost/', {
                 method : 'POST',
                 body   : body
-            });
+            }));
             
-            const raw1 = await ( server as any ).getRawBody( req );
-            const raw2 = await ( server as any ).getRawBody( req );
+            const raw1 = await req.rawBody();
+            const raw2 = await req.rawBody();
             
             expect( new Uint8Array( raw1 )).toEqual( body );
             expect( raw1 ).toBe( raw2 ); // Cached reference

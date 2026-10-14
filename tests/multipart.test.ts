@@ -12,10 +12,9 @@ import
     nestFieldName,
     cleanupUploadedFiles
 }
-from '../src/helpers/multipart.js';
+    from '../src/helpers/multipart.js';
 import { mergeFileConfigs, processMultipartUpload } from '../src/helpers/file-upload.js';
 import { ServerRequest } from '../src/core/server-request.js';
-import type { AugmentedRequest } from '../src/core/types.js';
 
 /** Build a wire multipart body (`part` = headers + `\r\n\r\n` + value, no trailing CRLF). */
 function multipartBody( boundary: string, parts: string[]): Buffer
@@ -395,7 +394,7 @@ describe( 'ServerRequest.upload', () =>
             headers : { 'content-type' : `multipart/form-data; boundary=${boundary}` },
             body
         });
-        const req = new ServerRequest( raw as AugmentedRequest, { maxBodySize : '1mb' }, { storage : 'memory' });
+        const req = new ServerRequest( raw, { maxBodySize : '1mb' }, { storage : 'memory' });
         const file = await req.upload( 'doc' );
 
         expect( file?.filename ).toBe( 'd.txt' );
@@ -456,7 +455,7 @@ describe( 'MultipartPayload', () =>
             headers : { 'content-type' : `multipart/form-data; boundary=${boundary}` },
             body
         });
-        const req = new ServerRequest( raw as AugmentedRequest, { maxBodySize : '1mb' }, { storage : 'memory' });
+        const req = new ServerRequest( raw, { maxBodySize : '1mb' }, { storage : 'memory' });
         const payload = await req.payload();
 
         expect( payload ).toBeInstanceOf( MultipartPayload );
@@ -701,7 +700,7 @@ describe( 'UploadedFile lifecycle', () =>
         {
             file.save( join( dir, 'f.bin' ));
             // destroy(err) emits 'error' on the WriteStream — swallow to keep the test isolated
-            ( file as unknown as { writeStream?: { on: ( e: string, cb: ( err: Error ) => void ) => void } })
+            ( file as unknown as { writeStream? : { on : ( e: string, cb: ( err: Error ) => void ) => void } })
                 .writeStream?.on( 'error', () => undefined );
             file.fail( new Error( 'boom' ));
 
@@ -1039,7 +1038,7 @@ describe( 'MultipartParser option edges', () =>
         ]);
         const fields: string[] = [];
         const parser = new MultipartParser( boundary, {
-            filter : () => false,
+            filter  : () => false,
             onField : ( name, value ) =>
             {
                 fields.push( `${name}=${value}` );

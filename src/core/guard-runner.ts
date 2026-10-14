@@ -1,4 +1,4 @@
-import { EndpointMetadata, AugmentedRequest, ServerResponse, ParamMetadata } from './types.js';
+import { EndpointMetadata, ServerResponse, ParamMetadata } from './types.js';
 import { ServerRequest } from './server-request.js';
 import { SecurityOptions } from '../decorators.js';
 import { ApplicationRegistry, getRegistry } from './registry.js';
@@ -41,8 +41,6 @@ export interface GuardRunOptions {
     securityConfig?  : SecurityOptions
     /** Backs `@Response`; absent for the WS upgrade and RPC paths, which have no bag. */
     response?        : ServerResponse
-    /** Shared `@Request` facade when the HTTP pipeline already built one. */
-    serverRequest?   : ServerRequest
     /** Backs `@ConnectedSocket`. Guards always run before a socket exists, so this is null. */
     websocket?       : any
     /** Runs before each guard, e.g. to abort a timed-out request. */
@@ -55,12 +53,13 @@ export interface GuardRunOptions {
  */
 export async function invokeGuards(
     metadata: EndpointMetadata,
-    req: AugmentedRequest,
+    req: ServerRequest | Request,
     options: GuardRunOptions
 ): Promise<void>
 {
     if( metadata.guards.length === 0 ) { return }
 
+    const sreq = ServerRequest.from( req, { security : options.securityConfig });
     const registry = getRegistry();
     const websocket = options.websocket ?? null;
 
@@ -84,13 +83,12 @@ export async function invokeGuards(
             {
                 args.push( await RequestProcessor.resolveParam(
                     p,
-                    req,
+                    sreq,
                     options.ctx,
                     options.securityConfig,
                     guardModule,
                     websocket,
-                    options.response,
-                    options.serverRequest
+                    options.response
                 ));
             }
             else

@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { AugmentedRequest, EndpointMetadata } from './types.js';
+import { EndpointMetadata } from './types.js';
+import type { ServerRequest } from './server-request.js';
 
 export interface RequestContext {
-    request           : AugmentedRequest
+    request           : ServerRequest
     metadata          : EndpointMetadata
     requestId?        : string
     requestInstances? : Map<string, any>
@@ -18,9 +19,9 @@ export class Context
    */
     static run<T>( ctx: RequestContext, fn: () => T ): T 
     {
-        if( ctx.requestId === undefined && ctx.request.requestId !== undefined )
+        if( ctx.requestId === undefined && ctx.request?.requestID !== undefined )
         {
-            ctx.requestId = ctx.request.requestId;
+            ctx.requestId = ctx.request.requestID;
         }
 
         return storage.run( ctx, fn );
@@ -38,7 +39,7 @@ export class Context
     /**
    * Helper to get the current request directly.
    */
-    static get request(): AugmentedRequest | undefined 
+    static get request(): ServerRequest | undefined 
     {
         return storage.getStore()?.request;
     }
@@ -56,6 +57,7 @@ export class Context
     {
         const store = storage.getStore();
 
-        return store?.requestId ?? store?.request.requestId;
+        return store?.requestId ?? store?.request?.requestID;
     }
 }
+

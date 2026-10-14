@@ -5,15 +5,15 @@ import
     parseCookieHeader,
     resolveRequestFileOptions
 }
-from '../src/core/server-request.js';
+    from '../src/core/server-request.js';
 import { ServerResponse, ResponseBag } from '../src/core/types.js';
-import type { AugmentedRequest, PeerCert } from '../src/core/types.js';
+import type { PeerCert } from '../src/core/types.js';
 import { Context } from '../src/core/context.js';
 
-function createAugmented( init: RequestInit & { url?: string } = {}): AugmentedRequest
+function createAugmented( init: RequestInit & { url? : string } = {}): Request
 {
     const url = init.url || 'https://api.example.com/v1/items?q=1';
-    const initOpts: RequestInit & { duplex?: 'half' } =
+    const initOpts: RequestInit & { duplex? : 'half' } =
     {
         method  : init.method || 'GET',
         headers : init.headers,
@@ -25,11 +25,8 @@ function createAugmented( init: RequestInit & { url?: string } = {}): AugmentedR
         initOpts.duplex = 'half';
     }
 
-    const req = new Request( url, initOpts ) as AugmentedRequest;
-    req.params = {};
-    req.query = { q : '1' };
-    req.meta = {};
-    req.remoteAddress = '127.0.0.1';
+    const req = new Request( url, initOpts );
+    ( req as any ).remoteAddress = '127.0.0.1';
 
     return req;
 }
@@ -91,18 +88,20 @@ describe( 'ServerRequest', () =>
     {
         // Arrange
         const raw = createAugmented();
-        raw.requestId = 'req-42';
-        raw.params = { id : '7' };
         const peer =
-        {
-            subject : 'CN=client',
-            issuer  : 'CN=ca'
-        } as PeerCert;
-        ( raw as AugmentedRequest & { clientCert?: PeerCert }).clientCert = peer;
+            {
+                subject : 'CN=client',
+                issuer  : 'CN=ca'
+            } as PeerCert;
         const ac = new AbortController();
-        raw.abortSignal = ac.signal;
         const files = { dest : '/tmp/uploads' };
-        const req = new ServerRequest( raw, undefined, files );
+        const req = new ServerRequest( raw, {
+            requestId : 'req-42',
+            params    : { id : '7' },
+            peer,
+            signal    : ac.signal,
+            files
+        });
 
         // Act / Assert
         expect( req.requestID ).toBe( 'req-42' );
@@ -114,7 +113,7 @@ describe( 'ServerRequest', () =>
 
         Context.run(
             {
-                request  : raw,
+                request : req,
                 metadata :
                 {
                     controller   : 'C',
@@ -130,7 +129,7 @@ describe( 'ServerRequest', () =>
             },
             () =>
             {
-                expect( req.context?.request ).toBe( raw );
+                expect( req.context?.request ).toBe( req );
             }
         );
     });
@@ -390,7 +389,7 @@ describe( 'ServerRequest', () =>
             message : expect.stringMatching( /already consumed/ )
         });
 
-        // Arrange — payload cache on request bag reused across ServerRequest instances
+        // Arrange — ServerRequest.from(raw) recovers the active ServerRequest and its cached payload
         const boundary = 'pay';
         const body = multipartBody( boundary, [
             'Content-Disposition: form-data; name="n"\r\n\r\nv',
@@ -403,12 +402,13 @@ describe( 'ServerRequest', () =>
         });
         const first = new ServerRequest( raw, { maxBodySize : '1mb' }, { storage : 'memory' });
         const payload = await first.payload();
-        const second = new ServerRequest( raw, { maxBodySize : '1mb' }, { storage : 'memory' });
+        const second = ServerRequest.from( raw );
 
         // Act
         const reused = await second.payload();
 
         // Assert
+        expect( second ).toBe( first );
         expect( reused ).toBe( payload );
         expect( reused.field( 'n' )).toBe( 'v' );
     });
@@ -447,18 +447,19 @@ describe( 'resolveRequestFileOptions', () =>
     it( 'should merge global, module, and route file options', () =>
     {
         // Arrange
-        const raw = createAugmented();
-        raw.globalFiles = { dest : '/global', maxFiles : 10 };
-        raw.files = { fields : { avatar : { maxFileSize : '1mb' } } };
+        const req = new ServerRequest( createAugmented(), {
+            globalFiles : { dest : '/global', maxFiles : 10 },
+            routeFiles  : { fields : { avatar : { maxFileSize : '1mb' } } }
+        });
 
         // Act
-        const merged = resolveRequestFileOptions( raw, { maxFiles : 3, dest : '/module' });
+        const merged = resolveRequestFileOptions( req, { maxFiles : 3, dest : '/module' });
 
         // Assert
         expect( merged?.dest ).toBe( '/module' );
         expect( merged?.maxFiles ).toBe( 3 );
         expect( merged?.fields?.avatar ).toEqual({ maxFileSize : '1mb' });
-        expect( resolveRequestFileOptions( createAugmented())).toBeUndefined();
+        expect( resolveRequestFileOptions( new ServerRequest( createAugmented()))).toBeUndefined();
     });
 });
 

@@ -3,16 +3,18 @@ import { RequestProcessor } from '../src/core/request-processor.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
 import { setModuleMeta } from '../src/core/symbols.js';
 import { validators } from '@webergency-utils/typechecker';
-import type { AugmentedRequest, EndpointMetadata, ParamMetadata } from '../src/core/types.js';
+import { ServerRequest } from '../src/core/server-request.js';
+import type { EndpointMetadata, ParamMetadata } from '../src/core/types.js';
 
 function createRequest( options:
 {
-    headers? : Record<string, string | null>
-    body?    : string
-    params?  : Record<string, string>
-    query?   : Record<string, unknown>
-    url?     : string
-}): AugmentedRequest
+    headers?    : Record<string, string | null>
+    body?       : string
+    params?     : Record<string, string>
+    query?      : Record<string, unknown>
+    url?        : string
+    streamBody? : ReadableStream<Uint8Array> | null
+}): ServerRequest
 {
     const headerMap = new Map<string, string>();
 
@@ -25,18 +27,21 @@ function createRequest( options:
     }
 
     const bodyText = options.body ?? '';
+    const raw =
+        {
+            headers : {
+                get     : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null,
+                entries : () => headerMap.entries()
+            },
+            arrayBuffer : async () => new TextEncoder().encode( bodyText ).buffer,
+            body        : options.streamBody,
+            url         : options.url ?? 'http://localhost/path'
+        } as unknown as Request;
 
-    return {
-        headers : {
-            get     : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null,
-            entries : () => headerMap.entries()
-        },
-        arrayBuffer : async () => new TextEncoder().encode( bodyText ).buffer,
-        params      : options.params ?? {},
-        query       : options.query ?? {},
-        url         : options.url ?? 'http://localhost/path',
-        meta        : {}
-    } as unknown as AugmentedRequest;
+    return new ServerRequest( raw, undefined, undefined, {
+        params : options.params ?? {},
+        query  : ( options.query ?? {}) as Record<string, string>
+    });
 }
 
 function createEndpoint( overrides: Partial<EndpointMetadata> & Pick<EndpointMetadata, 'controller' | 'methodName'> ): EndpointMetadata
@@ -70,8 +75,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set from:query for Query params and restore prior from', async () =>
     {
-        const seen: { from?: unknown, mode?: unknown } = {};
-        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown, mode?: unknown }) =>
+        const seen: { from? : unknown, mode? : unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from? : unknown, mode? : unknown }) =>
         {
             seen.from = ctx.from;
             seen.mode = ctx.mode;
@@ -93,7 +98,7 @@ describe( 'RequestProcessor.resolveParam', () =>
     it( 'should set from:query for Param Cookie Header Headers and Cookies', async () =>
     {
         const fromValues: unknown[] = [];
-        const capture = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        const capture = vi.fn(( v: unknown, _path: string, ctx: { from? : unknown }) =>
         {
             fromValues.push( ctx.from );
 
@@ -137,8 +142,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set from:json for JSON Body and revive Date values', async () =>
     {
-        const seen: { from?: unknown } = {};
-        const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown }) =>
+        const seen: { from? : unknown } = {};
+        const validator = vi.fn(( v: unknown, path: string, ctx: { from? : unknown }) =>
         {
             seen.from = ctx.from;
 
@@ -161,8 +166,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set from:query for urlencoded Body and coerce numbers', async () =>
     {
-        const seen: { from?: unknown } = {};
-        const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown, success: boolean, errors: unknown[], mode: string }) =>
+        const seen: { from? : unknown } = {};
+        const validator = vi.fn(( v: unknown, path: string, ctx: { from? : unknown, success : boolean, errors : unknown[], mode : string }) =>
         {
             seen.from = ctx.from;
 
@@ -193,8 +198,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should sniff JSON Body when content-type is missing', async () =>
     {
-        const seen: { from?: unknown } = {};
-        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        const seen: { from? : unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from? : unknown }) =>
         {
             seen.from = ctx.from;
 
@@ -215,8 +220,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should sniff urlencoded Body when content-type is missing', async () =>
     {
-        const seen: { from?: unknown } = {};
-        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        const seen: { from? : unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from? : unknown }) =>
         {
             seen.from = ctx.from;
 
@@ -246,8 +251,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should set Body from to json for application/json', async () =>
     {
-        const seen: { from?: unknown } = {};
-        const validator = vi.fn(( v: unknown, _path: string, ctx: { from?: unknown }) =>
+        const seen: { from? : unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { from? : unknown }) =>
         {
             seen.from = ctx.from;
 
@@ -271,8 +276,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should apply param mode for the validator then restore ctx.mode', async () =>
     {
-        const seen: { mode?: unknown } = {};
-        const validator = vi.fn(( v: unknown, _path: string, ctx: { mode?: unknown }) =>
+        const seen: { mode? : unknown } = {};
+        const validator = vi.fn(( v: unknown, _path: string, ctx: { mode? : unknown }) =>
         {
             seen.mode = ctx.mode;
 
@@ -365,12 +370,12 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( parsed ).toEqual({ src : 'seo' });
     });
 
-    it( 'should assert a pre-parsed Body _json instead of parsing it as JSON text', async() =>
+    it( 'should assert a pre-parsed Body cached on ServerRequest instead of parsing it as JSON text', async() =>
     {
         const parser = vi.fn();
         const validator = vi.fn(( v: unknown ) => v );
         const req = createRequest({});
-        ( req as any )._json = 'Ada';
+        req.cacheParsedBody( 'Ada' );
         const ctx = { success : true, errors : [], mode : 'strict' };
 
         const resolved = await RequestProcessor.resolveParam(
@@ -386,7 +391,6 @@ describe( 'RequestProcessor.resolveParam', () =>
 
     it( 'should resolve Request as ServerRequest', async () =>
     {
-        const { ServerRequest } = await import( '../src/core/server-request.js' );
         const req = createRequest({});
         const ctx = { success : true, errors : [], mode : 'strict' };
         const resolved = await RequestProcessor.resolveParam({ source : 'Request' }, req, ctx );
@@ -436,7 +440,7 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( result ).toEqual({ via : 'query' });
         expect( parserQuery ).toHaveBeenCalledWith( 'age=30', 'body' );
         expect( parser ).not.toHaveBeenCalled();
-        expect( ( req as any )._json ).toEqual({ via : 'query' });
+        expect( req.cachedBody ).toEqual({ via : 'query' });
     });
 
     it( 'should use parser for JSON Body', async () =>
@@ -526,7 +530,8 @@ describe( 'RequestProcessor.resolveParam', () =>
 
         expect( raw ).toBeInstanceOf( ArrayBuffer );
         expect( new TextDecoder().decode( raw as ArrayBuffer )).toBe( '{"x":1}' );
-        expect( ( req as any )._json ).toBeUndefined();
+        expect( req.hasCachedBody ).toBe( false );
+        expect( req.cachedBody ).toBeUndefined();
     });
 
     it( 'should resolve Url Hostname and Path from the request URL', async () =>
@@ -544,7 +549,7 @@ describe( 'RequestProcessor.resolveParam', () =>
         const withHeader = createRequest({
             headers : { 'x-forwarded-for' : '10.0.0.1, 10.0.0.2' }
         });
-        ( withHeader as any ).remoteAddress = '192.0.2.1';
+        withHeader.remoteAddress = '192.0.2.1';
         const without = createRequest({});
         const ctx = { success : true, errors : [], mode : 'strict' };
 
@@ -560,8 +565,8 @@ describe( 'RequestProcessor.resolveParam', () =>
         const req = createRequest({
             headers : { 'x-forwarded-for' : '203.0.113.7, 10.0.0.2' }
         });
-        ( req as any ).remoteAddress = '10.0.0.5';
-        ( req as any ).trustProxy = [ '10.0.0.0/8' ];
+        req.remoteAddress = '10.0.0.5';
+        req.trustProxy = [ '10.0.0.0/8' ];
         const ctx = { success : true, errors : [], mode : 'strict' };
 
         const ip = await RequestProcessor.resolveParam({ source : 'Ip' }, req, ctx );
@@ -699,9 +704,9 @@ describe( 'RequestProcessor.execute SSE', () =>
         // Arrange
         const registry = new ApplicationRegistry();
         registry.registerController( 'FalsyCtrl', {
-            zero    : () => 0,
-            no      : () => false,
-            empty   : () => ''
+            zero  : () => 0,
+            no    : () => false,
+            empty : () => ''
         });
 
         // Act / Assert
@@ -886,7 +891,7 @@ describe( 'RequestProcessor.execute SSE', () =>
             controller          : 'SseBareCtrl',
             methodName          : 'stream',
             meta                : { sse : true },
-            returnTypeValidator : ( v: unknown, _path: string, ctx: { success: boolean, errors: unknown[] }) =>
+            returnTypeValidator : ( v: unknown, _path: string, ctx: { success : boolean, errors : unknown[] }) =>
             {
                 validated.push( v );
 
@@ -1176,7 +1181,7 @@ describe( 'RequestProcessor.runWs / executeWs', () =>
             params     : [{
                 source    : 'Query',
                 name      : 'id',
-                validator : ( _v: unknown, path: string, ctx: { success: boolean, errors: unknown[] }) =>
+                validator : ( _v: unknown, path: string, ctx: { success : boolean, errors : unknown[] }) =>
                 {
                     ctx.success = false;
                     ctx.errors.push({ path, message : 'invalid' });
@@ -1292,7 +1297,7 @@ describe( 'RequestProcessor.executeRpc', () =>
                     { source : 'WebSocket' },
                     { source : 'Unknown' as any }
                 ],
-                isAsync   : false
+                isAsync : false
             }]
         });
 
@@ -1303,10 +1308,10 @@ describe( 'RequestProcessor.executeRpc', () =>
         // Assert
         expect( result ).toEqual({ ok : true });
         const { ServerRequest } = await import( '../src/core/server-request.js' );
-        expect( seen[0] ).toBeInstanceOf( ServerRequest );
+        expect( seen[0]).toBeInstanceOf( ServerRequest );
         expect(( seen[0] as InstanceType<typeof ServerRequest> ).url ).toBe( 'rpc://localhost/rpc.run' );
-        expect( seen[1] ).toEqual({ n : 1 });
-        expect( seen[2] ).toBeUndefined();
+        expect( seen[1]).toEqual({ n : 1 });
+        expect( seen[2]).toBeUndefined();
         // No socket exists on the RPC path, so @ConnectedSocket resolves to null rather
         // than silently consuming the next static @Protect argument.
         expect( seen[3]).toBeNull();
@@ -1439,7 +1444,7 @@ describe( 'RequestProcessor.executeRpc', () =>
                     controller          : 'ValCtrl',
                     methodName          : 'bad',
                     returnTypeMode      : 'strict',
-                    returnTypeValidator : ( _v, _p, ctx: { success: boolean, errors: unknown[] }) =>
+                    returnTypeValidator : ( _v, _p, ctx: { success : boolean, errors : unknown[] }) =>
                     {
                         ctx.success = false;
                         ctx.errors.push({ message : 'nope' });
@@ -1483,7 +1488,7 @@ describe( 'RequestProcessor.executeRpc', () =>
             controller          : 'SseObjCtrl',
             methodName          : 'stream',
             meta                : { sse : true },
-            returnTypeValidator : ( v: any, _path: string, ctx: { success: boolean, errors: unknown[] }) =>
+            returnTypeValidator : ( v: any, _path: string, ctx: { success : boolean, errors : unknown[] }) =>
             {
                 if( v?.ok === false )
                 {
@@ -1525,14 +1530,14 @@ describe( 'RequestProcessor.executeRpc', () =>
         ].join( '\r\n' );
         const req = createRequest({
             body,
-            headers : { 'content-type' : `multipart/form-data; boundary=${boundary}` }
-        });
-        ( req as any ).body = new ReadableStream({
-            start( c )
-            {
-                c.enqueue( new TextEncoder().encode( body ));
-                c.close();
-            }
+            headers    : { 'content-type' : `multipart/form-data; boundary=${boundary}` },
+            streamBody : new ReadableStream({
+                start( c )
+                {
+                    c.enqueue( new TextEncoder().encode( body ));
+                    c.close();
+                }
+            })
         });
         const ctx = { success : true, errors : [] as any[], mode : 'strict' };
 

@@ -32,7 +32,7 @@ A pre-handler gate that may reject a request (typically by throwing with a statu
 _Avoid_: Middleware (a different concept), auth filter
 
 **Interceptor**:
-A wrap-around around the handler: receives `request` and a `next` callback and must call `next()` to continue.
+A wrap-around around the handler: receives **ServerRequest** and a `next` callback and must call `next()` to continue.
 _Avoid_: Guard, middleware
 
 **Middleware**:
@@ -40,8 +40,8 @@ A pre-handler hook that can mutate the shared **ServerResponse**. Runs before **
 _Avoid_: Interceptor, pipe
 
 **ServerRequest**:
-Sealed request facade injected by `@Request` (and passed to middleware). Exposes string bags (`headers`, `cookies`, `query`, `params`), identity fields, and body helpers (`rawBody`, `formData`, `file`, `stream`, `multipart`, `upload`, `uploads`, `payload`). Not a Fetch `Request`.
-_Avoid_: Request (Fetch), AugmentedRequest (internal)
+Sealed request carrier and facade passed across the pipeline (Middleware, Guards, Interceptors, `@Request`, and **RequestContext**). Exposes string bags (`headers`, `cookies`, `query`, `params`), identity fields, and body helpers (`body`, `rawBody`, `text`, `formData`, `file`, `files`, `stream`, `multipart`, `upload`, `uploads`, `payload`). Not a Fetch `Request`.
+_Avoid_: Request (Fetch), mutating properties onto the platform `Request`
 
 **UploadedFile**:
 One streaming multipart file part (`field`, `filename`, `mime`, `size`, `path?`, `buffer`, `save` / `skip`). Produced by the in-tree MultiBuffer parser and injected via `@File` / `@Files`.
@@ -64,7 +64,7 @@ Deprecated alias of **ServerResponse**.
 _Avoid_: using the old name in new code
 
 **RequestContext**:
-Per-request AsyncLocalStorage bag holding the request, its **Endpoint** metadata, and request-scoped instances.
+Per-request AsyncLocalStorage bag holding the **ServerRequest**, its **Endpoint** metadata, and request-scoped instances.
 
 ### Routing and runtime
 

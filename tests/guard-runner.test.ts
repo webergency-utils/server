@@ -1,23 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
 import { invokeGuards } from '../src/core/guard-runner.js';
+import { ServerRequest } from '../src/core/server-request.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
 import { setGuardMeta } from '../src/core/symbols.js';
-import type { AugmentedRequest, EndpointMetadata, ResponseBag } from '../src/core/types.js';
+import type { EndpointMetadata, ResponseBag } from '../src/core/types.js';
 
-function createRequest(): AugmentedRequest
+function createRequest(): ServerRequest
 {
     const headerMap = new Map<string, string>([[ 'x-token', 'abc' ]]);
-
-    return {
+    const raw = {
         headers : {
             get     : ( name: string ) => headerMap.get( name.toLowerCase()) ?? null,
             entries : () => headerMap.entries()
         },
+        url : 'http://localhost/guarded/7?q=hi'
+    } as unknown as Request;
+
+    return new ServerRequest( raw, {
         params : { id : '7' },
-        query  : { q : 'hi' },
-        url    : 'http://localhost/guarded/7?q=hi',
-        meta   : {}
-    } as unknown as AugmentedRequest;
+        query  : { q : 'hi' }
+    });
 }
 
 function createEndpoint( guards: any[]): EndpointMetadata

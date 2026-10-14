@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { validators } from '@webergency-utils/typechecker';
 import { RequestProcessor } from '../src/core/request-processor.js';
+import { ServerRequest } from '../src/core/server-request.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
-import type { AugmentedRequest, EndpointMetadata } from '../src/core/types.js';
+import type { EndpointMetadata } from '../src/core/types.js';
 import { UploadedFile } from '../src/helpers/multipart.js';
 
 function multipartBody( boundary: string, parts: string[]): Buffer
@@ -22,7 +23,7 @@ function multipartBody( boundary: string, parts: string[]): Buffer
     return Buffer.from( body, 'utf8' );
 }
 
-function createUploadRequest( body: Buffer, boundary: string, files?: any ): AugmentedRequest
+function createUploadRequest( body: Buffer, boundary: string, files?: any ): ServerRequest
 {
     const stream = new ReadableStream<Uint8Array>({
         start( controller )
@@ -32,19 +33,19 @@ function createUploadRequest( body: Buffer, boundary: string, files?: any ): Aug
         }
     });
 
-    return {
+    const raw = {
+        url     : 'http://localhost/upload',
         method  : 'POST',
         headers : {
-            get     : ( name: string ) => name.toLowerCase() === 'content-type'
+            get : ( name: string ) => name.toLowerCase() === 'content-type'
                 ? `multipart/form-data; boundary=${boundary}`
                 : null,
             entries : () => [][Symbol.iterator]()
         },
-        body    : stream,
-        params  : {},
-        query   : {},
-        files
-    } as unknown as AugmentedRequest;
+        body : stream
+    } as unknown as Request;
+
+    return new ServerRequest( raw, { routeFiles : files });
 }
 
 describe( 'RequestProcessor @File upload', () =>
@@ -85,8 +86,7 @@ describe( 'RequestProcessor @File upload', () =>
                 files        : { dest : dir, filename : 'avatar.png' }
             };
 
-            const req = createUploadRequest( body, boundary );
-            req.files = meta.files;
+            const req = createUploadRequest( body, boundary, meta.files );
 
             const res = await runWithRegistry( registry, () =>
                 RequestProcessor.execute( meta, req, { maxBodySize : '1mb' }));
@@ -180,8 +180,7 @@ describe( 'RequestProcessor @Body multipart', () =>
             files        : { storage : 'memory' }
         };
 
-        const req = createUploadRequest( body, boundary );
-        req.files = meta.files;
+        const req = createUploadRequest( body, boundary, meta.files );
 
         const res = await runWithRegistry( registry, () =>
             RequestProcessor.execute( meta, req, { maxBodySize : '1mb' }));
@@ -201,8 +200,8 @@ describe( 'RequestProcessor @Body multipart', () =>
             'Content-Disposition: form-data; name="documents"; filename="1.txt"\r\nContent-Type: text/plain\r\n\r\none'
         ]);
 
-        const seenFrom: { from?: unknown } = {};
-        const validator = vi.fn(( v: unknown, path: string, ctx: { from?: unknown, success: boolean, errors: unknown[], mode: string }) =>
+        const seenFrom: { from? : unknown } = {};
+        const validator = vi.fn(( v: unknown, path: string, ctx: { from? : unknown, success : boolean, errors : unknown[], mode : string }) =>
         {
             seenFrom.from = ctx.from;
 
@@ -255,8 +254,7 @@ describe( 'RequestProcessor @Body multipart', () =>
             files        : { storage : 'memory' }
         };
 
-        const req = createUploadRequest( body, boundary );
-        req.files = meta.files;
+        const req = createUploadRequest( body, boundary, meta.files );
 
         const res = await runWithRegistry( registry, () =>
             RequestProcessor.execute( meta, req, { maxBodySize : '1mb' }));
