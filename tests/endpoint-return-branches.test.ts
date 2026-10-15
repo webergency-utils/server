@@ -92,6 +92,81 @@ export class BranchTestController
 
         return { foo : 'maybe-bar' };
     }
+
+    @Get( '/payment-terms' )
+    async paymentTerms( @Query( 'mode' ) mode: string ): Promise<object | string | null>
+    {
+        if( mode === 'obj' )
+        {
+            const result: object = { terms : 'net-30', amount : 1500, nested : { approved : true } };
+
+            return result;
+        }
+
+        if( mode === 'partial' )
+        {
+            const result: { terms : string } = { terms : 'net-60', extraDynamic : 42 } as any;
+
+            return result;
+        }
+
+        if( mode === 'null' )
+        {
+            return null;
+        }
+
+        return '';
+    }
+
+    @Get( '/competing-shapes' )
+    async competingShapes( @Query( 'mode' ) mode: string ): Promise<
+        | {}
+        | { id: string }
+        | { id: string; name: string }
+        | { id: string; name: string; amount: number; nested: { a: number; b: number } }
+    >
+    {
+        if( mode === 'large' )
+        {
+            const res = { id : 'item-1', name : 'Large Item', amount : 999, nested : { a : 1, b : 2 } };
+
+            return res;
+        }
+
+        if( mode === 'medium' )
+        {
+            const res = { id : 'item-2', name : 'Medium Item' };
+
+            return res;
+        }
+
+        if( mode === 'small' )
+        {
+            const res = { id : 'item-3' };
+
+            return res;
+        }
+
+        return {};
+    }
+
+    @Get( '/declared-base-returns-large' )
+    async declaredBaseReturnsLarge( @Query( 'mode' ) mode: string ): Promise<
+        | { id: string }
+        | { id: string; name: string; role: string }
+    >
+    {
+        if( mode === 'large' )
+        {
+            const user: { id : string } = { id : 'u-1', name : 'Alice', role : 'admin' } as any;
+
+            return user;
+        }
+
+        const user: { id : string } = { id : 'u-2' };
+
+        return user;
+    }
 }
 
 @Controller( '/strict-branches' )
@@ -308,5 +383,66 @@ export class StrictBranchController
         expect( ep1Schema ).toBeDefined();
         const schemaString = JSON.stringify( ep1Schema ) + JSON.stringify( swaggerSpec.components?.schemas || {});
         expect( schemaString ).toContain( 'foo' );
+    });
+
+    it( 'should preserve all properties when returning from Promise<object | string | null>', async () =>
+    {
+        const resObj = await server.fetch( new Request( 'http://localhost/branches/payment-terms?mode=obj' ));
+        expect( resObj.status ).toBe( 200 );
+        expect( await resObj.json()).toEqual({ terms : 'net-30', amount : 1500, nested : { approved : true } });
+
+        const resPartial = await server.fetch( new Request( 'http://localhost/branches/payment-terms?mode=partial' ));
+        expect( resPartial.status ).toBe( 200 );
+        expect( await resPartial.json()).toEqual({ terms : 'net-60', extraDynamic : 42 });
+
+        const resEmpty = await server.fetch( new Request( 'http://localhost/branches/payment-terms?mode=empty' ));
+        expect( resEmpty.status ).toBe( 200 );
+        expect( await resEmpty.json()).toBe( '' );
+    });
+
+    it( 'should select largest matching shape and preserve all properties across competing union shapes', async () =>
+    {
+        const resLarge = await server.fetch( new Request( 'http://localhost/branches/competing-shapes?mode=large' ));
+        expect( resLarge.status ).toBe( 200 );
+        expect( await resLarge.json()).toEqual({
+            id     : 'item-1',
+            name   : 'Large Item',
+            amount : 999,
+            nested : { a : 1, b : 2 }
+        });
+
+        const resMed = await server.fetch( new Request( 'http://localhost/branches/competing-shapes?mode=medium' ));
+        expect( resMed.status ).toBe( 200 );
+        expect( await resMed.json()).toEqual({
+            id   : 'item-2',
+            name : 'Medium Item'
+        });
+
+        const resSmall = await server.fetch( new Request( 'http://localhost/branches/competing-shapes?mode=small' ));
+        expect( resSmall.status ).toBe( 200 );
+        expect( await resSmall.json()).toEqual({
+            id : 'item-3'
+        });
+
+        const resEmpty = await server.fetch( new Request( 'http://localhost/branches/competing-shapes?mode=other' ));
+        expect( resEmpty.status ).toBe( 200 );
+        expect( await resEmpty.json()).toEqual({});
+    });
+
+    it( 'should preserve large shape properties when declared union includes large shape even if branch variable is typed as base shape', async () =>
+    {
+        const resLarge = await server.fetch( new Request( 'http://localhost/branches/declared-base-returns-large?mode=large' ));
+        expect( resLarge.status ).toBe( 200 );
+        expect( await resLarge.json()).toEqual({
+            id   : 'u-1',
+            name : 'Alice',
+            role : 'admin'
+        });
+
+        const resSmall = await server.fetch( new Request( 'http://localhost/branches/declared-base-returns-large?mode=small' ));
+        expect( resSmall.status ).toBe( 200 );
+        expect( await resSmall.json()).toEqual({
+            id : 'u-2'
+        });
     });
 });

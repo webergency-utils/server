@@ -217,6 +217,56 @@ function isAnyOrUnknownType( type: ts.Type ): boolean
     return ( type.flags & ( ts.TypeFlags.Any | ts.TypeFlags.Unknown )) !== 0;
 }
 
+/**
+ * When a method has an explicit union return type (e.g. `: Promise<object | string | null>`),
+ * map a return statement's inferred expression type to the matching declared arm so that
+ * an open `object` arm or declared DTO arm is used rather than raw expression type `bType`.
+ */
+function resolveDeclaredBranchType( bType: ts.Type, declaredUnion: ts.UnionType, checker: ts.TypeChecker ): ts.Type
+{
+    if( isVoidType( bType, checker ) || isResponseType( bType, checker ) || isNeverType( bType, checker ) || isAnyOrUnknownType( bType ))
+    {
+        return bType;
+    }
+
+    if( bType.isUnion())
+    {
+        const mapped = bType.types.map( arm => resolveDeclaredBranchType( arm, declaredUnion, checker ));
+
+        return ( checker as any ).getUnionType ? ( checker as any ).getUnionType( mapped ) : bType;
+    }
+
+    const candidateArms = declaredUnion.types.filter( arm =>
+        checker.isTypeAssignableTo( bType, arm ) || checker.isTypeAssignableTo( arm, bType )
+    );
+
+    if( candidateArms.length === 1 )
+    {
+        return candidateArms[0];
+    }
+
+    if( candidateArms.length > 1 && ( checker as any ).getUnionType )
+    {
+        return ( checker as any ).getUnionType( candidateArms );
+    }
+
+    const matching = declaredUnion.types.filter( arm => checker.isTypeAssignableTo( bType, arm ));
+
+    if( matching.length === 1 )
+    {
+        return matching[0];
+    }
+
+    const nonPrimitiveArm = matching.find( arm => ( arm.flags & ts.TypeFlags.NonPrimitive ) !== 0 );
+
+    if( nonPrimitiveArm && matching.every( arm => ( arm.flags & ts.TypeFlags.NonPrimitive ) !== 0 ))
+    {
+        return nonPrimitiveArm;
+    }
+
+    return bType;
+}
+
 /** The declared return type with `Promise<...>` peeled off, with union synthesis for unannotated multi-branch returns. */
 export function unwrapReturnType( member: ts.MethodDeclaration, checker: ts.TypeChecker ): { type : ts.Type, isPromise : boolean } | undefined
 {
@@ -577,7 +627,10 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                                     {
                                                         if( returnStmt.expression )
                                                         {
-                                                            const bType = unwrapTypeIfPromise( checker.getTypeAtLocation( returnStmt.expression ), checker );
+                                                            const rawBType = unwrapTypeIfPromise( checker.getTypeAtLocation( returnStmt.expression ), checker );
+                                                            const bType = member.type
+                                                                ? resolveDeclaredBranchType( rawBType, returned.type, checker )
+                                                                : rawBType;
 
                                                             if( !isVoidType( bType, checker ) && !isResponseType( bType, checker ) && !isNeverType( bType, checker ) && !isAnyOrUnknownType( bType ))
                                                             {
