@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createHash, createHmac } from 'node:crypto';
 import { RequestProcessor } from '../src/core/request-processor.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
 import { setModuleMeta } from '../src/core/symbols.js';
@@ -532,6 +533,90 @@ describe( 'RequestProcessor.resolveParam', () =>
         expect( new TextDecoder().decode( raw as ArrayBuffer )).toBe( '{"x":1}' );
         expect( req.hasCachedBody ).toBe( false );
         expect( req.cachedBody ).toBeUndefined();
+    });
+
+    it( 'should resolve BodyHash with string algorithm using default base64url encoding', async () =>
+    {
+        const req = createRequest({
+            body    : '{"hello":"world"}',
+            headers : { 'Content-Type' : 'application/json' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const hash = await RequestProcessor.resolveParam(
+            { source : 'BodyHash', hasher : 'sha256' },
+            req,
+            ctx
+        );
+
+        const expected = createHash( 'sha256' ).update( '{"hello":"world"}' ).digest( 'base64url' );
+        expect( hash ).toBe( expected );
+    });
+
+    it( 'should resolve BodyHash with custom options (HMAC, hex encoding, buffer)', async () =>
+    {
+        const req = createRequest({
+            body    : 'webhook-payload',
+            headers : { 'Content-Type' : 'text/plain' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        const hmacHex = await RequestProcessor.resolveParam(
+            {
+                source      : 'BodyHash',
+                hasher      : 'sha256',
+                hashOptions : { key : 'my-secret', encoding : 'hex' }
+            },
+            req,
+            ctx
+        );
+
+        const expectedHmac = createHmac( 'sha256', 'my-secret' ).update( 'webhook-payload' ).digest( 'hex' );
+        expect( hmacHex ).toBe( expectedHmac );
+
+        const rawBuffer = await RequestProcessor.resolveParam(
+            {
+                source      : 'BodyHash',
+                hasher      : 'sha256',
+                hashOptions : { encoding : 'buffer' }
+            },
+            req,
+            ctx
+        );
+
+        expect( Buffer.isBuffer( rawBuffer )).toBe( true );
+    });
+
+    it( 'should allow Body, RawBody, and BodyHash to co-exist on the same request', async () =>
+    {
+        const payload = '{"message":"hello world","count":42}';
+        const req = createRequest({
+            body    : payload,
+            headers : { 'Content-Type' : 'application/json' }
+        });
+        const ctx = { success : true, errors : [], mode : 'strict' };
+
+        // Test resolving in mixed order
+        const parsedBody = await RequestProcessor.resolveParam(
+            { source : 'Body' },
+            req,
+            ctx
+        );
+        const rawBody = await RequestProcessor.resolveParam(
+            { source : 'RawBody' },
+            req,
+            ctx
+        );
+        const bodyHash = await RequestProcessor.resolveParam(
+            { source : 'BodyHash', hasher : 'sha256' },
+            req,
+            ctx
+        );
+
+        expect( parsedBody ).toEqual({ message : 'hello world', count : 42 });
+        expect( rawBody ).toBeInstanceOf( ArrayBuffer );
+        expect( new TextDecoder().decode( rawBody as ArrayBuffer )).toBe( payload );
+        expect( bodyHash ).toBe( createHash( 'sha256' ).update( payload ).digest( 'base64url' ));
     });
 
     it( 'should resolve Url Hostname and Path from the request URL', async () =>

@@ -1,8 +1,10 @@
 import { ServerError } from '../errors.js';
 import { toStreamOrBinaryBody } from '../helpers/response-body.js';
 import type { Reviver } from '../helpers/reviver.js';
+import type { HasherInput, BodyHashOptions } from '../helpers/body-hash.js';
 
 export type { Reviver };
+export type { HasherInput, BodyHashOptions, BodyHashEncoding, HasherInstance, HasherConstructor, HasherFactory } from '../helpers/body-hash.js';
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS' | 'HEAD' | 'OPTIONS' | 'ALL' | 'RPC';
 
@@ -42,7 +44,7 @@ export interface PeerCert {
 }
 
 export interface ParamMetadata {
-    source       : 'Param' | 'Body' | 'RawBody' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer' | 'Cookies' | 'Cookie' | 'File' | 'Files'
+    source       : 'Param' | 'Body' | 'RawBody' | 'BodyHash' | 'Query' | 'Header' | 'Headers' | 'Request' | 'Response' | 'Ip' | 'Url' | 'Hostname' | 'Path' | 'Context' | 'Inject' | 'WebSocket' | 'Peer' | 'Cookies' | 'Cookie' | 'File' | 'Files'
     name?        : string
     validator?   : string | Validator
     parser?      : string | Parser
@@ -50,6 +52,8 @@ export interface ParamMetadata {
     mode?        : ValidationMode
     /** `?` / `| undefined` — missing wire value is `undefined`, not a parse of `undefined`. */
     optional?    : boolean
+    hasher?      : HasherInput
+    hashOptions? : BodyHashOptions
 }
 
 export interface GuardMetadata {

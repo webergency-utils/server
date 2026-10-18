@@ -267,6 +267,7 @@ await ms.shutdown();
 **With arguments:**
 
 * `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `parser` (`from: 'json'`); `text/plain` → string; urlencoded → `parserQuery` (`from: 'query'`); **`multipart/form-data` → bag + AOT validator (`from: 'query'`)** so DTOs like `{ title: string; documents: UploadedFile[] }` coerce strings and keep file instances. Missing CT sniffs JSON then form; unsupported CT → **415**; bad JSON → **400**.
+* `@BodyHash(hasher, options?)` — Injects calculated cryptographic hash or HMAC of the raw request body. `hasher` is an algorithm name (e.g. `'sha256'`) or a hasher class/factory/instance implementing `{ update, digest }`. Options: `{ encoding?: BinaryToTextEncoding | 'buffer', key?: string | Buffer, length?: number }`. Defaults to `'base64url'` encoding. Providing `key` computes an HMAC (`createHmac`). Providing `length` sets `outputLength` for variable-length/XOF algorithms (`shake256`, `blake2b`).
 * `@File` / `@Files` — Streaming multipart uploads. Class/method `@File({ dest, maxFileSize, onFile, fields })` configures handling (merged ServerOptions.files → Module.files → controller → endpoint). Parameter `@File('field')` injects `UploadedFile`; `@Files()` injects all files. Prefer `dest` for temp/disk paths, or `onFile` for custom sinks (e.g. S3). For the full form bag use `@Body()` with multipart Content-Type.
 * `@Query(name?, mode?)` — No name + typed: raw URL search text → `parse` `from: 'query'`. No name + untyped: `req.query` bag. Named scalar → `from: 'string'`. Named array/object → assert `from: 'query'`.
 * `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie scalar (`from: 'string'`).
@@ -290,6 +291,40 @@ owned(@Response() res: ServerResponse) {
   return res
     .header('Content-Type', 'application/pdf')
     .stream(createReadStream('/path/to/doc.pdf'));
+}
+```
+
+#### Body hashing & HMAC verification
+
+```ts
+import { Controller, Post, Body, BodyHash, Header, UnauthorizedError } from '@webergency-utils/server';
+
+@Controller('/webhooks')
+export class WebhookController {
+  // Default: SHA-256 with base64url encoding
+  @Post('/audit')
+  audit(@Body() data: any, @BodyHash('sha256') hash: string) {
+    return { received: true, hash };
+  }
+
+  // HMAC verification with secret key & hex encoding
+  @Post('/stripe')
+  stripe(
+    @Body() data: any,
+    @Header('stripe-signature') signature: string,
+    @BodyHash('sha256', { key: process.env.STRIPE_SECRET, encoding: 'hex' }) expectedHmac: string
+  ) {
+    if (signature !== expectedHmac) {
+      throw new UnauthorizedError('Invalid webhook signature');
+    }
+    return { success: true };
+  }
+
+  // Custom hasher class or instance implementing { update(data), digest(encoding?) }
+  @Post('/custom')
+  custom(@BodyHash(CustomHasher) digest: string) {
+    return { digest };
+  }
 }
 ```
 
@@ -342,6 +377,7 @@ Coercion via `from`:
 * `ServerWebSocket`, `PeerCert`, `PeerCertSubject`, `TlsOptions`
 * `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
 * `Scope` (`SINGLETON` | `TRANSIENT` | `REQUEST`)
+* `BodyHashOptions`, `HasherInput`, `HasherInstance`, `HasherConstructor`, `HasherFactory`, `BodyHashEncoding`
 * `ConsoleLogger` / `NoOpLogger`
 * `ApplicationRegistry`, `getRegistry`, `tryGetRegistry`, `runWithRegistry`
 * `Router`, `Reflector`, `RequestContext` / `RequestContextStore`

@@ -15,6 +15,7 @@ export const PARAM_DECORATORS: Record<string, string> = {
     'Query'           : 'Query',
     'Body'            : 'Body',
     'RawBody'         : 'RawBody',
+    'BodyHash'        : 'BodyHash',
     'Ctx'             : 'Context',
     'Context'         : 'Context',
     'ConnectedSocket' : 'WebSocket',

@@ -178,16 +178,16 @@ export class SwaggerSpecGenerator
                         };
                     }
                 }
-                else if( paramMeta.source === 'RawBody' )
+                else if( paramMeta.source === 'RawBody' || ( paramMeta.source === 'BodyHash' && !requestBody ))
                 {
                     requestBody = {
-            required : true,
-            content  : {
-                'application/octet-stream' : {
-                    schema : { type : 'string', format : 'binary' }
-                }
-            }
-          };
+                        required : !paramMeta.optional,
+                        content  : {
+                            'application/octet-stream' : {
+                                schema : { type : 'string', format : 'binary' }
+                            }
+                        }
+                    };
                 }
                 else if( paramMeta.source === 'File' && paramMeta.name )
                 {

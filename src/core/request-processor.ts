@@ -11,6 +11,7 @@ import { invokeGuards } from './guard-runner.js';
 import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
 import { isBinaryOrStreamBody, toStreamOrBinaryBody } from '../helpers/response-body.js';
 import { resolveReviver, parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js';
+import { computeBodyHash } from '../helpers/body-hash.js';
 
 function parseErrorPath( sourcePath: string, inner: string ): string
 {
@@ -146,6 +147,7 @@ const SOURCE_LABELS: Record<string, string> = {
     Param     : 'param',
     Body      : 'body',
     RawBody   : 'rawbody',
+    BodyHash  : 'bodyhash',
     Query     : 'query',
     Header    : 'header',
     Headers   : 'headers',
@@ -359,6 +361,11 @@ export class RequestProcessor
                 break;
             }
             case 'RawBody': val = await sreq.rawBody( securityConfig ); break;
+            case 'BodyHash': {
+                const raw = await sreq.rawBody( securityConfig );
+                val = computeBodyHash( raw, p.hasher, p.hashOptions );
+                break;
+            }
             case 'Query': {
                 if( p.name )
                 {

@@ -5,10 +5,12 @@ import { MiddlewareClass } from './core/types.js';
 import type { ServerRequest } from './core/server-request.js';
 import type { FileOptions, FileFieldOptions } from './helpers/file-upload.js';
 import type { Reviver as ReviverFn } from './helpers/reviver.js';
+import type { BodyHashOptions, HasherInput } from './helpers/body-hash.js';
 
 export type { FileOptions, FileFieldOptions, FileHandler } from './helpers/file-upload.js';
 export { UploadedFile } from './helpers/file-upload.js';
 export { MultipartPayload, type MultipartValue, type MultipartFieldValue } from './helpers/multipart.js';
+export type { BodyHashOptions, HasherInput, BodyHashEncoding, HasherInstance, HasherConstructor, HasherFactory } from './helpers/body-hash.js';
 
 export const Request = ( target: any, key: string | symbol, idx: number ) => {};
 export const Context = ( target: any, key: string | symbol, idx: number ) => {};
@@ -41,6 +43,25 @@ export function Query( arg1: any, arg2?: any, arg3?: any ): any
     if( arg3 !== undefined ) { return } // Direct decorator usage
 
     return ( target: any, key: string | symbol, idx: number ) => {}; 
+}
+
+/**
+ * Inject the cryptographic hash or HMAC of the raw request body.
+ *
+ * Usage:
+ * ```ts
+ * @Post('/webhook')
+ * handle(
+ *     @BodyHash('sha256') hash: string,
+ *     @BodyHash('sha256', { key: 'secret' }) hmac: string,
+ *     @BodyHash('sha256', { encoding: 'hex' }) hexHash: string,
+ *     @BodyHash(CustomHasher) custom: string
+ * )
+ * ```
+ */
+export function BodyHash( hasher: HasherInput, options?: BodyHashOptions ): ParameterDecorator
+{
+    return ( target: any, key: string | symbol | undefined, idx: number ) => {};
 }
 
 export const Param = ( name: string ): ParameterDecorator => ( target: any, key: string | symbol | undefined, idx: number ) => {};

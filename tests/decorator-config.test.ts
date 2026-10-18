@@ -89,6 +89,7 @@ describe( 'decorator-config constants', () =>
         expect( HTTP_METHOD_DECORATORS ).toContain( 'Get' );
         expect( HTTP_METHOD_DECORATORS ).toContain( 'Ws' );
         expect( PARAM_DECORATORS.Request ).toBe( 'Request' );
+        expect( PARAM_DECORATORS.BodyHash ).toBe( 'BodyHash' );
         expect( PARAM_DECORATORS.File ).toBe( 'File' );
         expect( PARAM_DECORATORS.Ctx ).toBe( 'Context' );
     });

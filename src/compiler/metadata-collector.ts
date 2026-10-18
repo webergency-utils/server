@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import { buildParser, buildValidator, generateHash } from '@webergency-utils/typechecker/transformer';
 import { ProjectRegistry } from './registry.js';
-import { PARAM_DECORATORS, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig, extractReviver } from './decorator-config.js';
+import { PARAM_DECORATORS, parseExpression, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig, extractReviver } from './decorator-config.js';
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
 import { resolveTokenFromType } from './di-resolution.js';
 
@@ -144,6 +144,7 @@ export class MetadataCollector
             const p = pArray[i];
             const decs = ts.getDecorators( p );
             let dName = '', pName = '', vMode: any = undefined;
+            let hashHasher: any = undefined, hashOptions: any = undefined;
 
             let isInject = false;
             let injectToken = '';
@@ -223,6 +224,28 @@ export class MetadataCollector
                                     vMode = e.arguments[0].text as any;
                                 }
                             }
+                            else if( dName === 'BodyHash' )
+                            {
+                                const sourceFile = e.getSourceFile();
+
+                                if( e.arguments[0])
+                                {
+                                    hashHasher = parseExpression( e.arguments[0], sourceFile );
+                                }
+                                else
+                                {
+                                    this.diagnostics.error(
+                                        e,
+                                        DiagnosticCode.DECORATOR_MISUSE,
+                                        'Decorator "@BodyHash" requires an algorithm string or Hasher class/instance.'
+                                    );
+                                }
+
+                                if( e.arguments[1])
+                                {
+                                    hashOptions = parseExpression( e.arguments[1], sourceFile );
+                                }
+                            }
                             else if( dName === 'Query' ) 
                             {
                                 if( e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
@@ -246,10 +269,18 @@ export class MetadataCollector
                                     pName = e.arguments[0].text;
                                 }
                             }
-                            else if( ![ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'RawBody', 'Request', 'Context', 'Response' ].includes( dName ) && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
+                            else if( ![ 'Peer', 'Cookies', 'Headers', 'Ip', 'Url', 'Hostname', 'Path', 'RawBody', 'BodyHash', 'Request', 'Context', 'Response' ].includes( dName ) && e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
                             {
                                 pName = e.arguments[0].text;
                             }
+                        }
+                        else if( dName === 'BodyHash' )
+                        {
+                            this.diagnostics.error(
+                                e,
+                                DiagnosticCode.DECORATOR_MISUSE,
+                                'Decorator "@BodyHash" must be called with arguments. E.g. @BodyHash(\'sha256\').'
+                            );
                         }
                         break;
                     }
@@ -366,6 +397,16 @@ export class MetadataCollector
                             metadata[i].optional = true;
                         }
                     }
+                }
+                else if( dName === 'BodyHash' )
+                {
+                    metadata.push({
+                        source      : dName,
+                        name        : pName,
+                        hasher      : hashHasher,
+                        hashOptions : hashOptions,
+                        optional    : Boolean( p.questionToken )
+                    });
                 }
                 else 
                 {

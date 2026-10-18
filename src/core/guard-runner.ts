@@ -29,7 +29,7 @@ function classGuardParams( registry: ApplicationRegistry, name: string, instance
  * reach the guard.
  */
 const GUARD_PARAM_SOURCES = new Set([
-    'Request', 'Response', 'WebSocket', 'Param', 'Body', 'RawBody', 'Header', 'Headers',
+    'Request', 'Response', 'WebSocket', 'Param', 'Body', 'RawBody', 'BodyHash', 'Header', 'Headers',
     'Cookies', 'Cookie', 'Query', 'Context', 'Inject', 'Ip', 'Url', 'Hostname', 'Path', 'Peer'
 ]);
 

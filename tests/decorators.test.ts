@@ -10,6 +10,7 @@ import {
     Path,
     RawBody,
     Body, 
+    BodyHash, 
     Query, 
     Param, 
     Header, 
@@ -59,6 +60,9 @@ describe( 'Decorators', () =>
         
         Body({}, 'test', 0 );
         Body( 'strict' )({}, 'test', 0 );
+        
+        BodyHash( 'sha256' )({}, 'test', 0 );
+        BodyHash( 'sha256', { encoding : 'hex' })({}, 'test', 0 );
         
         Query({}, 'test', 0 );
         Query( 'q' )({}, 'test', 0 );
