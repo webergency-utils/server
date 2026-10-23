@@ -35,9 +35,8 @@ export class ApplicationRegistry
     providers          = new Map<string, any>();
     modules            = new Map<string, any>();
     instances          = new Map<string, any>();
-    resolving          = new Set<string>();
-    /** In-flight onInit gates keyed like instances (`token::module`). */
-    initPromises       = new Map<string, Promise<void>>();
+    /** In-flight singleton creation + onInit promises keyed like instances (`token::module`). */
+    inflightSingletons = new Map<string, Promise<any>>();
     /**
      * TRANSIENT (and similar) instances created outside a request — destroyed on
      * `destroyAll()` / app shutdown.
@@ -59,6 +58,8 @@ export class ApplicationRegistry
     scopes             = new Map<string, Scope>();
     /** Dependency cycles found while resolving scopes, reported as `A -> B -> A`. */
     dependencyCycles   = new Set<string>();
+    /** Monotonic counter bumped whenever registrations change so EndpointPlan caches invalidate. */
+    cacheVersion       = 0;
     /** Paths registered (method+path) for duplicate detection. */
     private routeKeys  = new Set<string>();
 
@@ -114,6 +115,7 @@ export class ApplicationRegistry
     {
         this.bindings.clear();
         this.scopes.clear();
+        this.cacheVersion++;
     }
 
     recordDependencyCycle( path: string[])
@@ -245,6 +247,7 @@ export class ApplicationRegistry
         else
         {
             this.controllers.set( name, classOrInstance );
+            this.cacheVersion++;
         }
     }
 
@@ -270,6 +273,7 @@ export class ApplicationRegistry
         else
         {
             this.guards.set( name, classOrInstance );
+            this.cacheVersion++;
         }
     }
 
@@ -295,6 +299,7 @@ export class ApplicationRegistry
         else
         {
             this.interceptors.set( name, classOrInstance );
+            this.cacheVersion++;
         }
     }
 
@@ -323,8 +328,7 @@ export class ApplicationRegistry
         this.providers.clear();
         this.modules.clear();
         this.instances.clear();
-        this.resolving.clear();
-        this.initPromises.clear();
+        this.inflightSingletons.clear();
         this.ephemeralInstances.clear();
         this.controllerClasses.clear();
         this.guardClasses.clear();
@@ -339,6 +343,7 @@ export class ApplicationRegistry
         this.scopes.clear();
         this.dependencyCycles.clear();
         this.defaultResponseMode = undefined;
+        this.cacheVersion++;
     }
 
     locateProviderInScope( token: string, moduleInstance: any, visited = new Set<any>()): any
@@ -407,11 +412,16 @@ export class ApplicationRegistry
         return false;
     }
 
-    async instantiateProvider( token: string, provider: any, contextModule: any ): Promise<any>
+    async instantiateProvider(
+        token: string,
+        provider: any,
+        contextModule: any,
+        resolutionStack?: Set<string>
+    ): Promise<any>
     {
         if( typeof provider === 'function' )
         {
-            return this.construct( provider, contextModule );
+            return this.construct( provider, contextModule, resolutionStack );
         }
 
         if( provider && typeof provider === 'object' )
@@ -423,7 +433,7 @@ export class ApplicationRegistry
 
             if( 'class' in provider )
             {
-                return this.construct( provider.class, contextModule );
+                return this.construct( provider.class, contextModule, resolutionStack );
             }
 
             if( 'factory' in provider )
@@ -433,7 +443,7 @@ export class ApplicationRegistry
 
                 for( const depToken of factoryDeps )
                 {
-                    args.push( await this.resolve( depToken, contextModule ));
+                    args.push( await this.resolve( depToken, contextModule, resolutionStack ));
                 }
 
                 return await provider.factory( ...args );
@@ -449,7 +459,11 @@ export class ApplicationRegistry
      * Resolve each constructor dep (including its onInit) before `new`, then property deps.
      * Caller caches the instance then runs onInit.
      */
-    private async construct( cls: any, contextModule: any ): Promise<any>
+    private async construct(
+        cls: any,
+        contextModule: any,
+        resolutionStack?: Set<string>
+    ): Promise<any>
     {
         const injections = cls.__injections__ || {};
         const constructorDeps = injections.constructorDeps || [];
@@ -463,7 +477,7 @@ export class ApplicationRegistry
             }
             else
             {
-                args.push( await this.resolve( depToken, contextModule ));
+                args.push( await this.resolve( depToken, contextModule, resolutionStack ));
             }
         }
 
@@ -471,13 +485,13 @@ export class ApplicationRegistry
 
         for( const [ propName, depToken ] of Object.entries( ApplicationRegistry.collectPropertyDeps( cls )))
         {
-            instance[propName] = await this.resolve( depToken as string, contextModule );
+            instance[propName] = await this.resolve( depToken as string, contextModule, resolutionStack );
         }
 
         return instance;
     }
 
-    private async runOnInit( instance: any ): Promise<void>
+    private runOnInit( instance: any ): Promise<void> | void
     {
         if( !instance || typeof instance !== 'object' ){ return }
 
@@ -486,7 +500,8 @@ export class ApplicationRegistry
         if( instance.__webergencyOnInitDone ){ return }
 
         instance.__webergencyOnInitDone = true;
-        await instance.onInit();
+
+        return Promise.resolve( instance.onInit()).then(() => undefined );
     }
 
     /**
@@ -697,15 +712,8 @@ export class ApplicationRegistry
     }
 
     /** Sync cache read for circular lazy proxies (may be pre-onInit). */
-    private getCached( token: string, contextModule?: any ): any
+    private getCached( token: string, currentContext?: any ): any
     {
-        let currentContext = contextModule;
-
-        if( !currentContext && this.tokenToModuleMap.has( token ))
-        {
-            currentContext = this.tokenToModuleMap.get( token );
-        }
-
         const scope = this.getResolvedScope( token, currentContext );
 
         if( scope === Scope.REQUEST )
@@ -760,14 +768,7 @@ export class ApplicationRegistry
         return new Error( `No provider registered for token: ${token}${contextModule ? ` in module ${contextModule.name}` : ''}` );
     }
 
-    private async awaitInitIfPending( key: string ): Promise<void>
-    {
-        const pending = this.initPromises.get( key );
-
-        if( pending ){ await pending }
-    }
-
-    async resolve( token: string, contextModule?: any ): Promise<any>
+    async resolve( token: string, contextModule?: any, resolutionStack?: Set<string> ): Promise<any>
     {
         let currentContext = contextModule;
 
@@ -782,14 +783,24 @@ export class ApplicationRegistry
         {
             if( currentContext.instances.has( token ))
             {
-                await this.awaitInitIfPending( instanceKey );
+                if( !resolutionStack?.has( instanceKey ))
+                {
+                    const pending = this.inflightSingletons.get( instanceKey );
+
+                    if( pending ){ return await pending }
+                }
 
                 return currentContext.instances.get( token );
             }
         }
         else if( this.instances.has( instanceKey ))
         {
-            await this.awaitInitIfPending( instanceKey );
+            if( !resolutionStack?.has( instanceKey ))
+            {
+                const pending = this.inflightSingletons.get( instanceKey );
+
+                if( pending ){ return await pending }
+            }
 
             return this.instances.get( instanceKey );
         }
@@ -814,35 +825,53 @@ export class ApplicationRegistry
 
             if( requestStore.has( cacheKey ))
             {
-                await this.awaitInitIfPending( cacheKey );
+                if( !resolutionStack?.has( cacheKey ))
+                {
+                    const pending = ctx.requestInflight?.get( cacheKey );
+
+                    if( pending ){ return await pending }
+                }
 
                 return requestStore.get( cacheKey );
             }
 
-            if( this.resolving.has( cacheKey ))
+            if( resolutionStack?.has( cacheKey ))
             {
                 return this.lazyProxy( token, currentContext );
             }
 
-            this.resolving.add( cacheKey );
-            try
-            {
-                let resolveInit!: () => void;
-                const initGate = new Promise<void>(( r ) => { resolveInit = r });
-                this.initPromises.set( cacheKey, initGate );
+            const reqInflight = ctx.requestInflight ?? ( ctx.requestInflight = new Map<string, Promise<any>>());
+            const existingInflight = reqInflight.get( cacheKey );
 
-                const instance = await this.instantiateProvider( token, binding.provider, binding.declaringModule );
-                requestStore.set( cacheKey, instance );
-                await this.runOnInit( instance );
-                resolveInit();
-
-                return instance;
-            }
-            finally
+            if( existingInflight )
             {
-                this.initPromises.delete( cacheKey );
-                this.resolving.delete( cacheKey );
+                return await existingInflight;
             }
+
+            const nextStack = new Set( resolutionStack );
+            nextStack.add( cacheKey );
+
+            const createPromise = ( async () =>
+            {
+                try
+                {
+                    const instance = await this.instantiateProvider( token, binding.provider, binding.declaringModule, nextStack );
+                    requestStore.set( cacheKey, instance );
+                    const initPromise = this.runOnInit( instance );
+
+                    if( initPromise ){ await initPromise }
+
+                    return instance;
+                }
+                finally
+                {
+                    reqInflight.delete( cacheKey );
+                }
+            })();
+
+            reqInflight.set( cacheKey, createPromise );
+
+            return await createPromise;
         }
 
         const binding = this.getBinding( token, currentContext );
@@ -853,24 +882,22 @@ export class ApplicationRegistry
 
             const guardKey = scopedKey( token, binding.declaringModule );
 
-            if( this.resolving.has( guardKey ))
+            if( resolutionStack?.has( guardKey ))
             {
                 return this.lazyProxy( token, currentContext );
             }
 
-            this.resolving.add( guardKey );
-            try
-            {
-                const instance = await this.instantiateProvider( token, binding.provider, binding.declaringModule );
-                await this.runOnInit( instance );
-                this.trackEphemeral( instance, token );
+            const nextStack = new Set( resolutionStack );
+            nextStack.add( guardKey );
 
-                return instance;
-            }
-            finally
-            {
-                this.resolving.delete( guardKey );
-            }
+            const instance = await this.instantiateProvider( token, binding.provider, binding.declaringModule, nextStack );
+            const initPromise = this.runOnInit( instance );
+
+            if( initPromise ){ await initPromise }
+
+            this.trackEphemeral( instance, token );
+
+            return instance;
         }
 
         if( !binding )
@@ -880,39 +907,54 @@ export class ApplicationRegistry
 
         const guardKey = scopedKey( token, binding.declaringModule );
 
-        if( this.resolving.has( guardKey ))
+        if( resolutionStack?.has( guardKey ) || resolutionStack?.has( instanceKey ))
         {
             return this.lazyProxy( token, currentContext );
         }
 
-        this.resolving.add( guardKey );
-        try
+        const existingSingleton = this.inflightSingletons.get( instanceKey );
+
+        if( existingSingleton )
         {
-            // Cache before onInit so circular proxies can see the instance; waiters on
-            // initPromises still block until onInit completes.
-            let resolveInit!: () => void;
-            const initGate = new Promise<void>(( r ) => { resolveInit = r });
-            this.initPromises.set( instanceKey, initGate );
-
-            const instance = await this.instantiateProvider(
-                token,
-                binding.provider,
-                currentContext ? binding.declaringModule : null
-            );
-
-            if( currentContext ){ currentContext.instances.set( token, instance ) }
-            this.instances.set( instanceKey, instance );
-            this.syncLegacyCompatibility( token, instance );
-            await this.runOnInit( instance );
-            resolveInit();
-
-            return instance;
+            return await existingSingleton;
         }
-        finally
+
+        const nextStack = new Set( resolutionStack );
+        nextStack.add( guardKey );
+        nextStack.add( instanceKey );
+
+        const createSingleton = ( async () =>
         {
-            this.initPromises.delete( instanceKey );
-            this.resolving.delete( guardKey );
-        }
+            try
+            {
+                // Cache before onInit so circular proxies can see the instance; non-cyclic
+                // waiters on inflightSingletons still block until onInit completes.
+                const instance = await this.instantiateProvider(
+                    token,
+                    binding.provider,
+                    currentContext ? binding.declaringModule : null,
+                    nextStack
+                );
+
+                if( currentContext ){ currentContext.instances.set( token, instance ) }
+                this.instances.set( instanceKey, instance );
+                const initPromise = this.runOnInit( instance );
+
+                if( initPromise ){ await initPromise }
+
+                this.syncLegacyCompatibility( token, instance );
+
+                return instance;
+            }
+            finally
+            {
+                this.inflightSingletons.delete( instanceKey );
+            }
+        })();
+
+        this.inflightSingletons.set( instanceKey, createSingleton );
+
+        return await createSingleton;
     }
 
     getAllInstances(): any[]

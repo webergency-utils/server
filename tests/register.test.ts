@@ -125,5 +125,21 @@ describe( 'register', () =>
             // Assert
             expect( getProgramFor( file )).not.toBe( first );
         });
+
+        it( 'should reuse the cached program across multiple files in the same tsconfig project', () =>
+        {
+            // Arrange
+            const fileA = write( 'a.ts', SOURCE );
+            const fileB = write( 'b.ts', 'export class Other { run(): number { return 1 } }\n' );
+            touch( fileA, 1_000 );
+            touch( fileB, 4_000 );
+
+            // Act
+            const progA = getProgramFor( fileA );
+            const progB = getProgramFor( fileB );
+
+            // Assert
+            expect( progB ).toBe( progA );
+        });
     });
 });

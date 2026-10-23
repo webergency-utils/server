@@ -2,12 +2,49 @@ import ts from 'typescript';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ProjectRegistry } from './registry.js';
+import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
+
+function recordDiscoveredClass<T extends { path : string }>(
+    map: Map<string, T>,
+    entry: T,
+    kindLabel: 'controller' | 'provider' | 'module',
+    pluralLabel: 'Controllers' | 'Providers' | 'Modules',
+    nodeName: ts.Identifier,
+    filePath: string,
+    discoveredFiles: Set<string>,
+    reporter?: DiagnosticReporter
+): void
+{
+    const className = nodeName.text;
+    const existing = map.get( className );
+
+    if( existing && existing.path !== filePath )
+    {
+        reporter?.error(
+            nodeName,
+            DiagnosticCode.DUPLICATE_CLASS,
+            `Duplicate ${kindLabel} class name "${className}" already declared in ${existing.path}. ${pluralLabel} are keyed by class name; rename one of them.`
+        );
+    }
+    else
+    {
+        map.set( className, entry );
+    }
+
+    discoveredFiles.add( filePath );
+    console.log( `- Discovered ${kindLabel}: ${className} in ${path.basename( filePath )}` );
+}
 
 /**
  * Walk every source file of the program and record decorated classes, plus any AOT
  * manifest shipped by a dependency inside node_modules.
  */
-export function discoverFromEntryPoint( program: ts.Program, entryFile: string, registry: ProjectRegistry ) 
+export function discoverFromEntryPoint(
+    program: ts.Program,
+    entryFile: string,
+    registry: ProjectRegistry,
+    reporter?: DiagnosticReporter
+) 
 {
     const checker = program.getTypeChecker();
     const discoveredFiles = new Set<string>();
@@ -60,27 +97,42 @@ export function discoverFromEntryPoint( program: ts.Program, entryFile: string, 
 
                         if( isController ) 
                         {
-                            const className = node.name.text;
-                            const filePath = sourceFile.fileName;
-                            registry.controllers.set( className, { path : filePath, injections : new Map() });
-                            discoveredFiles.add( filePath );
-                            console.log( `- Discovered controller: ${className} in ${path.basename( filePath )}` );
+                            recordDiscoveredClass(
+                                registry.controllers,
+                                { path : sourceFile.fileName, injections : new Map() },
+                                'controller',
+                                'Controllers',
+                                node.name,
+                                sourceFile.fileName,
+                                discoveredFiles,
+                                reporter
+                            );
                         }
                         else if( isInjectable ) 
                         {
-                            const className = node.name.text;
-                            const filePath = sourceFile.fileName;
-                            registry.providers.set( className, { path : filePath });
-                            discoveredFiles.add( filePath );
-                            console.log( `- Discovered provider: ${className} in ${path.basename( filePath )}` );
+                            recordDiscoveredClass(
+                                registry.providers,
+                                { path : sourceFile.fileName },
+                                'provider',
+                                'Providers',
+                                node.name,
+                                sourceFile.fileName,
+                                discoveredFiles,
+                                reporter
+                            );
                         }
                         else if( isModule ) 
                         {
-                            const className = node.name.text;
-                            const filePath = sourceFile.fileName;
-                            registry.modules.set( className, { path : filePath });
-                            discoveredFiles.add( filePath );
-                            console.log( `- Discovered module: ${className} in ${path.basename( filePath )}` );
+                            recordDiscoveredClass(
+                                registry.modules,
+                                { path : sourceFile.fileName },
+                                'module',
+                                'Modules',
+                                node.name,
+                                sourceFile.fileName,
+                                discoveredFiles,
+                                reporter
+                            );
                         }
                     }
                 }

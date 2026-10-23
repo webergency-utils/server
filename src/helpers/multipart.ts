@@ -30,6 +30,9 @@ const COMPACT_CHUNK_THRESHOLD = 32;
 /** Max nested `multipart/*` containers below the root (root = 0). */
 export const MAX_MULTIPART_NEST_DEPTH = 3;
 
+/** Max bytes allowed for a single multipart part's header block before `\r\n\r\n`. */
+export const MAX_PART_HEADER_SIZE = 16 * 1024;
+
 /**
  * PHP/Rails-style nest: `bundle` + `child` → `bundle[child]`;
  * `bundle` + `docs[]` → `bundle[docs][]`.
@@ -680,7 +683,20 @@ export class MultipartParser
             {
                 const caret = this.buffer.indexOf( CRLF_CRLF );
 
-                if( caret === -1 ){ break }
+                if( caret === -1 )
+                {
+                    if( this.buffer.length > MAX_PART_HEADER_SIZE )
+                    {
+                        throw Object.assign( new Error( 'Multipart part header too large' ), { status : 431 });
+                    }
+
+                    break;
+                }
+
+                if( caret > MAX_PART_HEADER_SIZE )
+                {
+                    throw Object.assign( new Error( 'Multipart part header too large' ), { status : 431 });
+                }
 
                 const headerRaw = this.buffer.spliceConcat( 0, caret + CRLF_CRLF.length ).toString( 'utf8' );
                 this.headers = parseHeaders( headerRaw );
@@ -712,6 +728,13 @@ export class MultipartParser
 
                 if( disposition.filename !== undefined )
                 {
+                    this.fileCount++;
+
+                    if( this.options.maxFiles !== undefined && this.fileCount > this.options.maxFiles )
+                    {
+                        throw Object.assign( new Error( 'Too many files' ), { status : 413 });
+                    }
+
                     const mime = this.headers['content-type'] || 'application/octet-stream';
                     const file = new UploadedFile( this.partName, disposition.filename, mime, this.headers );
 
@@ -732,12 +755,6 @@ export class MultipartParser
 
                     this.file = file;
                     this.files.push( file );
-                    this.fileCount++;
-
-                    if( this.options.maxFiles !== undefined && this.fileCount > this.options.maxFiles )
-                    {
-                        throw Object.assign( new Error( 'Too many files' ), { status : 413 });
-                    }
                 }
                 else
                 {
@@ -870,12 +887,7 @@ export class MultipartParser
                 continue;
             }
 
-            if( this.step === Step.DONE )
-            {
-                this.finished = true;
-
-                break;
-            }
+            this.finished = true;
 
             break;
         }
@@ -1083,9 +1095,13 @@ export async function parseMultipartStream(
 
     const parser = new MultipartParser( boundary, options );
     const reader = body.getReader();
-    const onAbort = () => { void reader.cancel().catch(() => undefined ) };
+    const cancelReader = () =>
+    {
+        try { void reader.cancel()?.catch(() => undefined ) }
+        catch{ /* ignore */ }
+    };
 
-    options.signal?.addEventListener( 'abort', onAbort, { once : true });
+    options.signal?.addEventListener( 'abort', cancelReader, { once : true });
 
     try
     {
@@ -1108,14 +1124,13 @@ export async function parseMultipartStream(
     }
     catch( err )
     {
-        try { reader.cancel() }
-        catch{ /* ignore */ }
+        cancelReader();
         await cleanupUploadedFiles( parser.result.files );
 
         throw err;
     }
     finally
     {
-        options.signal?.removeEventListener( 'abort', onAbort );
+        options.signal?.removeEventListener( 'abort', cancelReader );
     }
 }

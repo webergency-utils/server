@@ -18,7 +18,67 @@ export class TcpMessageAdapter implements MicroserviceAdapter
             this.connections.add( socket );
             const framer = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
 
-            socket.on( 'data', async ( chunk ) => 
+            const handleLine = async ( line: string ): Promise<void> =>
+            {
+                let id: string | undefined;
+
+                try 
+                {
+                    const envelope = JSON.parse( line );
+                    id = envelope.id;
+                    const { pattern, payload } = envelope;
+
+                    if( !pattern ) 
+                    {
+                        if( id && socket.writable ) 
+                        {
+                            socket.write( JSON.stringify({ id, status : 'error', message : 'Missing pattern' }) + '\n' );
+                        }
+
+                        return;
+                    }
+
+                    const connection: MessageConnection = {
+                        send : ( data: any ) => 
+                        {
+                            if( socket.writable ) 
+                            {
+                                socket.write( JSON.stringify({ id, status : 'success', data }) + '\n' );
+                            }
+                        },
+                        close : () => 
+                        {
+                            socket.end();
+                        }
+                    };
+
+                    const result = await handler( pattern, payload, connection );
+
+                    // EventPattern → MicroserviceNoReply; MessagePattern replies when id is present.
+                    if( result !== MicroserviceNoReply && id && socket.writable )
+                    {
+                        socket.write( JSON.stringify({ id, status : 'success', data : result }) + '\n' );
+                    }
+                }
+                catch( err: any ) 
+                {
+                    if( !id ){ return }
+
+                    try 
+                    {
+                        if( socket.writable )
+                        {
+                            socket.write( JSON.stringify({ id, status : 'error', message : err.message || 'Malformed request' }) + '\n' );
+                        }
+                    }
+                    catch
+                    {
+                        // ignore write failures on a broken socket
+                    }
+                }
+            };
+
+            socket.on( 'data', ( chunk ) => 
             {
                 const { lines, oversized } = framer.push( chunk );
 
@@ -31,58 +91,7 @@ export class TcpMessageAdapter implements MicroserviceAdapter
 
                 for( const line of lines )
                 {
-                    let id: string | undefined;
-
-                    try 
-                    {
-                        const envelope = JSON.parse( line );
-                        id = envelope.id;
-                        const { pattern, payload } = envelope;
-
-                        if( !pattern ) 
-                        {
-                            if( id ) 
-                            {
-                                socket.write( JSON.stringify({ id, status : 'error', message : 'Missing pattern' }) + '\n' );
-                            }
-                            continue;
-                        }
-
-                        const connection: MessageConnection = {
-                            send : ( data: any ) => 
-                            {
-                                if( socket.writable ) 
-                                {
-                                    socket.write( JSON.stringify({ id, status : 'success', data }) + '\n' );
-                                }
-                            },
-                            close : () => 
-                            {
-                                socket.end();
-                            }
-                        };
-
-                        const result = await handler( pattern, payload, connection );
-
-                        // EventPattern → MicroserviceNoReply; MessagePattern replies when id is present.
-                        if( result !== MicroserviceNoReply && id )
-                        {
-                            socket.write( JSON.stringify({ id, status : 'success', data : result }) + '\n' );
-                        }
-                    }
-                    catch ( err: any ) 
-                    {
-                        if( !id ){ continue }
-
-                        try 
-                        {
-                            socket.write( JSON.stringify({ id, status : 'error', message : err.message || 'Malformed request' }) + '\n' );
-                        }
-                        catch
-                        {
-                            // ignore write failures on a broken socket
-                        }
-                    }
+                    void handleLine( line );
                 }
             });
 

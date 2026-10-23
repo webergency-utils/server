@@ -1,4 +1,4 @@
-const METADATA_BAG = Symbol.for( 'webergency.server.metadata' );
+import { getCustomMetadataBag } from './symbols.js';
 
 export class Reflector 
 {
@@ -9,7 +9,7 @@ export class Reflector
     {
         if( !target ){ return undefined }
 
-        const bag = target[METADATA_BAG] || target.__metadata__;
+        const bag = getCustomMetadataBag( target );
 
         if( bag && bag[metadataKey] !== undefined )
         {

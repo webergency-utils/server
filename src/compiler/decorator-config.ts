@@ -126,26 +126,7 @@ export function findDecoratorNamed( decorators: readonly ts.Decorator[] | undefi
 /** True when any decorator on the node matches `name` (either `@Name` or `@Name(...)`). */
 export function hasDecoratorNamed( decorators: readonly ts.Decorator[] | undefined, name: string ): boolean
 {
-    if( !decorators ){ return false }
-
-    for( const d of decorators )
-    {
-        const ident = decoratorIdent( d );
-
-        if( ts.isIdentifier( ident ) && ident.text === name )
-        {
-            return true;
-        }
-
-        const text = d.expression.getText();
-
-        if( text === name || text.startsWith( `${name}(` ))
-        {
-            return true;
-        }
-    }
-
-    return false;
+    return findDecoratorNamed( decorators, name ) !== null;
 }
 
 /**
@@ -154,26 +135,16 @@ export function hasDecoratorNamed( decorators: readonly ts.Decorator[] | undefin
  */
 function extractConfigDecorator( name: string, decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile ): any
 {
-    if( !decorators ) { return undefined }
+    const d = findDecoratorNamed( decorators, name );
 
-    for( const d of decorators ) 
+    if( !d ) { return undefined }
+
+    if( ts.isCallExpression( d.expression ) && d.expression.arguments.length > 0 ) 
     {
-        const matches =
-            ( ts.isCallExpression( d.expression ) && ts.isIdentifier( d.expression.expression ) && d.expression.expression.text === name ) ||
-            ( ts.isIdentifier( d.expression ) && d.expression.text === name );
-
-        if( matches ) 
-        {
-            if( ts.isCallExpression( d.expression ) && d.expression.arguments.length > 0 ) 
-            {
-                return parseExpression( d.expression.arguments[0], sourceFile );
-            }
-
-            return {};
-        }
+        return parseExpression( d.expression.arguments[0], sourceFile );
     }
 
-    return undefined;
+    return {};
 }
 
 export function extractCorsConfig( decorators: readonly ts.Decorator[] | undefined, sourceFile: ts.SourceFile ): any 

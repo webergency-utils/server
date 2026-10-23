@@ -101,14 +101,6 @@ const SIMPLE_TOKENS: Record<string, TokenType> = {
 };
 
 /**
- * Escape text for stringify to path.
- */
-function escapeText( str: string ) 
-{
-    return str.replace( /[{}()[\]+?!:*\\]/g, '\\$&' );
-}
-
-/**
  * Escape a regular expression string.
  */
 function escape( str: string ) 

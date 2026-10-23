@@ -29,7 +29,6 @@ export function bootstrapRegistry( registry: ApplicationRegistry, options: Boots
         registry.setDefaultResponseMode( options.responseMode );
     }
 
-    const activeControllers = new Set<string>();
     const visitedModules = new Set<any>();
 
     if( options.module )
@@ -38,7 +37,7 @@ export function bootstrapRegistry( registry: ApplicationRegistry, options: Boots
 
         for( const mod of modules )
         {
-            collectModule( registry, mod, activeControllers, visitedModules );
+            collectModule( registry, mod, visitedModules );
         }
     }
     else
@@ -47,7 +46,7 @@ export function bootstrapRegistry( registry: ApplicationRegistry, options: Boots
         {
             for( const ctrl of options.controllers )
             {
-                ingestControllerHost( registry, ctrl, activeControllers, undefined );
+                ingestControllerHost( registry, ctrl, undefined );
             }
         }
 
@@ -84,15 +83,11 @@ export function bootstrapRegistry( registry: ApplicationRegistry, options: Boots
             `Missing AOT metadata for: ${hosts}. Compile with webergency-tsc (or @webergency-utils/server/register) so Symbol.for meta is emitted.`
         );
     }
-
-    // When no module/controllers filter was used but endpoints were manually registered, keep them all.
-    void activeControllers;
 }
 
 function collectModule(
     registry: ApplicationRegistry,
     moduleOrDynamic: any,
-    activeControllers: Set<string>,
     visited: Set<any>
 ): any
 {
@@ -174,7 +169,7 @@ function collectModule(
     {
         for( const ctrl of meta.controllers )
         {
-            ingestControllerHost( registry, ctrl, activeControllers, moduleInstance );
+            ingestControllerHost( registry, ctrl, moduleInstance );
         }
     }
 
@@ -191,7 +186,7 @@ function collectModule(
     {
         for( const imp of meta.imports )
         {
-            const impInstance = collectModule( registry, imp, activeControllers, visited );
+            const impInstance = collectModule( registry, imp, visited );
 
             if( impInstance )
             {
@@ -226,13 +221,6 @@ function ingestProviderHost( registry: ApplicationRegistry, provider: any, modul
     if( typeof actual === 'function' )
     {
         const inj = getInjectableMeta( actual );
-
-        // Providers may only have __injections__ from AOT without injectable Symbol — still register
-        if( !inj && !actual.__injections__ && !actual.__scope__ )
-        {
-            // Allow plain @Injectable() classes that only set __scope__ at runtime; AOT sets WEBERGENCY_INJECTABLE
-            // Missing both AOT injectable and runtime scope is OK for bare classes used as providers
-        }
 
         if( !inj )
         {
@@ -305,7 +293,6 @@ function ingestInterceptorHost( registry: ApplicationRegistry, interceptor: any,
 function ingestControllerHost(
     registry: ApplicationRegistry,
     ctrl: any,
-    activeControllers: Set<string>,
     moduleInstance: any | undefined
 )
 {
@@ -318,7 +305,6 @@ function ingestControllerHost(
     if( typeof ctrl !== 'function' ){ return }
 
     const ctrlName = ctrl.name || 'AnonymousController';
-    activeControllers.add( ctrlName );
 
     const aot = getControllerMeta( ctrl );
 

@@ -200,8 +200,9 @@ describe( 'MultiBuffer', () =>
         expect( search.indexOf( 'world' )).toBe( 6 );
         expect( search.indexOf( '', 2 )).toBe( 2 );
         expect( search.indexOf( '', 100 )).toBe( -1 );
-        // negative offset is rewritten via `totalLength - offset` (past end → miss)
-        expect( search.indexOf( 'world', -5 )).toBe( -1 );
+        // negative offset indexes from the end of the buffer (matching Buffer.prototype.indexOf)
+        expect( search.indexOf( 'world', -5 )).toBe( 6 );
+        expect( search.indexOf( 'world', -4 )).toBe( -1 );
         // negative get() indexes from the end of the buffer
         expect( search.get( -1 )).toBe( 'd'.charCodeAt( 0 ));
         expect( search.get( 0 )).toBe( 'h'.charCodeAt( 0 ));

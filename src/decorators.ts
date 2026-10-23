@@ -2,6 +2,7 @@
  * PARAMETER DECORATORS (Strict - No Parentheses)
  */
 import { MiddlewareClass } from './core/types.js';
+import { ensureCustomMetadataBag } from './core/symbols.js';
 import type { ServerRequest } from './core/server-request.js';
 import type { FileOptions, FileFieldOptions } from './helpers/file-upload.js';
 import type { Reviver as ReviverFn } from './helpers/reviver.js';
@@ -179,19 +180,6 @@ export function Payload( arg1?: any, arg2?: any, arg3?: any ): any
     return ( target: any, key: string | symbol, idx: number ) => {}; 
 }
 
-const METADATA_BAG = Symbol.for( 'webergency.server.metadata' );
-
-function ensureMetaBag( host: any ): Record<string | symbol, any>
-{
-    if( !host[METADATA_BAG])
-    {
-        host[METADATA_BAG] = host.__metadata__ || {};
-    }
-    host.__metadata__ = host[METADATA_BAG];
-
-    return host[METADATA_BAG];
-}
-
 export function Meta( ...metas: Record<string, any>[]): any 
 {
     return ( target: any, propertyKey?: string | symbol, descriptor?: TypedPropertyDescriptor<any> ) => 
@@ -201,7 +189,7 @@ export function Meta( ...metas: Record<string, any>[]): any
         // Class decorator
         if( propertyKey === undefined ) 
         {
-            Object.assign( ensureMetaBag( target ), mergedMeta );
+            Object.assign( ensureCustomMetadataBag( target ), mergedMeta );
 
             return target;
         }
@@ -216,11 +204,11 @@ export function Meta( ...metas: Record<string, any>[]): any
 
         if( targetMethod && typeof targetMethod === 'function' ) 
         {
-            Object.assign( ensureMetaBag( targetMethod ), mergedMeta );
+            Object.assign( ensureCustomMetadataBag( targetMethod ), mergedMeta );
         }
         else 
         {
-            const bag = ensureMetaBag( target );
+            const bag = ensureCustomMetadataBag( target );
 
             if( !bag[propertyKey as any])
             {

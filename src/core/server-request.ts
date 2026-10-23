@@ -23,6 +23,7 @@ import { pathnameFromUrl, queryStringFromUrl } from '../helpers/query-string.js'
 import { parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js';
 import
 {
+    cleanupUploadedFiles,
     mergeFileConfigs,
     processMultipartUpload,
     type FileOptions,
@@ -205,24 +206,9 @@ export class ServerRequest
         init?           : ServerRequestInit
     ): ServerRequest
     {
-        if( req instanceof ServerRequest )
-        {
-            if( securityOrInit !== undefined && req.#security === undefined )
-            {
-                req.#security = securityOrInit;
-            }
-
-            if( files !== undefined && req.#files === undefined )
-            {
-                req.#files = files;
-            }
-
-            return req;
-        }
-
-        const existing = ( req && typeof req === 'object' )
-            ? requestFacadeMap.get( req )
-            : undefined;
+        const existing = req instanceof ServerRequest
+            ? req
+            : (( req && typeof req === 'object' ) ? requestFacadeMap.get( req ) : undefined );
 
         if( existing )
         {
@@ -239,7 +225,7 @@ export class ServerRequest
             return existing;
         }
 
-        return new ServerRequest( req, securityOrInit, files, init );
+        return new ServerRequest( req as Request, securityOrInit, files, init );
     }
 
     #getUrl(): URL
@@ -278,11 +264,6 @@ export class ServerRequest
         this.#ip = undefined;
     }
 
-    get trustProxy(): TrustProxy | undefined
-    {
-        return this.#trustProxy;
-    }
-
     set trustProxy( val: TrustProxy | undefined )
     {
         this.#trustProxy = val;
@@ -310,11 +291,6 @@ export class ServerRequest
     get requestID(): string | undefined
     {
         return this.#requestId;
-    }
-
-    set requestID( val: string | undefined )
-    {
-        this.#requestId = val;
     }
 
     /** Single header lookup without materializing the full string map. */
@@ -408,11 +384,6 @@ export class ServerRequest
         return this.#peer ?? ( this.#req as TransportRequest ).clientCert;
     }
 
-    set peer( val: PeerCert | undefined )
-    {
-        this.#peer = val;
-    }
-
     /** AbortSignal when `security.timeout` is set (and later disconnect). */
     get signal(): AbortSignal | undefined
     {
@@ -429,11 +400,6 @@ export class ServerRequest
         return Context.get();
     }
 
-    get securityOptions(): SecurityOptions | undefined
-    {
-        return this.#security;
-    }
-
     set securityOptions( val: SecurityOptions | undefined )
     {
         this.#security = val;
@@ -442,11 +408,6 @@ export class ServerRequest
     get globalFiles(): FileOptions | undefined
     {
         return this.#globalFiles;
-    }
-
-    set globalFiles( val: FileOptions | undefined )
-    {
-        this.#globalFiles = val;
     }
 
     get routeFiles(): FileOptions | undefined
@@ -500,11 +461,6 @@ export class ServerRequest
         this.#forwardBody = val;
     }
 
-    get forwardDepth(): number
-    {
-        return this.#forwardStack ? this.#forwardStack.length : 0;
-    }
-
     recordForwardHop( hopKey: string, maxDepth: number ): void
     {
         const stack = this.#forwardStack ?? ( this.#forwardStack = []);
@@ -528,16 +484,6 @@ export class ServerRequest
         stack.push( hopKey );
     }
 
-    get contentType(): string | null
-    {
-        return getContentType( this.#req );
-    }
-
-    get bodyContentType(): 'application/json' | 'application/x-www-form-urlencoded' | undefined
-    {
-        return this.#bodyContentType;
-    }
-
     get effectiveContentType(): string | null
     {
         return getContentType( this.#req ) ?? this.#bodyContentType ?? null;
@@ -556,11 +502,6 @@ export class ServerRequest
     get cachedBody(): unknown
     {
         return this.#json;
-    }
-
-    get cachedRawBody(): ArrayBuffer | undefined
-    {
-        return this.#raw;
     }
 
     cacheParsedBody( val: unknown ): void
@@ -800,6 +741,18 @@ export class ServerRequest
         this.#multipart = result;
 
         return result;
+    }
+
+    /**
+     * Delete any temporary disk files written during streaming multipart parsing on this
+     * request. Called when post-parse parameter validation or handler execution fails so
+     * rejected requests do not orphan files on disk.
+     */
+    async cleanupDiskUploads(): Promise<void>
+    {
+        if( !this.#multipart?.files.length ){ return }
+
+        await cleanupUploadedFiles( this.#multipart.files );
     }
 
     /** First `UploadedFile` for a field (streaming multipart). */

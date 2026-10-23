@@ -8,7 +8,9 @@ export const DiagnosticCode = {
     DECORATOR_MISUSE  : 90001,
     UNRESOLVED_CLASS  : 90002,
     INVALID_SIGNATURE : 90003,
-    SCHEMA_GENERATION : 90004
+    SCHEMA_GENERATION : 90004,
+    DUPLICATE_CLASS   : 90005,
+    DI_VISIBILITY     : 90006
 } as const;
 
 export type DiagnosticSink = ( diagnostic: ts.Diagnostic ) => void;

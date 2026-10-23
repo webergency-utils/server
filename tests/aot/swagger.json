@@ -8,6 +8,9 @@
   "paths": {
     "/type-safety/strict": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.strict",
         "responses": {
           "200": {
@@ -74,6 +77,9 @@
     },
     "/type-safety/strict-intercepted": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.strictIntercepted",
         "responses": {
           "200": {
@@ -140,6 +146,9 @@
     },
     "/type-safety/strip": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.strip",
         "responses": {
           "200": {
@@ -206,6 +215,9 @@
     },
     "/type-safety/relaxed": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.relaxed",
         "responses": {
           "200": {
@@ -272,6 +284,9 @@
     },
     "/type-safety/union": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.union",
         "responses": {
           "200": {
@@ -414,6 +429,9 @@
     },
     "/type-safety/status": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.status",
         "responses": {
           "200": {
@@ -496,6 +514,9 @@
     },
     "/type-safety/mixed-array": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.mixedArray",
         "responses": {
           "200": {
@@ -556,6 +577,9 @@
     },
     "/type-safety/nested": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.nested",
         "responses": {
           "200": {
@@ -575,26 +599,19 @@
                           "type": "number"
                         },
                         "user": {
-                          "anyOf": [
-                            {
-                              "x-typescript-type": "undefined"
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
                             },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string"
-                                },
-                                "age": {
-                                  "type": "number"
-                                }
-                              },
-                              "additionalProperties": false,
-                              "required": [
-                                "name",
-                                "age"
-                              ]
+                            "age": {
+                              "type": "number"
                             }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "name",
+                            "age"
                           ]
                         },
                         "tags": {
@@ -632,26 +649,19 @@
                     "type": "number"
                   },
                   "user": {
-                    "anyOf": [
-                      {
-                        "x-typescript-type": "undefined"
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
                       },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "age": {
-                            "type": "number"
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": [
-                          "name",
-                          "age"
-                        ]
+                      "age": {
+                        "type": "number"
                       }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "age"
                     ]
                   },
                   "tags": {
@@ -674,6 +684,9 @@
     },
     "/type-safety/intersection": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.intersection",
         "responses": {
           "200": {
@@ -764,6 +777,9 @@
     },
     "/type-safety/query-union": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.queryUnion",
         "responses": {
           "200": {
@@ -822,6 +838,9 @@
     },
     "/type-safety/array-query": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.arrayQuery",
         "responses": {
           "200": {
@@ -868,6 +887,9 @@
     },
     "/type-safety/coerce": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.coerce",
         "responses": {
           "200": {
@@ -956,6 +978,9 @@
     },
     "/type-safety/deep-boolean": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.deepBoolean",
         "responses": {
           "200": {
@@ -1022,6 +1047,9 @@
     },
     "/type-safety/coerce-union": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.coerceUnion",
         "responses": {
           "200": {
@@ -1113,6 +1141,9 @@
     },
     "/type-safety/template-literal": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.templateLiteral",
         "responses": {
           "200": {
@@ -1125,7 +1156,10 @@
                     "success": {
                       "type": "boolean"
                     },
-                    "id": {}
+                    "id": {
+                      "type": "string",
+                      "pattern": "^id-[+-]?(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
+                    }
                   },
                   "additionalProperties": false,
                   "required": [
@@ -1142,13 +1176,19 @@
             "name": "id",
             "in": "query",
             "required": true,
-            "schema": {}
+            "schema": {
+              "type": "string",
+              "pattern": "^id-[+-]?(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
+            }
           }
         ]
       }
     },
     "/type-safety/tags": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.tags",
         "responses": {
           "200": {
@@ -1205,6 +1245,9 @@
     },
     "/type-safety/custom-validator": {
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.customValidator",
         "responses": {
           "200": {
@@ -1263,6 +1306,9 @@
     },
     "/type-safety/head-explicit": {
       "head": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.headExplicit",
         "responses": {
           "200": {
@@ -1280,6 +1326,9 @@
     },
     "/type-safety/options-explicit": {
       "options": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.optionsExplicit",
         "responses": {
           "200": {
@@ -1306,6 +1355,9 @@
     },
     "/type-safety/get-fallback": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.getFallback",
         "responses": {
           "200": {
@@ -1332,6 +1384,9 @@
     },
     "/type-safety/all-verbs": {
       "get": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.allVerbs (GET)",
         "responses": {
           "200": {
@@ -1356,6 +1411,9 @@
         }
       },
       "post": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.allVerbs (POST)",
         "responses": {
           "200": {
@@ -1380,6 +1438,9 @@
         }
       },
       "put": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.allVerbs (PUT)",
         "responses": {
           "200": {
@@ -1404,6 +1465,9 @@
         }
       },
       "delete": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.allVerbs (DELETE)",
         "responses": {
           "200": {
@@ -1428,6 +1492,9 @@
         }
       },
       "patch": {
+        "tags": [
+          "TypeSafetyController"
+        ],
         "summary": "TypeSafetyController.allVerbs (PATCH)",
         "responses": {
           "200": {
@@ -1454,6 +1521,9 @@
     },
     "/tag-parity/number": {
       "get": {
+        "tags": [
+          "TagParityController"
+        ],
         "summary": "TagParityController.getNumber",
         "responses": {
           "200": {
@@ -1520,6 +1590,9 @@
     },
     "/tag-parity/string": {
       "get": {
+        "tags": [
+          "TagParityController"
+        ],
         "summary": "TagParityController.getString",
         "responses": {
           "200": {
@@ -1585,6 +1658,9 @@
     },
     "/tag-parity/array": {
       "post": {
+        "tags": [
+          "TagParityController"
+        ],
         "summary": "TagParityController.postArray",
         "responses": {
           "200": {
@@ -1622,6 +1698,9 @@
     },
     "/tag-parity/unique-array": {
       "post": {
+        "tags": [
+          "TagParityController"
+        ],
         "summary": "TagParityController.postUniqueArray",
         "responses": {
           "200": {
@@ -1657,6 +1736,9 @@
     },
     "/secure-controller/default": {
       "get": {
+        "tags": [
+          "SecureController"
+        ],
         "summary": "SecureController.getDefault",
         "responses": {
           "200": {
@@ -1674,6 +1756,9 @@
     },
     "/secure-controller/override": {
       "get": {
+        "tags": [
+          "SecureController"
+        ],
         "summary": "SecureController.getOverride",
         "responses": {
           "200": {
@@ -1691,6 +1776,9 @@
     },
     "/inherited/test": {
       "get": {
+        "tags": [
+          "InheritedController"
+        ],
         "summary": "InheritedController.getTest",
         "responses": {
           "200": {
@@ -1708,6 +1796,9 @@
     },
     "/inherited/override": {
       "get": {
+        "tags": [
+          "InheritedController"
+        ],
         "summary": "InheritedController.getOverride",
         "responses": {
           "200": {
@@ -1725,6 +1816,9 @@
     },
     "/di/test": {
       "get": {
+        "tags": [
+          "DiTestController"
+        ],
         "summary": "DiTestController.test",
         "responses": {
           "200": {
@@ -1759,6 +1853,9 @@
     },
     "/di/param-inject": {
       "get": {
+        "tags": [
+          "DiTestController"
+        ],
         "summary": "DiTestController.paramInject",
         "responses": {
           "200": {
@@ -1785,6 +1882,9 @@
     },
     "/di/guarded": {
       "get": {
+        "tags": [
+          "DiTestController"
+        ],
         "summary": "DiTestController.guarded",
         "responses": {
           "200": {
@@ -1811,6 +1911,9 @@
     },
     "/di/guarded-with-params": {
       "get": {
+        "tags": [
+          "DiTestController"
+        ],
         "summary": "DiTestController.guardedWithParams",
         "responses": {
           "200": {
@@ -1837,6 +1940,9 @@
     },
     "/realtime/sse": {
       "get": {
+        "tags": [
+          "RealtimeController"
+        ],
         "summary": "RealtimeController.handleSse",
         "responses": {
           "200": {
@@ -1855,6 +1961,9 @@
     },
     "/realtime/sse-strip": {
       "get": {
+        "tags": [
+          "RealtimeController"
+        ],
         "summary": "RealtimeController.handleSseStrip",
         "responses": {
           "200": {
@@ -1873,6 +1982,9 @@
     },
     "/realtime/sse-invalid": {
       "get": {
+        "tags": [
+          "RealtimeController"
+        ],
         "summary": "RealtimeController.handleSseInvalid",
         "responses": {
           "200": {
@@ -1891,6 +2003,9 @@
     },
     "math.sum": {
       "rpc": {
+        "tags": [
+          "MathMicroserviceController"
+        ],
         "summary": "MathMicroserviceController.sum",
         "responses": {
           "200": {
@@ -1931,6 +2046,9 @@
     },
     "math.greet": {
       "rpc": {
+        "tags": [
+          "MathMicroserviceController"
+        ],
         "summary": "MathMicroserviceController.greet",
         "responses": {
           "200": {
@@ -1958,6 +2076,9 @@
     },
     "logs.notify": {
       "rpc": {
+        "tags": [
+          "MathMicroserviceController"
+        ],
         "summary": "MathMicroserviceController.notify",
         "responses": {
           "200": {
@@ -1985,6 +2106,9 @@
     },
     "/return-type/exact": {
       "get": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.getExact",
         "responses": {
           "200": {
@@ -2015,6 +2139,9 @@
     },
     "/return-type/strip": {
       "get": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.getStrip",
         "responses": {
           "200": {
@@ -2045,6 +2172,9 @@
     },
     "/return-type/invalid": {
       "get": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.getInvalid",
         "responses": {
           "200": {
@@ -2075,6 +2205,9 @@
     },
     "/return-type/inferred-branch": {
       "get": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.getInferredBranch",
         "responses": {
           "200": {
@@ -2115,6 +2248,9 @@
     },
     "/return-typerpc.exact": {
       "rpc": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.rpcExact",
         "responses": {
           "200": {
@@ -2145,6 +2281,9 @@
     },
     "/return-typerpc.strip": {
       "rpc": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.rpcStrip",
         "responses": {
           "200": {
@@ -2175,6 +2314,9 @@
     },
     "/return-typerpc.invalid": {
       "rpc": {
+        "tags": [
+          "ReturnTypeController"
+        ],
         "summary": "ReturnTypeController.rpcInvalid",
         "responses": {
           "200": {
@@ -2205,6 +2347,9 @@
     },
     "/response-mode-strict/fail": {
       "get": {
+        "tags": [
+          "StrictResponseController"
+        ],
         "summary": "StrictResponseController.fail",
         "responses": {
           "200": {
@@ -2235,6 +2380,9 @@
     },
     "/response-mode-strict/override-relaxed": {
       "get": {
+        "tags": [
+          "StrictResponseController"
+        ],
         "summary": "StrictResponseController.overrideRelaxed",
         "responses": {
           "200": {
@@ -2265,6 +2413,9 @@
     },
     "/response-mode-inherited/inherited-relaxed": {
       "get": {
+        "tags": [
+          "InheritedResponseController"
+        ],
         "summary": "InheritedResponseController.inheritedRelaxed",
         "responses": {
           "200": {
@@ -2295,6 +2446,9 @@
     },
     "/response-mode-inherited/override-strict": {
       "get": {
+        "tags": [
+          "InheritedResponseController"
+        ],
         "summary": "InheritedResponseController.overrideStrict",
         "responses": {
           "200": {
@@ -2325,6 +2479,9 @@
     },
     "/unprotected-class/test": {
       "get": {
+        "tags": [
+          "UnprotectedClassController"
+        ],
         "summary": "UnprotectedClassController.test",
         "responses": {
           "200": {
@@ -2342,6 +2499,9 @@
     },
     "/unprotected-class-all/test": {
       "get": {
+        "tags": [
+          "UnprotectedClassAllController"
+        ],
         "summary": "UnprotectedClassAllController.test",
         "responses": {
           "200": {
@@ -2359,6 +2519,9 @@
     },
     "/unprotected-method/one": {
       "get": {
+        "tags": [
+          "UnprotectedMethodController"
+        ],
         "summary": "UnprotectedMethodController.getOne",
         "responses": {
           "200": {
@@ -2376,6 +2539,9 @@
     },
     "/unprotected-method/all": {
       "get": {
+        "tags": [
+          "UnprotectedMethodController"
+        ],
         "summary": "UnprotectedMethodController.getAll",
         "responses": {
           "200": {
@@ -2393,6 +2559,9 @@
     },
     "/unintercepted-class/test": {
       "get": {
+        "tags": [
+          "UninterceptedClassController"
+        ],
         "summary": "UninterceptedClassController.test",
         "responses": {
           "200": {
@@ -2410,6 +2579,9 @@
     },
     "/unintercepted-class-all/test": {
       "get": {
+        "tags": [
+          "UninterceptedClassAllController"
+        ],
         "summary": "UninterceptedClassAllController.test",
         "responses": {
           "200": {
@@ -2427,6 +2599,9 @@
     },
     "/unintercepted-method/one": {
       "get": {
+        "tags": [
+          "UninterceptedMethodController"
+        ],
         "summary": "UninterceptedMethodController.getOne",
         "responses": {
           "200": {
@@ -2444,6 +2619,9 @@
     },
     "/unintercepted-method/all": {
       "get": {
+        "tags": [
+          "UninterceptedMethodController"
+        ],
         "summary": "UninterceptedMethodController.getAll",
         "responses": {
           "200": {
@@ -2461,6 +2639,9 @@
     },
     "/middleware-test/both": {
       "get": {
+        "tags": [
+          "MiddlewareTestController"
+        ],
         "summary": "MiddlewareTestController.both",
         "responses": {
           "200": {
@@ -2505,6 +2686,9 @@
     },
     "/middleware-test/override": {
       "get": {
+        "tags": [
+          "MiddlewareTestController"
+        ],
         "summary": "MiddlewareTestController.override",
         "responses": {
           "200": {
@@ -2549,6 +2733,9 @@
     },
     "/middleware-unmiddleware/remove-one": {
       "get": {
+        "tags": [
+          "MiddlewareUnmiddlewareController"
+        ],
         "summary": "MiddlewareUnmiddlewareController.removeOne",
         "responses": {
           "200": {
@@ -2593,6 +2780,9 @@
     },
     "/middleware-unmiddleware/remove-all": {
       "get": {
+        "tags": [
+          "MiddlewareUnmiddlewareController"
+        ],
         "summary": "MiddlewareUnmiddlewareController.removeAll",
         "responses": {
           "200": {
@@ -2637,6 +2827,9 @@
     },
     "/guard-interceptor-order/test": {
       "get": {
+        "tags": [
+          "GuardInterceptorOrderController"
+        ],
         "summary": "GuardInterceptorOrderController.test",
         "responses": {
           "200": {
@@ -2654,6 +2847,9 @@
     },
     "/class-public/test": {
       "get": {
+        "tags": [
+          "ClassPublicController"
+        ],
         "summary": "ClassPublicController.test",
         "responses": {
           "200": {
@@ -2671,6 +2867,9 @@
     },
     "/method-public/test": {
       "get": {
+        "tags": [
+          "MethodPublicController"
+        ],
         "summary": "MethodPublicController.test",
         "responses": {
           "200": {
@@ -2688,6 +2887,9 @@
     },
     "/seo/blog/{slug}": {
       "get": {
+        "tags": [
+          "SeoEmitController"
+        ],
         "summary": "SeoEmitController.blog",
         "responses": {
           "200": {
@@ -2709,30 +2911,16 @@
                           "type": "string"
                         },
                         "query": {
-                          "anyOf": [
-                            {
-                              "x-typescript-type": "undefined"
-                            },
-                            {
-                              "type": "object",
-                              "properties": {},
-                              "additionalProperties": {
-                                "type": "string"
-                              }
-                            }
-                          ]
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "body": {
-                          "anyOf": [
-                            {
-                              "x-typescript-type": "undefined"
-                            },
-                            {
-                              "type": "object",
-                              "properties": {},
-                              "additionalProperties": {}
-                            }
-                          ]
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": {}
                         }
                       },
                       "additionalProperties": false,
@@ -2761,6 +2949,9 @@
     },
     "/seo/posts/{id}": {
       "get": {
+        "tags": [
+          "SeoTargetController"
+        ],
         "summary": "SeoTargetController.show",
         "responses": {
           "200": {
@@ -2795,34 +2986,11 @@
         ]
       }
     },
-    "/_internal/seo-secret": {
-      "get": {
-        "summary": "InternalEmitController.secret",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "secret": {
-                      "type": "boolean"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "required": [
-                    "secret"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/seo/pretty": {
       "get": {
+        "tags": [
+          "SeoToInternalController"
+        ],
         "summary": "SeoToInternalController.go",
         "responses": {
           "200": {
@@ -2839,30 +3007,16 @@
                       "type": "string"
                     },
                     "query": {
-                      "anyOf": [
-                        {
-                          "x-typescript-type": "undefined"
-                        },
-                        {
-                          "type": "object",
-                          "properties": {},
-                          "additionalProperties": {
-                            "type": "string"
-                          }
-                        }
-                      ]
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     },
                     "body": {
-                      "anyOf": [
-                        {
-                          "x-typescript-type": "undefined"
-                        },
-                        {
-                          "type": "object",
-                          "properties": {},
-                          "additionalProperties": {}
-                        }
-                      ]
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": {}
                     }
                   },
                   "additionalProperties": false,
@@ -2879,6 +3033,9 @@
     },
     "/scalar-wire/param/{id}": {
       "get": {
+        "tags": [
+          "ScalarWireController"
+        ],
         "summary": "ScalarWireController.paramId",
         "responses": {
           "200": {
@@ -2952,6 +3109,9 @@
     },
     "/scalar-wire/param-num/{n}": {
       "get": {
+        "tags": [
+          "ScalarWireController"
+        ],
         "summary": "ScalarWireController.paramNum",
         "responses": {
           "200": {
@@ -3025,6 +3185,9 @@
     },
     "/scalar-wire/header": {
       "get": {
+        "tags": [
+          "ScalarWireController"
+        ],
         "summary": "ScalarWireController.headerToken",
         "responses": {
           "200": {
@@ -3083,11 +3246,24 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/scalar-wire/cookie": {
       "get": {
+        "tags": [
+          "ScalarWireController"
+        ],
         "summary": "ScalarWireController.cookieSession",
         "responses": {
           "200": {
@@ -3146,11 +3322,24 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/scalar-wire/combo/{attachmentId}": {
       "get": {
+        "tags": [
+          "ScalarWireController"
+        ],
         "summary": "ScalarWireController.combo",
         "responses": {
           "200": {
@@ -3189,12 +3378,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "x-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "flag",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ]
       }
     },
     "/scalar-wire/form": {
       "post": {
+        "tags": [
+          "ScalarWireController"
+        ],
         "summary": "ScalarWireController.form",
         "responses": {
           "200": {

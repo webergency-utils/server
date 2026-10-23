@@ -93,13 +93,7 @@ function splitParameter( token: string ): { key : string, val : string } | null
 {
     const n = token.length;
     let i = 0;
-
-    while( i < n && isWs( token.charCodeAt( i )))
-    {
-        i++;
-    }
-
-    const keyStart = i;
+    const keyStart = 0;
     let inQuote = false;
     let escaped = false;
     let eq = -1;
@@ -155,16 +149,9 @@ function splitParameter( token: string ): { key : string, val : string } | null
         v++;
     }
 
-    let vend = n;
+    if( n <= v ){ return null }
 
-    while( vend > v && isWs( token.charCodeAt( vend - 1 )))
-    {
-        vend--;
-    }
-
-    if( vend <= v ){ return null }
-
-    return { key : token.slice( keyStart, keyEnd ), val : token.slice( v, vend ) };
+    return { key : token.slice( keyStart, keyEnd ), val : token.slice( v, n ) };
 }
 
 export function parseHeaders( headerBlock: string ): Record<string, string>

@@ -1,15 +1,15 @@
-import { Context } from './context.js';
+import { Context, type RequestContext } from './context.js';
 import { ApplicationRegistry, getRegistry } from './registry.js';
 import { isMultipartContentType } from '../helpers/request-reader.js';
 import { EndpointMetadata, ParamMetadata, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
 import { ServerRequest, resolveRequestFileOptions } from './server-request.js';
-import { SecurityOptions, type FileOptions } from '../decorators.js';
-import { getModuleMeta, getBranchSerializers } from './symbols.js';
+import { Scope, SecurityOptions, type FileOptions } from '../decorators.js';
+import { getModuleMeta, getBranchSerializers, hasFallbackBranchSerializers } from './symbols.js';
 import { httpStatusFromError } from '../errors.js';
 import { clientErrorBody } from '../helpers/error-response.js';
 import { invokeGuards } from './guard-runner.js';
 import { ParseError, SerializationError } from '@webergency-utils/typechecker/runtime';
-import { isBinaryOrStreamBody, toStreamOrBinaryBody } from '../helpers/response-body.js';
+import { toStreamOrBinaryBody } from '../helpers/response-body.js';
 import { resolveReviver, parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js';
 import { computeBodyHash } from '../helpers/body-hash.js';
 
@@ -74,13 +74,16 @@ const reversedInterceptorsCache = new WeakMap<EndpointMetadata, string[]>();
 const rpcRequestTemplateCache = new WeakMap<EndpointMetadata, Request>();
 
 interface EndpointPlan {
-    controllerModule      : any
-    moduleFiles           : FileOptions | undefined
-    moduleReviver         : Reviver | null | undefined
-    reversedInterceptors  : string[]
-    needsResponseInParams : boolean
-    hasMiddlewares        : boolean
-    hasGuards             : boolean
+    cacheVersion           : number
+    controllerModule       : any
+    moduleFiles            : FileOptions | undefined
+    moduleReviver          : Reviver | null | undefined
+    reversedInterceptors   : string[]
+    needsResponseInParams  : boolean
+    hasMiddlewares         : boolean
+    hasGuards              : boolean
+    singletonController?   : any
+    singletonInterceptors? : any[]
 }
 
 const endpointPlanCache = new WeakMap<ApplicationRegistry, WeakMap<EndpointMetadata, EndpointPlan>>();
@@ -112,10 +115,11 @@ function getEndpointPlan( registry: ApplicationRegistry, metadata: EndpointMetad
 
     let plan = byMeta.get( metadata );
 
-    if( !plan )
+    if( !plan || plan.cacheVersion !== registry.cacheVersion )
     {
         const controllerModule = registry.getTokenModule( metadata.controller );
         plan = {
+            cacheVersion          : registry.cacheVersion,
             controllerModule,
             moduleFiles           : resolveModuleFileOptions( controllerModule ),
             moduleReviver         : resolveModuleReviver( controllerModule ),
@@ -516,10 +520,166 @@ export class RequestProcessor
         return val;
     }
 
+    public static async resolveParams(
+        metadata: EndpointMetadata,
+        sreq: ServerRequest,
+        ctx: { success : boolean, errors : any[], mode : string },
+        securityConfig?: SecurityOptions,
+        controllerModule?: any,
+        ws?: any,
+        responseBag?: ServerResponse
+    ): Promise<any[]>
+    {
+        if( metadata.params.length === 0 ){ return [] }
+
+        const args: any[] = [];
+
+        for( const p of metadata.params )
+        {
+            args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, ws, responseBag ));
+        }
+
+        return args;
+    }
+
+    private static async resolveController(
+        plan: EndpointPlan,
+        metadata: EndpointMetadata,
+        registry: ApplicationRegistry
+    ): Promise<any>
+    {
+        const controller = await registry.getController( metadata.controller, plan.controllerModule );
+
+        if( controller && registry.getResolvedScope( metadata.controller, plan.controllerModule ) === Scope.SINGLETON )
+        {
+            plan.singletonController = controller;
+        }
+
+        return controller;
+    }
+
+    private static wrapInterceptorChain<T>(
+        interceptors: any[],
+        sreq: ServerRequest,
+        finalHandler: () => Promise<T>
+    ): () => Promise<T>
+    {
+        let chain = finalHandler;
+
+        for( let i = 0; i < interceptors.length; i++ )
+        {
+            const interceptor = interceptors[i];
+            const next = chain;
+            chain = () => interceptor.intercept( sreq, next );
+        }
+
+        return chain;
+    }
+
+    private static async buildInterceptorChain<T>(
+        plan: EndpointPlan,
+        registry: ApplicationRegistry,
+        sreq: ServerRequest,
+        finalHandler: () => Promise<T>
+    ): Promise<() => Promise<T>>
+    {
+        const resolved: any[] = [];
+        let allSingleton = true;
+
+        for( const iName of plan.reversedInterceptors )
+        {
+            const interceptor = await registry.getInterceptor( iName, plan.controllerModule );
+            resolved.push( interceptor );
+
+            if( allSingleton && registry.getResolvedScope( iName, plan.controllerModule ) !== Scope.SINGLETON )
+            {
+                allSingleton = false;
+            }
+        }
+
+        if( allSingleton )
+        {
+            plan.singletonInterceptors = resolved;
+        }
+
+        return this.wrapInterceptorChain( resolved, sreq, finalHandler );
+    }
+
+    private static async runMiddlewares(
+        plan: EndpointPlan,
+        metadata: EndpointMetadata,
+        registry: ApplicationRegistry,
+        sreq: ServerRequest,
+        resBag: ServerResponse
+    ): Promise<void>
+    {
+        for( const mName of metadata.middlewares! )
+        {
+            this.throwIfAborted( sreq );
+
+            const middlewareInstance = await registry.getInjectable( mName, plan.controllerModule );
+
+            if( !middlewareInstance )
+            {
+                throw new Error( `Middleware ${mName} not registered` );
+            }
+
+            if( typeof middlewareInstance.use === 'function' )
+            {
+                await middlewareInstance.use( sreq, resBag );
+            }
+            else if( typeof middlewareInstance.useCallback === 'function' )
+            {
+                await new Promise<void>(( resolve, reject ) =>
+                {
+                    try
+                    {
+                        const next = ( error?: any ) =>
+                        {
+                            if( error )
+                            {
+                                reject( error );
+                            }
+                            else
+                            {
+                                resolve();
+                            }
+                        };
+                        const res = middlewareInstance.useCallback( sreq, resBag, next );
+
+                        if( res instanceof Promise )
+                        {
+                            res.catch( reject );
+                        }
+                    }
+                    catch( err )
+                    {
+                        reject( err );
+                    }
+                });
+            }
+        }
+    }
+
+    public static async cleanupRequestContext( requestCtx?: RequestContext ): Promise<void>
+    {
+        if( !requestCtx ){ return }
+
+        requestCtx.wsCleanedUp = true;
+        const scoped = requestCtx.requestInstances;
+
+        if( scoped && scoped.size > 0 )
+        {
+            await ApplicationRegistry.destroyInstances( scoped.values());
+            scoped.clear();
+        }
+    }
+
     public static async execute(
         metadata: EndpointMetadata,
         req: ServerRequest | Request,
-        securityConfig?: SecurityOptions
+        securityConfig?: SecurityOptions,
+        registryArg?: ApplicationRegistry
     ): Promise<Response> 
     {
         const sreq = ServerRequest.from( req, { security : securityConfig });
@@ -529,8 +689,8 @@ export class RequestProcessor
             sreq.securityOptions = securityConfig;
         }
 
-        const registry = getRegistry();
-        const requestCtx = {
+        const registry = registryArg ?? getRegistry();
+        const requestCtx: RequestContext = {
             request   : sreq,
             metadata,
             requestId : sreq.requestID,
@@ -541,7 +701,7 @@ export class RequestProcessor
         {
             const plan = getEndpointPlan( registry, metadata );
             const { controllerModule } = plan;
-            const controller = await registry.getController( metadata.controller, controllerModule );
+            const controller = plan.singletonController ?? await this.resolveController( plan, metadata, registry );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
@@ -551,7 +711,7 @@ export class RequestProcessor
                 sreq.globalReviver
             );
 
-            const ctx = { success : true, errors : [], mode : 'strict' };
+            const ctx = { success : true, errors : [] as any[], mode : 'strict' };
             let middlewareResponse: ServerResponse | undefined =
                 ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
             const getResponseBag = (): ServerResponse =>
@@ -575,17 +735,22 @@ export class RequestProcessor
                 }
                 else
                 {
-                    const args: any[] = [];
-
-                    for( const p of metadata.params ) 
-                    {
-                        args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, undefined, middlewareResponse ));
-                    }
+                    const args = await this.resolveParams(
+                        metadata,
+                        sreq,
+                        ctx,
+                        securityConfig,
+                        controllerModule,
+                        undefined,
+                        middlewareResponse
+                    );
 
                     this.throwIfAborted( sreq );
 
                     if( !ctx.success ) 
                     {
+                        await sreq.cleanupDiskUploads();
+
                         return new Response( JSON.stringify({ success : false, message : 'request validation failed', errors : ctx.errors }), { 
                             status  : 400,
                             headers : { 'Content-Type' : 'application/json' }
@@ -721,7 +886,8 @@ export class RequestProcessor
                 }
 
                 const branchSerializer = ( typeof result === 'object' && result !== null )
-                    ? getBranchSerializers().get( result )
+                    ? ( requestCtx.branchSerializers?.get( result )
+                        ?? ( hasFallbackBranchSerializers() ? getBranchSerializers().get( result ) : undefined ))
                     : undefined;
                 const activeSerializer = branchSerializer
                     || ( typeof metadata.returnTypeSerializer === 'function' ? metadata.returnTypeSerializer : undefined );
@@ -759,11 +925,6 @@ export class RequestProcessor
                     }
                 }
 
-                if( isBinaryOrStreamBody( validatedResult ))
-                {
-                    return new Response( toStreamOrBinaryBody( validatedResult )! );
-                }
-
                 if( typeof validatedResult === 'object' && validatedResult !== null )
                 {
                     return new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } });
@@ -772,71 +933,19 @@ export class RequestProcessor
                 return new Response( validatedResult == null ? '' : String( validatedResult ));
             };
 
-            // 4. Wrap in Interceptor Chain
-            let chain = finalHandler;
-
-            for( const iName of plan.reversedInterceptors ) 
-            {
-                const interceptor = await registry.getInterceptor( iName );
-                const next = chain;
-                chain = () => interceptor.intercept( sreq, next );
-            }
+            const chain = plan.reversedInterceptors.length === 0
+                ? finalHandler
+                : ( plan.singletonInterceptors !== undefined
+                    ? this.wrapInterceptorChain( plan.singletonInterceptors, sreq, finalHandler )
+                    : await this.buildInterceptorChain( plan, registry, sreq, finalHandler ));
 
             try 
             {
                 this.throwIfAborted( sreq );
 
-                // Run Middlewares before guards
-                if( plan.hasMiddlewares ) 
+                if( plan.hasMiddlewares )
                 {
-                    const resBag = getResponseBag();
-
-                    for( const mName of metadata.middlewares! ) 
-                    {
-                        this.throwIfAborted( sreq );
-
-                        const middlewareInstance = await registry.getInjectable( mName, controllerModule );
-
-                        if( !middlewareInstance ) 
-                        {
-                            throw new Error( `Middleware ${mName} not registered` );
-                        }
-
-                        if( typeof middlewareInstance.use === 'function' ) 
-                        {
-                            await middlewareInstance.use( sreq, resBag );
-                        }
-                        else if( typeof middlewareInstance.useCallback === 'function' ) 
-                        {
-                            await new Promise<void>(( resolve, reject ) => 
-                            {
-                                try 
-                                {
-                                    const next = ( error?: any ) => 
-                                    {
-                                        if( error ) 
-                                        {
-                                            reject( error );
-                                        }
-                                        else 
-                                        {
-                                            resolve();
-                                        }
-                                    };
-                                    const res = middlewareInstance.useCallback( sreq, resBag, next );
-
-                                    if( res instanceof Promise ) 
-                                    {
-                                        res.catch( reject );
-                                    }
-                                }
-                                catch ( err ) 
-                                {
-                                    reject( err );
-                                }
-                            });
-                        }
-                    }
+                    await this.runMiddlewares( plan, metadata, registry, sreq, middlewareResponse! );
                 }
 
                 // 1. Run Guards FIRST (Security gate)
@@ -866,6 +975,8 @@ export class RequestProcessor
                     throw err;
                 }
 
+                await sreq.cleanupDiskUploads();
+
                 if( err instanceof Response ) 
                 {
                     return middlewareResponse ? middlewareResponse.applyTo( err ) : err;
@@ -881,12 +992,9 @@ export class RequestProcessor
             }
             finally
             {
-                const scoped = ( requestCtx as any ).requestInstances;
-
-                if( scoped && scoped.size > 0 )
+                if( requestCtx.requestInstances?.size )
                 {
-                    await ApplicationRegistry.destroyInstances( scoped.values());
-                    scoped.clear();
+                    await this.cleanupRequestContext( requestCtx );
                 }
             }
         });
@@ -918,15 +1026,16 @@ export class RequestProcessor
         req: ServerRequest | Request
     ): Promise<void> 
     {
-        const sreq = ServerRequest.from( req );
+        const handedOffCtx: RequestContext | undefined = ( req as any )?.__wsRequestContext;
+        const sreq: ServerRequest = handedOffCtx?.request ?? ServerRequest.from( req );
 
         if( ws?.params && Object.keys( sreq.params ).length === 0 )
         {
             sreq.params = ws.params;
         }
 
-        const registry = getRegistry();
-        const requestCtx = {
+        const registry = handedOffCtx?.registry ?? getRegistry();
+        const requestCtx: RequestContext = handedOffCtx ?? {
             request   : sreq,
             metadata,
             requestId : sreq.requestID,
@@ -937,27 +1046,41 @@ export class RequestProcessor
         {
             const plan = getEndpointPlan( registry, metadata );
             const { controllerModule } = plan;
-            const controller = await registry.getController( metadata.controller, controllerModule );
+            const controller = handedOffCtx?.wsController
+                ?? plan.singletonController
+                ?? await this.resolveController( plan, metadata, registry );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            sreq.reviver = resolveReviver(
-                metadata.reviver,
-                plan.moduleReviver,
-                sreq.globalReviver
-            );
+            if( !handedOffCtx )
+            {
+                sreq.reviver = resolveReviver(
+                    metadata.reviver,
+                    plan.moduleReviver,
+                    sreq.globalReviver
+                );
+            }
 
-            const ctx = { success : true, errors : [], mode : 'strict' };
+            const ctx = { success : true, errors : [] as any[], mode : 'strict' };
+            const middlewareResponse: ServerResponse | undefined =
+                ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
 
             try 
             {
-                // Resolve parameters (Parsing & Validation)
-                const args: any[] = [];
-
-                for( const p of metadata.params ) 
+                if( plan.hasMiddlewares )
                 {
-                    args.push( await this.resolveParam( p, sreq, ctx, undefined, controllerModule, ws ));
+                    await this.runMiddlewares( plan, metadata, registry, sreq, middlewareResponse! );
                 }
+
+                const args = await this.resolveParams(
+                    metadata,
+                    sreq,
+                    ctx,
+                    undefined,
+                    controllerModule,
+                    ws,
+                    middlewareResponse
+                );
 
                 if( !ctx.success ) 
                 {
@@ -966,8 +1089,13 @@ export class RequestProcessor
                     return;
                 }
 
-                // Execute Method
-                await controller[metadata.methodName]( ...args );
+                const finalHandler = async () => controller[metadata.methodName]( ...args );
+                const chain = plan.reversedInterceptors.length === 0
+                    ? finalHandler
+                    : ( plan.singletonInterceptors !== undefined
+                        ? this.wrapInterceptorChain( plan.singletonInterceptors, sreq, finalHandler )
+                        : await this.buildInterceptorChain( plan, registry, sreq, finalHandler ));
+                await chain();
             }
             catch ( err: any ) 
             {
@@ -982,13 +1110,7 @@ export class RequestProcessor
             }
             finally
             {
-                const scoped = ( requestCtx as any ).requestInstances;
-
-                if( scoped && scoped.size > 0 )
-                {
-                    await ApplicationRegistry.destroyInstances( scoped.values());
-                    scoped.clear();
-                }
+                await this.cleanupRequestContext( requestCtx );
             }
         });
     }
@@ -1004,7 +1126,7 @@ export class RequestProcessor
         );
 
         const registry = getRegistry();
-        const requestCtx = {
+        const requestCtx: RequestContext = {
             request   : sreq,
             metadata,
             requestId : sreq.requestID,
@@ -1017,25 +1139,43 @@ export class RequestProcessor
             {
                 const plan = getEndpointPlan( registry, metadata );
                 const { controllerModule } = plan;
-                const controller = await registry.getController( metadata.controller, controllerModule );
+                const controller = plan.singletonController ?? await this.resolveController( plan, metadata, registry );
 
                 if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-                const ctx = { success : true, errors : [], mode : 'strict' };
+                const ctx = { success : true, errors : [] as any[], mode : 'strict' };
+                let middlewareResponse: ServerResponse | undefined =
+                    ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
+                const getResponseBag = (): ServerResponse =>
+                    middlewareResponse ?? ( middlewareResponse = new ServerResponse());
+
+                if( plan.hasMiddlewares )
+                {
+                    await this.runMiddlewares( plan, metadata, registry, sreq, middlewareResponse! );
+                }
 
                 // 1. Run Guards
                 if( plan.hasGuards )
                 {
-                    await invokeGuards( metadata, sreq, { ctx, controller, controllerModule });
+                    await invokeGuards( metadata, sreq, {
+                        ctx,
+                        controller,
+                        controllerModule,
+                        response    : middlewareResponse,
+                        getResponse : getResponseBag
+                    });
                 }
 
                 // 2. Resolve parameters (Validation)
-                const args: any[] = [];
-
-                for( const p of metadata.params ) 
-                {
-                    args.push( await this.resolveParam( p, sreq, ctx, undefined, controllerModule ));
-                }
+                const args = await this.resolveParams(
+                    metadata,
+                    sreq,
+                    ctx,
+                    undefined,
+                    controllerModule,
+                    undefined,
+                    middlewareResponse
+                );
 
                 if( !ctx.success ) 
                 {
@@ -1064,25 +1204,19 @@ export class RequestProcessor
                     return result;
                 };
 
-                let chain = finalHandler;
-
-                for( const iName of plan.reversedInterceptors ) 
-                {
-                    const interceptor = await registry.getInterceptor( iName );
-                    const next = chain;
-                    chain = () => interceptor.intercept( sreq, next );
-                }
+                const chain = plan.reversedInterceptors.length === 0
+                    ? finalHandler
+                    : ( plan.singletonInterceptors !== undefined
+                        ? this.wrapInterceptorChain( plan.singletonInterceptors, sreq, finalHandler )
+                        : await this.buildInterceptorChain( plan, registry, sreq, finalHandler ));
 
                 return await chain();
             }
             finally
             {
-                const scoped = ( requestCtx as any ).requestInstances;
-
-                if( scoped && scoped.size > 0 )
+                if( requestCtx.requestInstances?.size )
                 {
-                    await ApplicationRegistry.destroyInstances( scoped.values());
-                    scoped.clear();
+                    await this.cleanupRequestContext( requestCtx );
                 }
             }
         });

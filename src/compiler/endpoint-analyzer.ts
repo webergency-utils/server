@@ -5,8 +5,8 @@ import type { ValidationMode } from '@webergency-utils/typechecker';
 import { ProjectRegistry, ModuleGraphInfo } from './registry.js';
 import {
     HTTP_METHOD_DECORATORS,
-    decoratorIdent,
     findDecoratorNamed,
+    hasDecoratorNamed,
     extractCorsConfig,
     extractSecurityConfig,
     extractFileConfig,
@@ -70,33 +70,334 @@ function extractInjectableScope( injectableDec: ts.Decorator ): number | undefin
     return undefined;
 }
 
-function collectModuleGraph( statement: ts.ClassDeclaration, sourceFile: ts.SourceFile, registry: ProjectRegistry ): void
+interface ParsedModuleSummary {
+    name              : string
+    global            : boolean
+    localTokens       : Set<string>
+    imports           : Set<string>
+    hasDynamicImports : boolean
+    exports           : Set<string>
+    exportNodes       : Map<string, ts.Expression>
+    hostNodes         : Array<{ name : string, decl : ts.ClassDeclaration, refNode : ts.Expression }>
+}
+
+const programModuleSummariesCache = new WeakMap<ts.Program, Map<string, ParsedModuleSummary>>();
+
+function extractProviderTokenName( expr: ts.Expression ): string | null
+{
+    if( ts.isIdentifier( expr )){ return expr.text }
+
+    if( ts.isStringLiteral( expr )){ return expr.text }
+
+    if( ts.isObjectLiteralExpression( expr ))
+    {
+        for( const prop of expr.properties )
+        {
+            if( ts.isPropertyAssignment( prop ) && ts.isIdentifier( prop.name ) && prop.name.text === 'token' )
+            {
+                if( ts.isStringLiteral( prop.initializer ) || ts.isIdentifier( prop.initializer ))
+                {
+                    return prop.initializer.text;
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function resolveClassDeclarationFromExpr( expr: ts.Expression, checker: ts.TypeChecker ): ts.ClassDeclaration | null
+{
+    const targetExpr = ts.isObjectLiteralExpression( expr )
+        ? ( expr.properties.find(
+            ( p ): p is ts.PropertyAssignment => ts.isPropertyAssignment( p ) && ts.isIdentifier( p.name ) && p.name.text === 'class'
+        )?.initializer ?? expr )
+        : expr;
+
+    const sym = checker.getSymbolAtLocation( targetExpr );
+    const resolvedSym = sym && ( sym.flags & ts.SymbolFlags.Alias )
+        ? checker.getAliasedSymbol( sym )
+        : sym;
+    const decl = resolvedSym?.valueDeclaration || resolvedSym?.declarations?.[0];
+
+    if( decl && ts.isClassDeclaration( decl ))
+    {
+        return decl;
+    }
+
+    const type = checker.getTypeAtLocation( targetExpr );
+    const typeDecl = type.symbol?.valueDeclaration || type.symbol?.declarations?.[0];
+
+    return ( typeDecl && ts.isClassDeclaration( typeDecl )) ? typeDecl : null;
+}
+
+function parseModuleSummary( stmt: ts.ClassDeclaration, checker: ts.TypeChecker ): ParsedModuleSummary | undefined
+{
+    if( !stmt.name ){ return undefined }
+
+    const decorators = ts.getDecorators( stmt );
+    const moduleDec = findDecoratorNamed( decorators, 'Module' );
+
+    if( !moduleDec || !ts.isCallExpression( moduleDec.expression )){ return undefined }
+
+    const modName = stmt.name.text;
+    const summary: ParsedModuleSummary = {
+        name              : modName,
+        global            : hasDecoratorNamed( decorators, 'Global' ),
+        localTokens       : new Set([ modName ]),
+        imports           : new Set(),
+        hasDynamicImports : false,
+        exports           : new Set(),
+        exportNodes       : new Map(),
+        hostNodes         : []
+    };
+
+    const arg = moduleDec.expression.arguments[0];
+
+    if( !arg || !ts.isObjectLiteralExpression( arg )){ return summary }
+
+    for( const prop of arg.properties )
+    {
+        if( !ts.isPropertyAssignment( prop ) || !ts.isIdentifier( prop.name )){ continue }
+
+        const key = prop.name.text;
+        const elems = extractClassReferences( prop.initializer );
+
+        if( key === 'providers' || key === 'controllers' || key === 'guards' || key === 'interceptors' )
+        {
+            for( const el of elems )
+            {
+                const tok = extractProviderTokenName( el );
+
+                if( tok ){ summary.localTokens.add( tok ) }
+
+                const clsDecl = resolveClassDeclarationFromExpr( el, checker );
+
+                if( clsDecl && clsDecl.name )
+                {
+                    summary.hostNodes.push({ name : clsDecl.name.text, decl : clsDecl, refNode : el });
+                }
+            }
+        }
+        else if( key === 'imports' )
+        {
+            for( const el of elems )
+            {
+                if( ts.isIdentifier( el ))
+                {
+                    summary.imports.add( el.text );
+                }
+                else
+                {
+                    summary.hasDynamicImports = true;
+                }
+            }
+        }
+        else if( key === 'exports' )
+        {
+            for( const el of elems )
+            {
+                const tok = extractProviderTokenName( el );
+
+                if( tok )
+                {
+                    summary.exports.add( tok );
+                    summary.exportNodes.set( tok, el );
+                }
+            }
+        }
+    }
+
+    return summary;
+}
+
+function getProgramModuleSummaries( program: ts.Program, checker: ts.TypeChecker ): Map<string, ParsedModuleSummary>
+{
+    let cached = programModuleSummariesCache.get( program );
+
+    if( cached ){ return cached }
+
+    cached = new Map();
+
+    for( const sf of program.getSourceFiles())
+    {
+        if( sf.isDeclarationFile || sf.fileName.includes( 'node_modules' )){ continue }
+
+        for( const stmt of sf.statements )
+        {
+            if( !ts.isClassDeclaration( stmt )){ continue }
+
+            const summary = parseModuleSummary( stmt, checker );
+
+            if( summary )
+            {
+                cached.set( summary.name, summary );
+            }
+        }
+    }
+
+    programModuleSummariesCache.set( program, cached );
+
+    return cached;
+}
+
+function isTokenExportedBySummary(
+    token: string,
+    modName: string,
+    summaries: Map<string, ParsedModuleSummary>,
+    visited = new Set<string>()
+): boolean
+{
+    if( visited.has( modName )){ return false }
+    visited.add( modName );
+
+    const mod = summaries.get( modName );
+
+    if( !mod ){ return false }
+
+    if( mod.exports.has( token )){ return true }
+
+    for( const exp of mod.exports )
+    {
+        if( summaries.has( exp ) && isTokenExportedBySummary( token, exp, summaries, visited ))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isTokenVisibleInSummary(
+    token: string,
+    modName: string,
+    summaries: Map<string, ParsedModuleSummary>,
+    visited = new Set<string>()
+): boolean
+{
+    if( visited.has( modName )){ return false }
+    visited.add( modName );
+
+    const mod = summaries.get( modName );
+
+    if( !mod ){ return false }
+
+    if( mod.localTokens.has( token )){ return true }
+
+    for( const impName of mod.imports )
+    {
+        if( isTokenExportedBySummary( token, impName, summaries, new Set( visited )))
+        {
+            return true;
+        }
+    }
+
+    for( const [ gName, gMod ] of summaries )
+    {
+        if( gMod.global && gName !== modName && isTokenExportedBySummary( token, gName, summaries, new Set( visited )))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function validateModuleDiGraph(
+    moduleName: string,
+    program: ts.Program,
+    checker: ts.TypeChecker,
+    diagnostics: DiagnosticReporter
+): void
+{
+    const summaries = getProgramModuleSummaries( program, checker );
+    const summary = summaries.get( moduleName );
+
+    if( !summary || summary.hasDynamicImports ){ return }
+
+    for( const [ expToken, expNode ] of summary.exportNodes )
+    {
+        const canExport = summary.localTokens.has( expToken )
+            || summary.imports.has( expToken )
+            || Array.from( summary.imports ).some( imp => isTokenExportedBySummary( expToken, imp, summaries ));
+
+        if( !canExport )
+        {
+            diagnostics.error(
+                expNode,
+                DiagnosticCode.DI_VISIBILITY,
+                `Module "${moduleName}" cannot export "${expToken}" because it is neither provided by "${moduleName}" nor imported.`
+            );
+        }
+    }
+
+    for( const { name : hostName, decl : hostDecl, refNode } of summary.hostNodes )
+    {
+        const ctorDeps = findConstructorDeps( hostDecl, checker ) || [];
+        const propDeps = Object.values( resolvePropertyDeps( hostDecl, checker ) || {});
+        const allDeps = [ ...ctorDeps, ...propDeps ];
+
+        for( const depToken of allDeps )
+        {
+            if( !depToken || depToken === 'any' ){ continue }
+
+            if( isTokenVisibleInSummary( depToken, moduleName, summaries )){ continue }
+
+            let ownerModule: ParsedModuleSummary | undefined;
+
+            for( const [ otherName, otherSummary ] of summaries )
+            {
+                if( otherName !== moduleName && otherSummary.localTokens.has( depToken ))
+                {
+                    ownerModule = otherSummary;
+                    break;
+                }
+            }
+
+            if( ownerModule )
+            {
+                const isImported = summary.imports.has( ownerModule.name );
+                const message = isImported
+                    ? `Cannot inject "${depToken}" into "${hostName}" in module "${moduleName}": "${depToken}" is declared in "${ownerModule.name}" but is not in its exports.`
+                    : `Cannot inject "${depToken}" into "${hostName}" in module "${moduleName}": "${depToken}" is declared in "${ownerModule.name}", which is not imported by "${moduleName}" (and is not @Global).`;
+
+                diagnostics.error( refNode, DiagnosticCode.DI_VISIBILITY, message );
+            }
+        }
+    }
+}
+
+function collectModuleGraph(
+    statement: ts.ClassDeclaration,
+    sourceFile: ts.SourceFile,
+    registry: ProjectRegistry,
+    program: ts.Program,
+    checker: ts.TypeChecker,
+    diagnostics: DiagnosticReporter
+): void
 {
     const decorators = ts.getDecorators( statement );
 
     if( !decorators || !statement.name ){ return }
 
-    let moduleCall: ts.CallExpression | undefined;
-    let isGlobal = false;
+    const moduleDec = findDecoratorNamed( decorators, 'Module' );
 
-    for( const d of decorators )
+    if( !moduleDec || !ts.isCallExpression( moduleDec.expression )){ return }
+
+    const moduleCall = moduleDec.expression;
+    const isGlobal = hasDecoratorNamed( decorators, 'Global' );
+    const moduleName = statement.name.text;
+    const existingMod = registry.modules.get( moduleName );
+    const isDuplicateMod = Boolean( existingMod && existingMod.path !== sourceFile.fileName );
+
+    if( isDuplicateMod )
     {
-        const ident = decoratorIdent( d );
-
-        if( !ts.isIdentifier( ident )){ continue }
-
-        if( ident.text === 'Module' && ts.isCallExpression( d.expression ))
-        {
-            moduleCall = d.expression;
-        }
-
-        if( ident.text === 'Global' )
-        {
-            isGlobal = true;
-        }
+        diagnostics.error(
+            statement.name,
+            DiagnosticCode.DUPLICATE_CLASS,
+            `Duplicate module class name "${moduleName}" already declared in ${existingMod!.path}. Modules are keyed by class name; rename one of them.`
+        );
     }
-
-    if( !moduleCall ){ return }
 
     const graph: ModuleGraphInfo = { path : sourceFile.fileName, global : isGlobal };
     const arg = moduleCall.arguments[0];
@@ -124,7 +425,12 @@ function collectModuleGraph( statement: ts.ClassDeclaration, sourceFile: ts.Sour
         }
     }
 
-    registry.modules.set( statement.name.text, graph );
+    if( !isDuplicateMod )
+    {
+        registry.modules.set( moduleName, graph );
+    }
+
+    validateModuleDiGraph( moduleName, program, checker, diagnostics );
 }
 
 function isAsyncMethod( method: ts.MethodDeclaration ): boolean
@@ -248,20 +554,6 @@ function resolveDeclaredBranchType( bType: ts.Type, declaredUnion: ts.UnionType,
     if( candidateArms.length > 1 && ( checker as any ).getUnionType )
     {
         return ( checker as any ).getUnionType( candidateArms );
-    }
-
-    const matching = declaredUnion.types.filter( arm => checker.isTypeAssignableTo( bType, arm ));
-
-    if( matching.length === 1 )
-    {
-        return matching[0];
-    }
-
-    const nonPrimitiveArm = matching.find( arm => ( arm.flags & ts.TypeFlags.NonPrimitive ) !== 0 );
-
-    if( nonPrimitiveArm && matching.every( arm => ( arm.flags & ts.TypeFlags.NonPrimitive ) !== 0 ))
-    {
-        return nonPrimitiveArm;
     }
 
     return bType;
@@ -446,19 +738,42 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                         const scope = extractInjectableScope( injectableDec );
                         const existing = registry.providers.get( providerName );
 
-                        registry.providers.set( providerName, {
-                            path  : sourceFile.fileName,
-                            scope : scope ?? existing?.scope
-                        });
+                        if( existing && existing.path !== sourceFile.fileName )
+                        {
+                            diagnostics.error(
+                                statement.name,
+                                DiagnosticCode.DUPLICATE_CLASS,
+                                `Duplicate provider class name "${providerName}" already declared in ${existing.path}. Providers are keyed by class name; rename one of them.`
+                            );
+                        }
+                        else
+                        {
+                            registry.providers.set( providerName, {
+                                path  : sourceFile.fileName,
+                                scope : scope ?? existing?.scope
+                            });
+                        }
                     }
 
-                    collectModuleGraph( statement, sourceFile, registry );
+                    collectModuleGraph( statement, sourceFile, registry, program, checker, diagnostics );
 
                     if( controllerDec ) 
                     {
                         const controllerName = statement.name?.text || 'Anonymous';
+                        const existingCtrl = registry.controllers.get( controllerName );
 
-                        if( !registry.controllers.has( controllerName )) { registry.controllers.set( controllerName, { path : sourceFile.fileName, injections : new Map() }) }
+                        if( existingCtrl && existingCtrl.path !== sourceFile.fileName )
+                        {
+                            diagnostics.error(
+                                statement.name ?? statement,
+                                DiagnosticCode.DUPLICATE_CLASS,
+                                `Duplicate controller class name "${controllerName}" already declared in ${existingCtrl.path}. Controllers are keyed by class name; rename one of them.`
+                            );
+                        }
+                        else if( !existingCtrl )
+                        {
+                            registry.controllers.set( controllerName, { path : sourceFile.fileName, injections : new Map() });
+                        }
 
                         const prefix = ( controllerDec.expression as ts.CallExpression ).arguments[0] as ts.StringLiteral;
                         const classPublic = hasPublicDecorator( decorators );

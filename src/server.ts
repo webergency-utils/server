@@ -5,7 +5,7 @@ import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/regist
 import { bootstrapRegistry } from './core/bootstrap.js';
 import { EndpointMetadata, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
 import { ServerRequest } from './core/server-request.js';
-import { Context } from './core/context.js';
+import { Context, type RequestContext } from './core/context.js';
 import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
 import { handleCors, isPreflight } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders, getAllowedContentTypesSet } from './helpers/security.js';
@@ -114,6 +114,77 @@ export type ServerEvents = {
     error          : ( err: Error ) => void
 };
 
+function setCorsHeader( headers: Headers, key: string, value: string ): void
+{
+    if( key === 'Vary' || key === 'vary' )
+    {
+        const existing = headers.get( 'Vary' );
+
+        if( existing && existing !== '*' )
+        {
+            const parts = existing.split( ',' ).map( s => s.trim().toLowerCase());
+
+            if( !parts.includes( value.toLowerCase()))
+            {
+                headers.set( 'Vary', `${existing}, ${value}` );
+            }
+
+            return;
+        }
+
+        if( existing === '*' ){ return }
+    }
+
+    headers.set( key, value );
+}
+
+const compiledSecurityHeadersCache = new WeakMap<SecurityOptions, [ string, string ][]>();
+
+function getCompiledSecurityHeaders( securityConfig: SecurityOptions ): [ string, string ][]
+{
+    let cached = compiledSecurityHeadersCache.get( securityConfig );
+
+    if( !cached )
+    {
+        cached = Object.entries( generateSecurityHeaders( securityConfig ));
+        compiledSecurityHeadersCache.set( securityConfig, cached );
+    }
+
+    return cached;
+}
+
+function applyFinalHeaders(
+    headers: Headers,
+    corsHeaders: Record<string, string> | Response | null,
+    secHeaders: [ string, string ][] | null,
+    allowHeader: string | undefined,
+    requestId: string
+): void
+{
+    if( corsHeaders && !( corsHeaders instanceof Response ))
+    {
+        for( const key in corsHeaders )
+        {
+            setCorsHeader( headers, key, corsHeaders[key]);
+        }
+    }
+
+    if( secHeaders )
+    {
+        for( let i = 0; i < secHeaders.length; i++ )
+        {
+            headers.set( secHeaders[i][0], secHeaders[i][1]);
+        }
+    }
+
+    if( allowHeader )
+    {
+        headers.set( 'Allow', allowHeader );
+    }
+
+    headers.set( REQUEST_ID_HEADER, requestId );
+}
+
 export class Server extends EventEmitter 
 {
     /** High-priority SEO route group (`@Seo`). */
@@ -136,6 +207,7 @@ export class Server extends EventEmitter
     private compiledTrustProxy : CompiledTrustProxy | null;
     private hasSeoRoutes = false;
     private baseSecurityConfig : SecurityOptions | undefined;
+    private routeSecurityCache = new WeakMap<EndpointMetadata, SecurityOptions | undefined>();
     public logger              : Logger;
 
     public get isShuttingDown(): boolean 
@@ -199,7 +271,6 @@ export class Server extends EventEmitter
 
             const publicKeys = new Set<string>();
             const internalKeys = new Set<string>();
-            const seoKeys = new Set<string>();
 
             for( const endpoint of this.registry.getEndpoints())
             {
@@ -214,22 +285,11 @@ export class Server extends EventEmitter
 
                 if( endpoint.seo )
                 {
-                    if( seoKeys.has( key ))
-                    {
-                        throw new Error( `Duplicate SEO route: ${key}` );
-                    }
-
-                    seoKeys.add( key );
                     this.hasSeoRoutes = true;
                     this.seoRouter.add( endpoint );
                 }
                 else if( endpoint.internal )
                 {
-                    if( internalKeys.has( key ))
-                    {
-                        throw new Error( `Duplicate Internal route: ${key}` );
-                    }
-
                     if( publicKeys.has( key ))
                     {
                         throw new Error( `Internal route ${key} conflicts with a public route` );
@@ -240,11 +300,6 @@ export class Server extends EventEmitter
                 }
                 else
                 {
-                    if( publicKeys.has( key ))
-                    {
-                        throw new Error( `Duplicate public route: ${key}` );
-                    }
-
                     if( internalKeys.has( key ))
                     {
                         throw new Error( `Public route ${key} conflicts with an Internal route` );
@@ -343,11 +398,6 @@ export class Server extends EventEmitter
         {
             process.on( 'SIGTERM', this.sigtermListener );
             process.on( 'SIGINT', this.sigintListener );
-        } 
-        else if(( globalThis as any ).Deno?.addSignalListener ) 
-        {
-            ( globalThis as any ).Deno.addSignalListener( 'SIGTERM', this.sigtermListener );
-            ( globalThis as any ).Deno.addSignalListener( 'SIGINT', this.sigintListener );
         }
     }
 
@@ -358,18 +408,6 @@ export class Server extends EventEmitter
             if( this.sigtermListener ){ process.off( 'SIGTERM', this.sigtermListener ) }
 
             if( this.sigintListener ){ process.off( 'SIGINT', this.sigintListener ) }
-        }
-        else if( typeof process !== 'undefined' && typeof process.removeListener === 'function' ) 
-        {
-            if( this.sigtermListener ){ process.removeListener( 'SIGTERM', this.sigtermListener ) }
-
-            if( this.sigintListener ){ process.removeListener( 'SIGINT', this.sigintListener ) }
-        }
-        else if(( globalThis as any ).Deno?.removeSignalListener ) 
-        {
-            if( this.sigtermListener ){ ( globalThis as any ).Deno.removeSignalListener( 'SIGTERM', this.sigtermListener ) }
-
-            if( this.sigintListener ){ ( globalThis as any ).Deno.removeSignalListener( 'SIGINT', this.sigintListener ) }
         }
         this.sigtermListener = undefined;
         this.sigintListener = undefined;
@@ -516,6 +554,11 @@ export class Server extends EventEmitter
     /** Allow list for external clients (SEO ∪ public; never Internal). */
     private externalAllowedMethods( path: string ): string[]
     {
+        if( !this.hasSeoRoutes )
+        {
+            return this.router.allowedMethods( path );
+        }
+
         const allowed = new Set<string>([
             ...this.seoRouter.allowedMethods( path ),
             ...this.router.allowedMethods( path )
@@ -563,7 +606,7 @@ export class Server extends EventEmitter
             const controller = new AbortController();
             sreq.signal = controller.signal;
             let timer: ReturnType<typeof setTimeout> | undefined;
-            const work = RequestProcessor.execute( metadata, sreq, securityConfig );
+            const work = RequestProcessor.execute( metadata, sreq, securityConfig, this.registry );
 
             try
             {
@@ -586,7 +629,7 @@ export class Server extends EventEmitter
             }
         }
 
-        return RequestProcessor.execute( metadata, sreq, securityConfig );
+        return RequestProcessor.execute( metadata, sreq, securityConfig, this.registry );
     }
 
     /**
@@ -602,8 +645,8 @@ export class Server extends EventEmitter
         sreq.recordForwardHop( hopKey, MAX_FORWARD_DEPTH );
 
         const match =
-            this.router.lookup( method, path ).match
-            || this.internalRouter.lookup( method, path ).match;
+            this.router.match( method, path )
+            || this.internalRouter.match( method, path );
 
         if( !match )
         {
@@ -627,29 +670,13 @@ export class Server extends EventEmitter
         sreq.routeFiles = match.metadata.files;
         sreq.forwardBody = target.body ? target.body : undefined;
 
-        const securityConfig = match.metadata.security !== undefined
-            ? mergeSecurityConfigs([ this.baseSecurityConfig, match.metadata.security ])
-            : this.baseSecurityConfig;
+        const securityConfig = this.resolveEndpointSecurity( match.metadata );
 
-        try
-        {
-            // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
-            return await this.runEndpoint( match.metadata, sreq, securityConfig );
-        }
-        catch( err: any )
-        {
-            if( err instanceof SeoFallthrough )
-            {
-                throw Object.assign(
-                    new Error( 'SEO fallthrough is not valid during forward' ),
-                    { status : 500 }
-                );
-            }
-
-            throw err;
-        }
+        // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
+        return await this.runEndpoint( match.metadata, sreq, securityConfig );
     }
 
+    /** @internal */
     public fetch = async ( request: Request ): Promise<Response> => 
     {
         const probe = await this.answerHealthProbe( request );
@@ -658,7 +685,7 @@ export class Server extends EventEmitter
 
         await this.ensureReady();
 
-        return runWithRegistry( this.registry, () => this.handleFetch( request ));
+        return this.handleFetch( request );
     };
 
     /**
@@ -694,29 +721,24 @@ export class Server extends EventEmitter
             return new Response( JSON.stringify({ status : 'ok' }), { status : 200, headers });
         }
 
-        if( pathname === paths.ready )
+        try
         {
-            try
-            {
-                await this.ensureReady();
-            }
-            catch
-            {
-                return new Response(
-                    JSON.stringify({ status : 'not_ready' }),
-                    { status : 503, headers }
-                );
-            }
-
-            const ready = this.isReady();
-
+            await this.ensureReady();
+        }
+        catch
+        {
             return new Response(
-                JSON.stringify({ status : ready ? 'ready' : 'not_ready' }),
-                { status : ready ? 200 : 503, headers }
+                JSON.stringify({ status : 'not_ready' }),
+                { status : 503, headers }
             );
         }
 
-        return null;
+        const ready = this.isReady();
+
+        return new Response(
+            JSON.stringify({ status : ready ? 'ready' : 'not_ready' }),
+            { status : ready ? 200 : 503, headers }
+        );
     }
 
     private isReady(): boolean
@@ -729,6 +751,24 @@ export class Server extends EventEmitter
         return this.listening;
     }
 
+    private resolveEndpointSecurity( metadata?: EndpointMetadata ): SecurityOptions | undefined
+    {
+        if( !metadata || metadata.security === undefined )
+        {
+            return this.baseSecurityConfig;
+        }
+
+        if( this.routeSecurityCache.has( metadata ))
+        {
+            return this.routeSecurityCache.get( metadata );
+        }
+
+        const merged = mergeSecurityConfigs([ this.baseSecurityConfig, metadata.security ]);
+        this.routeSecurityCache.set( metadata, merged );
+
+        return merged;
+    }
+
     /**
      * Apply CORS, security, optional Allow, and `X-Request-Id` in one pass.
      * Falls back to cloning the Response if its headers are immutable.
@@ -738,66 +778,23 @@ export class Server extends EventEmitter
         request: Request,
         requestId: string,
         corsConfig?: CorsOptions,
-        securityConfig?: SecurityOptions | boolean,
+        securityConfig?: SecurityOptions,
         allowHeader?: string
     ): Response
     {
         const corsHeaders = corsConfig ? handleCors( request, corsConfig ) : null;
-        const secHeaders = securityConfig !== undefined ? generateSecurityHeaders( securityConfig ) : null;
+        const secHeaders = securityConfig !== undefined ? getCompiledSecurityHeaders( securityConfig ) : null;
 
         try
         {
-            if( corsHeaders && !( corsHeaders instanceof Response ))
-            {
-                for( const key in corsHeaders )
-                {
-                    res.headers.set( key, corsHeaders[key]);
-                }
-            }
-
-            if( secHeaders )
-            {
-                for( const key in secHeaders )
-                {
-                    res.headers.set( key, secHeaders[key]);
-                }
-            }
-
-            if( allowHeader )
-            {
-                res.headers.set( 'Allow', allowHeader );
-            }
-
-            res.headers.set( REQUEST_ID_HEADER, requestId );
+            applyFinalHeaders( res.headers, corsHeaders, secHeaders, allowHeader, requestId );
 
             return res;
         }
         catch
         {
             const merged = new Headers( res.headers );
-
-            if( corsHeaders && !( corsHeaders instanceof Response ))
-            {
-                for( const key in corsHeaders )
-                {
-                    merged.set( key, corsHeaders[key]);
-                }
-            }
-
-            if( secHeaders )
-            {
-                for( const key in secHeaders )
-                {
-                    merged.set( key, secHeaders[key]);
-                }
-            }
-
-            if( allowHeader )
-            {
-                merged.set( 'Allow', allowHeader );
-            }
-
-            merged.set( REQUEST_ID_HEADER, requestId );
+            applyFinalHeaders( merged, corsHeaders, secHeaders, allowHeader, requestId );
 
             return new Response( res.body, {
                 status     : res.status,
@@ -812,11 +809,11 @@ export class Server extends EventEmitter
         request: Request,
         sreq: ServerRequest,
         method: string,
-        path: string
+        routeKey: string
     ): void
     {
         // Enforce allowedContentTypes (require a matching CT when a body is indicated)
-        if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' ) 
+        if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'WS' ) 
         {
             const contentType = getContentType( request );
             const allowed = getAllowedContentTypesSet( cfg );
@@ -838,7 +835,7 @@ export class Server extends EventEmitter
         if( cfg?.rateLimit ) 
         {
             const ip = sreq.ip;
-            const limit = this.rateLimiter.consume( ip, path, cfg.rateLimit );
+            const limit = this.rateLimiter.consume( ip, routeKey, cfg.rateLimit );
 
             if( !limit.allowed ) 
             {
@@ -919,9 +916,15 @@ export class Server extends EventEmitter
             // participates in external lookup.
             const seoMatches = ( isUpgrade || !this.hasSeoRoutes ) ? [] : this.seoRouter.matchAll( method, path );
             const publicLookup = this.router.lookup( method, path );
-            let cachedExternalAllowed: string[] | undefined;
             const getExternalAllowed = (): string[] =>
-                cachedExternalAllowed ?? ( cachedExternalAllowed = this.externalAllowedMethods( path ));
+            {
+                if( !this.hasSeoRoutes && !publicLookup.match )
+                {
+                    return publicLookup.allowed;
+                }
+
+                return this.externalAllowedMethods( path );
+            };
 
             const match = seoMatches[0] || publicLookup.match;
             finalMatch = match || ( method === 'OPTIONS'
@@ -929,10 +932,7 @@ export class Server extends EventEmitter
                 : null );
 
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
-            const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
-            const securityConfig = routeSecurity !== undefined
-                ? mergeSecurityConfigs([ this.baseSecurityConfig, routeSecurity ])
-                : this.baseSecurityConfig;
+            const securityConfig = this.resolveEndpointSecurity( finalMatch?.metadata );
 
             // A genuine CORS preflight is answered here, before guards run. Browsers omit
             // credentials on preflight, so dispatching it into a @Protect'ed route would
@@ -997,29 +997,19 @@ export class Server extends EventEmitter
             if( isUpgrade ) 
             {
                 // WS only lives on the public router (SEO/Internal are HTTP resolvers).
-                const wsMatch = publicLookup.match;
-
-                if( !wsMatch )
-                {
-                    this.logRequestEnd( startTime, method, path, 404, requestId, 'Not Found' );
-
-                    return this.finalizeResponse( new Response( 'Not Found', { status : 404 }), request, requestId );
-                }
-
+                const wsMatch = publicLookup.match!;
                 finalMatch = wsMatch;
 
-                // Enforce guards before upgrading
+                const wsSecurity = this.resolveEndpointSecurity( wsMatch.metadata );
+                this.enforceSecurityGates( wsSecurity, request, sreq, 'WS', wsMatch.metadata.path );
+
+                // Enforce guards + upgrade within request context
                 const registry = this.registry;
                 const controllerModule = registry.getTokenModule( finalMatch.metadata.controller );
-                const controller = await registry.getController( finalMatch.metadata.controller, controllerModule );
-
-                if( !controller ) { throw new Error( `Controller ${finalMatch.metadata.controller} not registered` ) }
-
-                // Run Guards + upgrade within request context
                 sreq.params = finalMatch.params;
                 RequestProcessor.applyReviver( sreq, finalMatch.metadata, controllerModule );
                 const ctx = { success : true, errors : [], mode : 'strict' };
-                const requestCtx = {
+                const requestCtx: RequestContext = {
                     request  : sreq,
                     metadata : wsMatch.metadata,
                     requestId,
@@ -1028,14 +1018,22 @@ export class Server extends EventEmitter
 
                 return await Context.run( requestCtx, async () =>
                 {
+                    let handedOffToWs = false;
                     try
                     {
+                        const controller = await registry.getController( finalMatch!.metadata.controller, controllerModule );
+
+                        if( !controller ) { throw new Error( `Controller ${finalMatch!.metadata.controller} not registered` ) }
+
+                        requestCtx.wsController = controller;
+
                         // The socket does not exist until after the upgrade, so @ConnectedSocket is null.
                         await invokeGuards( wsMatch.metadata, sreq, {
                             ctx,
                             controller,
                             controllerModule,
-                            websocket : null
+                            securityConfig : wsSecurity,
+                            websocket      : null
                         });
 
                         if( !ctx.success ) 
@@ -1052,7 +1050,17 @@ export class Server extends EventEmitter
 
                         if( this.serverAdapter && typeof this.serverAdapter.upgrade === 'function' ) 
                         {
+                            ( request as any ).__wsRequestContext = requestCtx;
                             const res = await this.serverAdapter.upgrade( request, finalMatch!.metadata, finalMatch!.params );
+
+                            if( res.status < 400 && !requestCtx.wsCleanedUp )
+                            {
+                                handedOffToWs = true;
+                            }
+                            else
+                            {
+                                delete ( request as any ).__wsRequestContext;
+                            }
 
                             return this.finalizeResponse( res, request, requestId );
                         }
@@ -1061,12 +1069,9 @@ export class Server extends EventEmitter
                     }
                     finally
                     {
-                        const scoped = ( requestCtx as any ).requestInstances;
-
-                        if( scoped && scoped.size > 0 )
+                        if( !handedOffToWs && requestCtx.requestInstances?.size )
                         {
-                            await ApplicationRegistry.destroyInstances( scoped.values());
-                            scoped.clear();
+                            await RequestProcessor.cleanupRequestContext( requestCtx );
                         }
                     }
                 });
@@ -1080,11 +1085,9 @@ export class Server extends EventEmitter
             for( const seoMatch of seoMatches )
             {
                 this.applyMatchBags( sreq, seoMatch );
-                activeSecurity = seoMatch.metadata.security !== undefined
-                    ? mergeSecurityConfigs([ this.baseSecurityConfig, seoMatch.metadata.security ])
-                    : this.baseSecurityConfig;
+                activeSecurity = this.resolveEndpointSecurity( seoMatch.metadata );
                 activeCors = seoMatch.metadata.cors !== undefined ? seoMatch.metadata.cors : this.options.cors;
-                this.enforceSecurityGates( activeSecurity, request, sreq, method, path );
+                this.enforceSecurityGates( activeSecurity, request, sreq, method, seoMatch.metadata.path );
 
                 try
                 {
@@ -1111,9 +1114,7 @@ export class Server extends EventEmitter
                 if( !pubMatch )
                 {
                     // SEO already declined (void fallthrough): do not advertise SEO verbs as Allow.
-                    const allowedAfterSeo = seoMatches.length > 0
-                        ? publicLookup.allowed
-                        : getExternalAllowed();
+                    const allowedAfterSeo = publicLookup.allowed;
                     const wrongMethod = allowedAfterSeo.length > 0;
                     const status = wrongMethod ? 405 : 404;
                     const res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
@@ -1127,11 +1128,9 @@ export class Server extends EventEmitter
                 }
 
                 this.applyMatchBags( sreq, pubMatch );
-                activeSecurity = pubMatch.metadata.security !== undefined
-                    ? mergeSecurityConfigs([ this.baseSecurityConfig, pubMatch.metadata.security ])
-                    : this.baseSecurityConfig;
+                activeSecurity = this.resolveEndpointSecurity( pubMatch.metadata );
                 activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
-                this.enforceSecurityGates( activeSecurity, request, sreq, method, path );
+                this.enforceSecurityGates( activeSecurity, request, sreq, method, pubMatch.metadata.path );
                 response = await this.runEndpoint( pubMatch.metadata, sreq, activeSecurity );
             }
 
@@ -1183,10 +1182,7 @@ export class Server extends EventEmitter
             }
       
             const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
-            const routeSecurity = finalMatch ? finalMatch.metadata.security : undefined;
-            const errSecurityConfig = routeSecurity !== undefined
-                ? mergeSecurityConfigs([ this.baseSecurityConfig, routeSecurity ])
-                : this.baseSecurityConfig;
+            const errSecurityConfig = this.resolveEndpointSecurity( finalMatch?.metadata );
       
             const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };
 

@@ -72,7 +72,7 @@ export interface EndpointMetadata {
     params                : ParamMetadata[]
     guards                : GuardMetadata[]
     interceptors          : string[]
-    middlewares           : string[]
+    middlewares?          : string[]
     cors?                 : any
     security?             : any
     /** Merged class + method `@File` config (runtime merges ServerOptions / Module). */
@@ -333,6 +333,33 @@ export class ServerResponse
         });
     }
 
+    #copyHeadersTo( target: Headers ): void
+    {
+        let hasSetCookie = false;
+
+        for( const [ key, value ] of this.#headers.entries())
+        {
+            if( key.toLowerCase() === 'set-cookie' )
+            {
+                hasSetCookie = true;
+                continue;
+            }
+
+            target.set( key, value );
+        }
+
+        if( !hasSetCookie ){ return }
+
+        const cookies = typeof this.#headers.getSetCookie === 'function'
+            ? this.#headers.getSetCookie()
+            : ( this.#headers.get( 'set-cookie' ) ? [ this.#headers.get( 'set-cookie' )! ] : []);
+
+        for( const cookie of cookies )
+        {
+            target.append( 'Set-Cookie', cookie );
+        }
+    }
+
     /** Merge this bag onto a Fetch Response (headers always; status when explicitly set). */
     public applyTo( response: Response ): Response
     {
@@ -347,10 +374,7 @@ export class ServerResponse
 
             if( this.#headersSet )
             {
-                for( const [key, value] of this.#headers.entries())
-                {
-                    headers.set( key, value );
-                }
+                this.#copyHeadersTo( headers );
             }
 
             return new Response( response.body, {
@@ -360,10 +384,7 @@ export class ServerResponse
             });
         }
 
-        for( const [key, value] of this.#headers.entries())
-        {
-            response.headers.set( key, value );
-        }
+        this.#copyHeadersTo( response.headers );
 
         return response;
     }

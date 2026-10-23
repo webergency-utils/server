@@ -2,9 +2,11 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { NdjsonLineFramer, TCP_MAX_LINE_BYTES } from './ndjson-framer.js';
 
-export interface TcpClientOptions {
-    host? : string
-    port  : number
+export interface TcpClientOptions
+{
+    host?      : string
+    port       : number
+    timeoutMs? : number
 }
 
 /**
@@ -12,16 +14,22 @@ export interface TcpClientOptions {
  */
 export class TcpClient
 {
-    private socket?       : net.Socket;
+    private socket? : net.Socket;
     private readonly framer  = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
-    private readonly pending = new Map<string, { resolve : ( v: any ) => void, reject : ( e: Error ) => void }>();
-    private readonly host : string;
-    private readonly port : number;
+    private readonly pending = new Map<string, {
+        resolve : ( v: any ) => void
+        reject  : ( e: Error ) => void
+        timer?  : ReturnType<typeof setTimeout>
+    }>();
+    private readonly host      : string;
+    private readonly port      : number;
+    private readonly timeoutMs : number | undefined;
 
     constructor( options: TcpClientOptions )
     {
         this.host = options.host ?? '127.0.0.1';
         this.port = options.port;
+        this.timeoutMs = options.timeoutMs;
     }
 
     async connect(): Promise<void>
@@ -52,15 +60,37 @@ export class TcpClient
     }
 
     /** Request/response — Nest `ClientProxy.send`. */
-    async send<T = any>( pattern: string, payload?: any ): Promise<T>
+    async send<T = any>( pattern: string, payload?: any, timeoutMs?: number ): Promise<T>
     {
         await this.ensureConnected();
         const id = randomUUID();
+        const effectiveTimeout = timeoutMs ?? this.timeoutMs;
 
         return new Promise<T>(( resolve, reject ) =>
         {
-            this.pending.set( id, { resolve, reject });
-            this.write({ id, pattern, payload });
+            let timer: ReturnType<typeof setTimeout> | undefined;
+
+            if( effectiveTimeout !== undefined && effectiveTimeout > 0 )
+            {
+                timer = setTimeout(() =>
+                {
+                    this.pending.delete( id );
+                    reject( new Error( `RPC request timed out after ${effectiveTimeout}ms (${pattern})` ));
+                }, effectiveTimeout );
+            }
+
+            this.pending.set( id, { resolve, reject, timer });
+
+            try
+            {
+                this.write({ id, pattern, payload });
+            }
+            catch( err )
+            {
+                if( timer !== undefined ){ clearTimeout( timer ) }
+                this.pending.delete( id );
+                reject( err as Error );
+            }
         });
     }
 
@@ -126,6 +156,7 @@ export class TcpClient
 
             if( !waiter ){ continue }
 
+            if( waiter.timer !== undefined ){ clearTimeout( waiter.timer ) }
             this.pending.delete( response.id );
 
             if( response.status === 'success' )
@@ -150,6 +181,7 @@ export class TcpClient
     {
         for( const waiter of this.pending.values())
         {
+            if( waiter.timer !== undefined ){ clearTimeout( waiter.timer ) }
             waiter.reject( err );
         }
         this.pending.clear();

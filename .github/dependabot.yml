@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        applies-to: version-updates # default: groups scheduled updates, while security updates trigger immediately
+        dependency-type: "development"
     # Peer allows typescript ^5 || ^6 only — do not open PRs for 7+.
     ignore:
       - dependency-name: "typescript"

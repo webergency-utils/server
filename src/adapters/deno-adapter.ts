@@ -90,7 +90,26 @@ export class DenoAdapter implements ServerAdapter
         }
         else
         {
-            socket.addEventListener( 'open', start, { once : true });
+            let started = false;
+            socket.addEventListener( 'open', () =>
+            {
+                started = true;
+                start();
+            }, { once : true });
+
+            const cleanupIfAborted = () =>
+            {
+                const handedOffCtx = ( request as any ).__wsRequestContext;
+
+                if( !started && handedOffCtx )
+                {
+                    delete ( request as any ).__wsRequestContext;
+                    void RequestProcessor.cleanupRequestContext( handedOffCtx );
+                }
+            };
+
+            socket.addEventListener( 'close', cleanupIfAborted, { once : true });
+            socket.addEventListener( 'error', cleanupIfAborted, { once : true });
         }
 
         return response;

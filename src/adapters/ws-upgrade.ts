@@ -7,6 +7,13 @@ import { queryStringFromUrl } from '../helpers/query-string.js';
  */
 export function upgradeQuery( request: Request ): Record<string, any>
 {
+    const handedOffReq = ( request as any )?.__wsRequestContext?.request;
+
+    if( handedOffReq )
+    {
+        return handedOffReq.query;
+    }
+
     return parseQueryString( queryStringFromUrl( request.url ));
 }
 

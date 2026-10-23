@@ -165,6 +165,13 @@ export class BunAdapter implements ServerAdapter
         if( this.nodeTls.active )
         {
             this.nodeTls.closeAllConnections();
+
+            return;
+        }
+
+        if( this.server && typeof this.server.stop === 'function' )
+        {
+            this.server.stop( true );
         }
     }
 }

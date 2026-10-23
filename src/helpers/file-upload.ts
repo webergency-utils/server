@@ -5,6 +5,7 @@ import { parseSize } from './security.js';
 import
 {
     parseMultipartStream,
+    cleanupUploadedFiles,
     UploadedFile,
     MultipartPayload,
     type MultipartParseResult,
@@ -48,8 +49,8 @@ export const DEFAULT_MAX_FIELDS = 128;
 export const DEFAULT_MAX_FILE_SIZE = '10mb';
 export const DEFAULT_MAX_FIELD_SIZE = '1mb';
 
-const DEFAULT_MAX_FILE_BYTES = parseSize( DEFAULT_MAX_FILE_SIZE );
-const DEFAULT_MAX_FIELD_BYTES = parseSize( DEFAULT_MAX_FIELD_SIZE );
+const DEFAULT_MAX_FILE_BYTES = /* @__PURE__ */ parseSize( DEFAULT_MAX_FILE_SIZE );
+const DEFAULT_MAX_FIELD_BYTES = /* @__PURE__ */ parseSize( DEFAULT_MAX_FIELD_SIZE );
 
 function resolveSize( value: string | number | undefined ): number | undefined
 {
@@ -358,5 +359,5 @@ export async function processMultipartUpload(
     return parseMultipartStream( body, contentType, multipartOptions );
 }
 
-export { UploadedFile, MultipartPayload };
+export { UploadedFile, MultipartPayload, cleanupUploadedFiles };
 export type { MultipartParseResult, MultipartValue, MultipartFieldValue };

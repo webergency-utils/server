@@ -2,6 +2,7 @@ import { httpStatusFromError } from '../errors.js';
 
 export const REDACTED = '********';
 export const SECRET_KEYS = [ 'password', 'confirmPassword' ];
+const SECRET_KEYS_SET = new Set<string>( SECRET_KEYS );
 
 export function redactSecrets<T>( value: T ): T
 {
@@ -24,16 +25,15 @@ export function clientErrorBody( err: unknown, status = httpStatusFromError( err
         if( status >= 500 )
         {
             delete body.debug;
-            delete body.stack;
         }
 
         return redactSecrets( body );
     }
 
-    return redactSecrets({
+    return {
         success : false,
         error   : typeof e.message === 'string' && e.message ? e.message : 'Internal server error'
-    });
+    };
 }
 
 export type ErrorLogFields =
@@ -53,7 +53,7 @@ export function errorLogFields( err: unknown ): ErrorLogFields
         name    : typeof e.name === 'string' && e.name ? e.name : 'Error',
         message : typeof e.message === 'string' ? e.message : '',
         status  : httpStatusFromError( err ),
-        data    : e.data !== undefined ? redactSecrets( cloneJson( e.data )) : undefined,
+        data    : e.data !== undefined ? redactSecrets( e.data ) : undefined,
         stack   : e.stack
     };
 }
@@ -66,18 +66,6 @@ function asErrorRecord( err: unknown ): { name? : string, message? : string, dat
     }
 
     return { message : err === undefined || err === null ? '' : String( err ) };
-}
-
-function cloneJson( value: unknown ): unknown
-{
-    try
-    {
-        return JSON.parse( JSON.stringify( value ));
-    }
-    catch
-    {
-        return undefined;
-    }
 }
 
 function redact( value: unknown, seen: WeakSet<object> ): unknown
@@ -100,17 +88,20 @@ function redact( value: unknown, seen: WeakSet<object> ): unknown
     }
 
     const out: Record<string, unknown> = {};
+    const keys = Object.keys( value );
 
-    for( const [ key, nested ] of Object.entries( value ))
+    for( let i = 0; i < keys.length; i++ )
     {
-        if( SECRET_KEYS.includes( key ))
+        const key = keys[i];
+
+        if( SECRET_KEYS_SET.has( key ))
         {
             out[key] = REDACTED;
 
             continue;
         }
 
-        out[key] = redact( nested, seen );
+        out[key] = redact(( value as Record<string, unknown> )[key], seen );
     }
 
     return out;

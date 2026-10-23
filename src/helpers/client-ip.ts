@@ -80,15 +80,8 @@ function hasMappedV4Prefix( ip: string ): boolean
     return ip.startsWith( '::ffff:' ) || ip.slice( 0, 7 ).toLowerCase() === '::ffff:';
 }
 
-function parseIpv6( ip: string ): Uint8Array | null
+function parseIpv6( input: string ): Uint8Array | null
 {
-    let input = ip;
-
-    if( input.startsWith( '[' ) && input.endsWith( ']' ))
-    {
-        input = input.slice( 1, -1 );
-    }
-
     if( hasMappedV4Prefix( input ))
     {
         const v4 = parseIpv4( input.slice( 7 ));
@@ -152,56 +145,11 @@ function parseIpv6( ip: string ): Uint8Array | null
     return bytes;
 }
 
-/** Normalize display form; expand IPv4-mapped IPv6 to dotted IPv4 when possible. */
-export function normalizeIp( raw?: string | null ): string | null
-{
-    if( !raw ){ return null }
-
-    if( raw === '127.0.0.1' || raw === '::1' ){ return raw }
-
-    if( raw === '::ffff:127.0.0.1' ){ return '127.0.0.1' }
-
-    let ip = raw.trim();
-
-    if( !ip ){ return null }
-
-    if( ip.startsWith( '[' ))
-    {
-        const end = ip.indexOf( ']' );
-
-        if( end !== -1 ){ ip = ip.slice( 1, end ) }
-    }
-
-    const zone = ip.indexOf( '%' );
-
-    if( zone !== -1 ){ ip = ip.slice( 0, zone ) }
-
-    if( hasMappedV4Prefix( ip ))
-    {
-        const v4Str = ip.slice( 7 );
-
-        if( parseIpv4( v4Str )){ return v4Str }
-    }
-
-    if( parseIpv4( ip )){ return ip }
-
-    if( parseIpv6( ip )){ return ip.toLowerCase() }
-
-    return null;
-}
-
-function parseIpBytes( ip: string ): IpBytes | null
-{
-    const v4 = parseIpv4( ip );
-
-    if( v4 ){ return { kind : 'v4', bytes : v4 } }
-
-    const v6 = parseIpv6( ip );
-
-    if( v6 ){ return { kind : 'v6', bytes : v6 } }
-
-    return null;
-}
+const LOOPBACK_V4_BYTES: IpBytes = { kind : 'v4', bytes : new Uint8Array([ 127, 0, 0, 1 ]) };
+const LOOPBACK_V6_BYTES: IpBytes = {
+    kind  : 'v6',
+    bytes : new Uint8Array([ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 ])
+};
 
 /** Strip display wrappers without collapsing IPv4-mapped addresses to IPv4. */
 function stripIpDisplay( raw: string ): string
@@ -220,6 +168,83 @@ function stripIpDisplay( raw: string ): string
     if( zone !== -1 ){ ip = ip.slice( 0, zone ) }
 
     return ip;
+}
+
+/** Normalize display form; expand IPv4-mapped IPv6 to dotted IPv4 when possible. */
+export function normalizeIp( raw?: string | null ): string | null
+{
+    if( !raw ){ return null }
+
+    if( raw === '127.0.0.1' || raw === '::1' ){ return raw }
+
+    if( raw === '::ffff:127.0.0.1' ){ return '127.0.0.1' }
+
+    const ip = stripIpDisplay( raw );
+
+    if( !ip ){ return null }
+
+    if( hasMappedV4Prefix( ip ))
+    {
+        const v4Str = ip.slice( 7 );
+
+        if( parseIpv4( v4Str )){ return v4Str }
+    }
+
+    if( parseIpv4( ip )){ return ip }
+
+    if( parseIpv6( ip )){ return ip.toLowerCase() }
+
+    return null;
+}
+
+function normalizeAndParseIp( raw?: string | null ): { ip : string, parsed : IpBytes } | null
+{
+    if( !raw ){ return null }
+
+    if( raw === '127.0.0.1' || raw === '::ffff:127.0.0.1' )
+    {
+        return { ip : '127.0.0.1', parsed : LOOPBACK_V4_BYTES };
+    }
+
+    if( raw === '::1' )
+    {
+        return { ip : '::1', parsed : LOOPBACK_V6_BYTES };
+    }
+
+    const ip = stripIpDisplay( raw );
+
+    if( !ip ){ return null }
+
+    if( hasMappedV4Prefix( ip ))
+    {
+        const v4Str = ip.slice( 7 );
+        const v4 = parseIpv4( v4Str );
+
+        if( v4 ){ return { ip : v4Str, parsed : { kind : 'v4', bytes : v4 } } }
+    }
+
+    const v4 = parseIpv4( ip );
+
+    if( v4 ){ return { ip, parsed : { kind : 'v4', bytes : v4 } } }
+
+    const v6 = parseIpv6( ip );
+
+    if( v6 ){ return { ip : ip.toLowerCase(), parsed : { kind : 'v6', bytes : v6 } } }
+
+    return null;
+}
+
+function parseIpBytes( ip: string ): IpBytes | null
+{
+    const v4 = parseIpv4( ip );
+
+    if( v4 ){ return { kind : 'v4', bytes : v4 } }
+
+    const v6 = parseIpv6( ip );
+
+    if( v6 ){ return { kind : 'v6', bytes : v6 } }
+
+    return null;
 }
 
 function parseCidr( cidr: string ): Cidr | null
@@ -282,37 +307,28 @@ function ipMatchesCidr( ip: IpBytes, cidr: Cidr ): boolean
         return ipMatchesCidr({ kind : 'v6', bytes : mapped }, cidr );
     }
 
-    if( ip.kind === 'v6' && cidr.kind === 'v4' )
+    // ip.kind === 'v6' && cidr.kind === 'v4': only IPv4-mapped addresses can match an IPv4 CIDR.
+    if( ip.bytes[10] !== 0xff || ip.bytes[11] !== 0xff ){ return false }
+
+    for( let i = 0; i < 10; i++ )
     {
-        // Only IPv4-mapped addresses can match an IPv4 CIDR.
-        if( ip.bytes[10] !== 0xff || ip.bytes[11] !== 0xff ){ return false }
-
-        for( let i = 0; i < 10; i++ )
-        {
-            if( ip.bytes[i] !== 0 ){ return false }
-        }
-
-        return ipMatchesCidr({
-            kind  : 'v4',
-            bytes : ip.bytes.slice( 12 )
-        }, cidr );
+        if( ip.bytes[i] !== 0 ){ return false }
     }
 
-    return false;
+    return ipMatchesCidr({
+        kind  : 'v4',
+        bytes : ip.bytes.slice( 12 )
+    }, cidr );
 }
 
 export function ipInCidr( ip: string, cidr: string ): boolean
 {
-    const normalized = normalizeIp( ip );
+    const entry = normalizeAndParseIp( ip );
     const range = parseCidr( cidr );
 
-    if( !normalized || !range ){ return false }
+    if( !entry || !range ){ return false }
 
-    const parsed = parseIpBytes( normalized );
-
-    if( !parsed ){ return false }
-
-    return ipMatchesCidr( parsed, range );
+    return ipMatchesCidr( entry.parsed, range );
 }
 
 export type CompiledTrustProxy = readonly Cidr[];
@@ -352,12 +368,8 @@ export function compileTrustProxy( trustProxy?: TrustProxy | CompiledTrustProxy 
     return compiled;
 }
 
-function isTrusted( ip: string, ranges: readonly Cidr[]): boolean
+function isTrustedBytes( parsed: IpBytes, ranges: readonly Cidr[]): boolean
 {
-    const parsed = parseIpBytes( ip );
-
-    if( !parsed ){ return false }
-
     for( const range of ranges )
     {
         if( ipMatchesCidr( parsed, range )){ return true }
@@ -381,12 +393,20 @@ export interface ClientIpRequest
  */
 export function resolveClientIp( req: ClientIpRequest, trustProxy?: TrustProxy | CompiledTrustProxy | null ): string
 {
-    const remote = normalizeIp( req.remoteAddress ) || '127.0.0.1';
     const ranges = trustProxy !== undefined
         ? compileTrustProxy( trustProxy )
         : ( req.compiledTrustProxy !== undefined ? req.compiledTrustProxy : compileTrustProxy( req.trustProxy ));
 
-    if( !ranges || !isTrusted( remote, ranges ))
+    if( !ranges )
+    {
+        return normalizeIp( req.remoteAddress ) || '127.0.0.1';
+    }
+
+    const remoteEntry = normalizeAndParseIp( req.remoteAddress );
+    const remote = remoteEntry ? remoteEntry.ip : '127.0.0.1';
+    const remoteParsed = remoteEntry ? remoteEntry.parsed : LOOPBACK_V4_BYTES;
+
+    if( !isTrustedBytes( remoteParsed, ranges ))
     {
         return remote;
     }
@@ -405,16 +425,16 @@ export function resolveClientIp( req: ClientIpRequest, trustProxy?: TrustProxy |
     {
         const comma = header.lastIndexOf( ',', end - 1 );
         const part = header.slice( comma + 1, end );
-        const hop = normalizeIp( part );
+        const hopEntry = normalizeAndParseIp( part );
 
-        if( hop )
+        if( hopEntry )
         {
-            if( !isTrusted( hop, ranges ))
+            if( !isTrustedBytes( hopEntry.parsed, ranges ))
             {
-                return hop;
+                return hopEntry.ip;
             }
 
-            lastValidHop = hop;
+            lastValidHop = hopEntry.ip;
         }
 
         if( comma === -1 ){ break }

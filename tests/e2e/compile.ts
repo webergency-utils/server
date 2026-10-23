@@ -2,6 +2,7 @@ import ts from '../../src/compiler/ts.js';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBeforeTransformers, readTsPatchPlugins } from '../../src/compiler/emit-transformers.js';
 import { resolveRootDir } from '../../src/compiler/root-dir.js';
@@ -16,6 +17,13 @@ export const fixtureDist = path.join( fixtureRoot, 'dist' );
  */
 export function compileFixture(): void
 {
+    const root = path.resolve( here, '../..' );
+
+    if( !fs.existsSync( path.join( root, 'dist/index.d.ts' )) || !fs.existsSync( path.join( root, 'dist/index.js' )))
+    {
+        execSync( 'npm run build', { cwd : root, stdio : 'ignore' });
+    }
+
     const tsconfigPath = path.join( fixtureRoot, 'tsconfig.json' );
     const configFile = ts.readConfigFile( tsconfigPath, ts.sys.readFile );
 

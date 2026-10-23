@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
-import { DIContainer } from '../src/core/container.js';
 import { Scope } from '../src/decorators.js';
 import { Context } from '../src/core/context.js';
 
-describe( 'DIContainer', () =>
+describe( 'ApplicationRegistry DI resolution', () =>
 {
     it( 'should resolve circular constructor deps via a lazy proxy', async () =>
     {
@@ -31,7 +30,7 @@ describe( 'DIContainer', () =>
         // Act / Assert — proxy traps re-enter resolve and need ALS context
         await runWithRegistry( registry, async () =>
         {
-            const a = await DIContainer.resolve( 'A' );
+            const a = await registry.resolve( 'A' );
 
             expect( a.name()).toBe( 'A' );
             expect( a.b.name()).toBe( 'B' );
@@ -64,8 +63,8 @@ describe( 'DIContainer', () =>
         // Act
         const [ h1, h2 ] = await runWithRegistry( registry, async () =>
         {
-            const a = await DIContainer.resolve( 'Host' );
-            const b = await DIContainer.resolve( 'Host' );
+            const a = await registry.resolve( 'Host' );
+            const b = await registry.resolve( 'Host' );
 
             return [ a, b ];
         });
@@ -89,8 +88,8 @@ describe( 'DIContainer', () =>
         // Act / Assert
         await runWithRegistry( registry, async () =>
         {
-            expect( DIContainer.getResolvedScope( 'Svc' )).toBe( Scope.REQUEST );
-            await expect( DIContainer.resolve( 'Missing' )).rejects.toThrow( /No provider registered/ );
+            expect( registry.getResolvedScope( 'Svc' )).toBe( Scope.REQUEST );
+            await expect( registry.resolve( 'Missing' )).rejects.toThrow( /No provider registered/ );
         });
     });
 
@@ -106,7 +105,7 @@ describe( 'DIContainer', () =>
         registry.registerController( 'C', C );
 
         // Act — onInit runs during resolve
-        await runWithRegistry( registry, () => DIContainer.resolve( 'C' ));
+        await runWithRegistry( registry, () => registry.resolve( 'C' ));
 
         // Assert
         expect( calls ).toEqual([ 'init' ]);
@@ -146,14 +145,14 @@ describe( 'DIContainer', () =>
         // Act / Assert
         await runWithRegistry( registry, async () =>
         {
-            expect( await DIContainer.resolve( 'Const' )).toBe( 42 );
-            const host = await DIContainer.resolve( 'Host' );
+            expect( await registry.resolve( 'Const' )).toBe( 42 );
+            const host = await registry.resolve( 'Host' );
             expect( host.dep ).toBeInstanceOf( Dep );
             expect( host.unused ).toBeUndefined();
             expect( host.extra ).toBe( host.dep );
-            expect( await DIContainer.resolve( 'Made' )).toEqual({ n : 2 });
-            expect( DIContainer.getResolvedScope( 'Host' )).toBe( Scope.SINGLETON );
-            expect( DIContainer.getResolvedScope( 'Made' )).toBe( Scope.TRANSIENT );
+            expect( await registry.resolve( 'Made' )).toEqual({ n : 2 });
+            expect( registry.getResolvedScope( 'Host' )).toBe( Scope.SINGLETON );
+            expect( registry.getResolvedScope( 'Made' )).toBe( Scope.TRANSIENT );
         });
     });
 
@@ -182,7 +181,7 @@ describe( 'DIContainer', () =>
         // Act / Assert — Proxy set must land on the real cached instance
         await runWithRegistry( registry, async () =>
         {
-            const a = await DIContainer.resolve( 'A' );
+            const a = await registry.resolve( 'A' );
             a.b.a.tag = 'mutated';
             expect( a.tag ).toBe( 'mutated' );
             expect( a.b.name()).toBe( 'B' );
@@ -221,14 +220,14 @@ describe( 'DIContainer', () =>
                 { request : {} as any, metadata : {} as any, requestInstances : new Map() },
                 async () =>
                 {
-                    const a = await DIContainer.resolve( 'A' );
+                    const a = await registry.resolve( 'A' );
 
                     expect( a.name()).toBe( 'A' );
                     expect( a.b.name()).toBe( 'B' );
                     expect( a.b.a.name()).toBe( 'A' );
                     a.b.a.tag = 'mutated';
                     expect( a.tag ).toBe( 'mutated' );
-                    expect( await DIContainer.resolve( 'A' )).toBe( a );
+                    expect( await registry.resolve( 'A' )).toBe( a );
                 }
             );
         });
@@ -249,9 +248,9 @@ describe( 'DIContainer', () =>
         // Act / Assert
         await runWithRegistry( registry, async () =>
         {
-            expect( await DIContainer.resolve( 'Bare' )).toEqual({ already : true });
-            expect( DIContainer.getResolvedScope( 'Scoped' )).toBe( Scope.REQUEST );
-            expect( await DIContainer.resolve( 'Primitive' )).toBe( 7 );
+            expect( await registry.resolve( 'Bare' )).toEqual({ already : true });
+            expect( registry.getResolvedScope( 'Scoped' )).toBe( Scope.REQUEST );
+            expect( await registry.resolve( 'Primitive' )).toBe( 7 );
         });
     });
 
@@ -279,10 +278,10 @@ describe( 'DIContainer', () =>
         {
             await expect( Context.run(
                 { request : {} as any, metadata : {} as any, requestInstances : new Map() },
-                () => DIContainer.resolve( 'Req' )
+                () => registry.resolve( 'Req' )
             )).rejects.toThrow( /No provider registered/ );
 
-            await expect( DIContainer.resolve( 'Tx' )).rejects.toThrow( /No provider registered/ );
+            await expect( registry.resolve( 'Tx' )).rejects.toThrow( /No provider registered/ );
         });
     });
 
@@ -305,7 +304,7 @@ describe( 'DIContainer', () =>
         registry.registerProvider( 'B', B );
 
         // Act
-        await runWithRegistry( registry, () => DIContainer.resolve( 'A' ));
+        await runWithRegistry( registry, () => registry.resolve( 'A' ));
 
         // Assert
         expect([ ...registry.dependencyCycles ]).toContain( 'A -> B -> A' );
@@ -321,8 +320,8 @@ describe( 'DIContainer', () =>
         // Act
         const [ first, second ] = await runWithRegistry( registry, async () =>
         {
-            const a = await DIContainer.resolve( 'Svc' );
-            const b = await DIContainer.resolve( 'Svc' );
+            const a = await registry.resolve( 'Svc' );
+            const b = await registry.resolve( 'Svc' );
 
             return [ a, b ];
         });
@@ -341,11 +340,11 @@ describe( 'DIContainer', () =>
         // Act / Assert — the memoized binding for Late must not be a cached miss
         await runWithRegistry( registry, async () =>
         {
-            await DIContainer.resolve( 'Early' );
-            await expect( DIContainer.resolve( 'Late' )).rejects.toThrow( /No provider registered/ );
+            await registry.resolve( 'Early' );
+            await expect( registry.resolve( 'Late' )).rejects.toThrow( /No provider registered/ );
             registry.registerProvider( 'Late', Late );
 
-            expect(( await DIContainer.resolve( 'Late' )).tag ).toBe( 'late' );
+            expect(( await registry.resolve( 'Late' )).tag ).toBe( 'late' );
         });
     });
 
@@ -376,7 +375,7 @@ describe( 'DIContainer', () =>
         // Act / Assert
         await runWithRegistry( registry, async () =>
         {
-            await expect( DIContainer.resolve( 'Ghost' )).rejects.toThrow(
+            await expect( registry.resolve( 'Ghost' )).rejects.toThrow(
                 /No provider registered for token: Ghost in module Owner/
             );
         });
@@ -396,7 +395,7 @@ describe( 'DIContainer', () =>
         // Act / Assert
         await runWithRegistry( registry, async () =>
         {
-            expect(( await DIContainer.resolve( 'Priv' )).tag ).toBe( 'private' );
+            expect(( await registry.resolve( 'Priv' )).tag ).toBe( 'private' );
         });
     });
 
@@ -459,7 +458,7 @@ describe( 'DIContainer', () =>
         registry.registerProvider( 'Dep', Dep );
 
         // Act
-        await runWithRegistry( registry, () => DIContainer.resolve( 'Host' ));
+        await runWithRegistry( registry, () => registry.resolve( 'Host' ));
 
         // Assert — dep onInit finishes before host constructor
         expect( calls ).toEqual([ 'init:dep', 'ctor:host', 'init:host' ]);
@@ -485,9 +484,9 @@ describe( 'DIContainer', () =>
                 { request : {} as any, metadata : {} as any, requestInstances : new Map() },
                 async () =>
                 {
-                    await DIContainer.resolve( 'Scratch' );
-                    await DIContainer.resolve( 'Scratch' );
-                    await DIContainer.destroyInstances( Context.get()!.requestInstances!.values());
+                    await registry.resolve( 'Scratch' );
+                    await registry.resolve( 'Scratch' );
+                    await ApplicationRegistry.destroyInstances( Context.get()!.requestInstances!.values());
                     Context.get()!.requestInstances!.clear();
                 }
             );
@@ -513,7 +512,7 @@ describe( 'DIContainer', () =>
         // Act
         await runWithRegistry( registry, async () =>
         {
-            await DIContainer.resolve( 'Scratch' );
+            await registry.resolve( 'Scratch' );
             await registry.destroyAll();
         });
 
@@ -550,12 +549,12 @@ describe( 'DIContainer', () =>
         // proxy that cannot re-find the constructed instance after resolve completes.
         await runWithRegistry( registry, async () =>
         {
-            const a = await DIContainer.resolve( 'A' );
+            const a = await registry.resolve( 'A' );
 
             expect( a.name()).toBe( 'A' );
             expect( a.b.name()).toBe( 'B' );
             expect( a.b.a ).toBeDefined();
-            expect( await DIContainer.resolve( 'A' )).not.toBe( a );
+            expect( await registry.resolve( 'A' )).not.toBe( a );
         });
     });
 });

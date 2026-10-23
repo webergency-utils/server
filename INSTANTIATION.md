@@ -2,7 +2,7 @@
 
 How providers are registered, constructed, and injected in `@webergency-utils/server`.
 
-Runtime never reflects on types. The AOT transformer emits `static __injections__ = { constructorDeps, propertyDeps }` (and related Symbol meta). `DIContainer` only reads those tables and the provider objects you register.
+Runtime never reflects on types. The AOT transformer emits `static __injections__ = { constructorDeps, propertyDeps }` (and related Symbol meta). `ApplicationRegistry` only reads those tables and the provider objects you register.
 
 Tokens are **strings**: a class’s `.name`, or an explicit `token` string / `token.name`.
 
@@ -29,7 +29,7 @@ Tokens are **strings**: a class’s `.name`, or an explicit `token` string / `to
 - **Scopes:** `Scope.SINGLETON` (one per module), `TRANSIENT` (new each resolve), `REQUEST` (once per request). A provider becomes request-scoped if any dependency is.
 - **Cycles:** circular constructor deps resolve through a lazy `Proxy` (no `forwardRef` API).
 - **Lifecycle:** `onInit` runs (awaited, dependency-first) during `resolve` / `resolveAll`. `onDestroy` runs for **every** instance — at **request end** (REQUEST + TRANSIENT created in that request) or **app shutdown** (SINGLETON + TRANSIENT created outside a request).
-- **Async:** `DIContainer.resolve`, `registry.resolveAll`, and `server.ensureReady` are async — always `await` them.
+- **Async:** `registry.resolve`, `registry.resolveAll`, and `server.ensureReady` are async — always `await` them.
 
 ---
 
@@ -492,4 +492,4 @@ Sorted for application and database-model code. Prefer higher ranks unless you h
 - [README.md](./README.md) — Dependency injection notes (tokens, memoization, lifecycle)
 - [docs/adr/0001-aot-symbol-emit.md](./docs/adr/0001-aot-symbol-emit.md) — zero-reflection AOT
 - [docs/adr/0002-per-server-registry.md](./docs/adr/0002-per-server-registry.md) — per-server registry & export graph
-- Implementation: [`src/core/container.ts`](./src/core/container.ts), [`src/core/bootstrap.ts`](./src/core/bootstrap.ts), [`src/compiler/di-resolution.ts`](./src/compiler/di-resolution.ts)
+- Implementation: [`src/core/registry.ts`](./src/core/registry.ts), [`src/core/bootstrap.ts`](./src/core/bootstrap.ts), [`src/compiler/di-resolution.ts`](./src/compiler/di-resolution.ts)

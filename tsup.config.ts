@@ -14,11 +14,10 @@ export default defineConfig({
         'compiler/cli'         : 'src/compiler/cli.ts'
     },
     format    : [ 'cjs' ],
-    dts       : true,
-    sourcemap : true,
+    dts       : { compilerOptions : { stripInternal : true } },
+    sourcemap : false,
     clean     : false,
     minify    : false,
-    treeshake : false,
     shims     : true,
     splitting : false,
     external  : [
@@ -26,6 +25,18 @@ export default defineConfig({
         '@webergency-utils/typechecker',
         '@webergency-utils/typechecker/runtime',
         '@webergency-utils/typechecker/transformer'
+    ],
+    esbuildPlugins : [
+        {
+            name : 'externalize-sibling-transformer',
+            setup( build )
+            {
+                build.onResolve({ filter : /^\.\/transformer\.js$/ }, () => ({
+                    path     : './transformer.cjs',
+                    external : true
+                }));
+            }
+        }
     ],
     esbuildOptions( options )
     {

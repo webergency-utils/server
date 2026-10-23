@@ -25,17 +25,17 @@ export default defineConfig({
             provider : 'v8',
             reporter : ['text', 'json', 'html', 'lcov'],
             include  : ['src/**/*.ts'],
-            exclude  : [
+            exclude : [
                 '**/*.test.ts',
                 'tests/**',
-                'src/cli.ts',
-                'src/transformer.ts',
+                // Pure type / barrel re-export entrypoints
+                'src/index.ts',
+                'src/adapters/adapter.ts',
+                'src/compiler/transformer.ts',
                 // Build / load-time hosts — not part of the runtime library surface
                 'src/compiler/cli.ts',
                 'src/compiler/register.ts',
                 'src/compiler/ts.ts',
-                // Deprecated ALS shim (ApplicationRegistry is the SoT)
-                'src/core/metadata.ts',
                 // Cross-runtime adapters: attribute via unit-bun / runtime-deno uploads
                 ...( isBun
                     ? ['src/adapters/deno-adapter.ts']

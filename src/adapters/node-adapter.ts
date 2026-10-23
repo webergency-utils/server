@@ -26,6 +26,38 @@ function applyHttpTimeouts( server: any, http?: NodeHttpOptions ): void
     server.keepAliveTimeout = http?.keepAliveTimeout ?? DEFAULT_NODE_HTTP.keepAliveTimeout;
 }
 
+function resolveRequestUrl( req: any ): string
+{
+    const protocol = ( req.socket as any )?.encrypted ? 'https' : 'http';
+    const host = req.headers?.host || 'localhost';
+
+    return typeof req.url === 'string' && req.url.startsWith( '/' )
+        ? `${protocol}://${host}${req.url}`
+        : new URL( req.url || '/', `${protocol}://${host}` ).href;
+}
+
+function endUpgradeSocket( socket: any, rawHttp: string ): void
+{
+    if( socket.destroyed ){ return }
+
+    try
+    {
+        if( typeof socket.end === 'function' )
+        {
+            socket.end( rawHttp );
+        }
+        else
+        {
+            socket.write( rawHttp );
+            socket.destroy();
+        }
+    }
+    catch
+    {
+        socket.destroy();
+    }
+}
+
 export class NodeAdapter implements ServerAdapter 
 {
     private nodeServer? : any;
@@ -64,16 +96,26 @@ export class NodeAdapter implements ServerAdapter
                 return;
             }
 
-            const protocol = ( req.socket as any ).encrypted ? 'https' : 'http';
-            const url = `${protocol}://${req.headers.host}${req.url}`;
             const method = req.method || 'GET';
-            const fetchReq = new Request( url, {
-                method,
-                headers : req.headers as any,
-                body    : ( method === 'GET' || method === 'HEAD' ) ? undefined : ( req as any ),
-                // @ts-expect-error: duplex half required for fetch Request
-                duplex  : 'half'
-            });
+            let fetchReq: Request;
+
+            try
+            {
+                fetchReq = new Request( resolveRequestUrl( req ), {
+                    method,
+                    headers : req.headers as any,
+                    body    : ( method === 'GET' || method === 'HEAD' ) ? undefined : ( req as any ),
+                    // @ts-expect-error: duplex half required for fetch Request
+                    duplex  : 'half'
+                });
+            }
+            catch
+            {
+                res.statusCode = 400;
+                res.end( 'Bad Request' );
+
+                return;
+            }
 
             if( req.socket?.remoteAddress )
             {
@@ -86,7 +128,22 @@ export class NodeAdapter implements ServerAdapter
             }
             const response = await handler( fetchReq );
             res.statusCode = response.status;
-            response.headers.forEach(( value, key ) => res.setHeader( key, value ));
+            response.headers.forEach(( value, key ) =>
+            {
+                if( key.toLowerCase() !== 'set-cookie' )
+                {
+                    res.setHeader( key, value );
+                }
+            });
+
+            const setCookies = typeof response.headers.getSetCookie === 'function'
+                ? response.headers.getSetCookie()
+                : [];
+
+            if( setCookies.length > 0 )
+            {
+                res.setHeader( 'set-cookie', setCookies );
+            }
 
             if( response.body ) 
             {
@@ -168,12 +225,22 @@ export class NodeAdapter implements ServerAdapter
         {
             this.nodeServer.on( 'upgrade', async ( req: any, socket: any, head: any ) => 
             {
-                const protocol = ( req.socket as any ).encrypted ? 'https' : 'http';
-                const url = `${protocol}://${req.headers.host}${req.url}`;
-                const fetchReq = new Request( url, {
-                    method  : 'GET',
-                    headers : req.headers as any
-                });
+                let fetchReq: Request;
+
+                try
+                {
+                    fetchReq = new Request( resolveRequestUrl( req ), {
+                        method  : 'GET',
+                        headers : req.headers as any
+                    });
+                }
+                catch
+                {
+                    endUpgradeSocket( socket, 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n' );
+
+                    return;
+                }
+
                 ( fetchReq as any ).nodeSocket = socket;
                 ( fetchReq as any ).nodeHead = head;
 
@@ -182,7 +249,28 @@ export class NodeAdapter implements ServerAdapter
                     ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
                 }
 
-                await handler( fetchReq );
+                try
+                {
+                    const response = await handler( fetchReq );
+
+                    if( !( fetchReq as any ).__wsUpgraded && !socket.destroyed )
+                    {
+                        const bodyText = await response.text();
+                        const status = response.status || 400;
+                        const statusText = response.statusText || ( status === 404 ? 'Not Found' : 'Bad Request' );
+                        const rawHttp =
+                            `HTTP/1.1 ${status} ${statusText}\r\n` +
+                            'Connection: close\r\n' +
+                            `Content-Length: ${Buffer.byteLength( bodyText )}\r\n\r\n` +
+                            bodyText;
+
+                        endUpgradeSocket( socket, rawHttp );
+                    }
+                }
+                catch
+                {
+                    endUpgradeSocket( socket, 'HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n' );
+                }
             });
         }
     
@@ -225,6 +313,7 @@ export class NodeAdapter implements ServerAdapter
             `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
         );
 
+        ( request as any ).__wsUpgraded = true;
         const query = upgradeQuery( request );
 
         const connection = new NodeServerWebSocket( socket, head, request.headers, params, query, metadata.meta?.wsOptions );
@@ -264,6 +353,7 @@ class NodeServerWebSocket
     /** Fragmented messages span reads, so the reader's state lives with the connection. */
     private frameState         : FrameReadState = {};
     private readonly heartbeat : WsHeartbeat;
+    private closed = false;
 
     constructor(
         private socket: any,
@@ -298,8 +388,9 @@ class NodeServerWebSocket
             WebsocketFrame.read( this.rx_buffer, emit, { maxPayload : this.wsOptions?.maxPayload }, this.frameState );
         });
 
-        this.socket.on( 'end', () => this.close( 1000 ));
-        this.socket.on( 'close', () => this.close( 1000 ));
+        const onSocketClose = () => this.finalizeClose( 1000, '', false );
+        this.socket.on( 'end', onSocketClose );
+        this.socket.on( 'close', onSocketClose );
         this.socket.on( 'error', ( err: any ) => 
         {
             this.emitter.emit( 'error', err );
@@ -340,37 +431,54 @@ class NodeServerWebSocket
 
     send( data: any, options: { opcode? : number } = {}) 
     {
+        if( this.closed ){ return }
+
         WebsocketFrame.write( this.tx_buffer, data, options );
         this.flushTx();
     }
 
-    close( code?: number, reason?: string ) 
+    private finalizeClose( code?: number, reason?: string, sendCloseFrame = true )
     {
+        if( this.closed ){ return }
+        this.closed = true;
         this.heartbeat.stop();
 
-        let payload = code !== undefined ? Buffer.allocUnsafe( 2 ) : EMPTY_BUFFER;
-
-        if( code !== undefined ) 
+        if( sendCloseFrame && !this.socket.destroyed && this.socket.writable )
         {
-            payload.writeUInt16BE( code, 0 );
+            let payload = code !== undefined ? Buffer.allocUnsafe( 2 ) : EMPTY_BUFFER;
 
-            if( reason ) 
+            if( code !== undefined ) 
             {
-                payload = Buffer.concat([payload, Buffer.from( reason, 'utf8' )]);
+                payload.writeUInt16BE( code, 0 );
+
+                if( reason ) 
+                {
+                    payload = Buffer.concat([payload, Buffer.from( reason, 'utf8' )]);
+                }
             }
+        
+            try 
+            {
+                WebsocketFrame.write( this.tx_buffer, payload, { opcode : 0x08 });
+                this.flushTx();
+            }
+            catch ( e ) {}
         }
-    
-        try 
+
+        try
         {
-            WebsocketFrame.write( this.tx_buffer, payload, { opcode : 0x08 });
-            this.flushTx();
+            this.socket.end();
+            this.socket.destroy();
+            this.socket.removeAllListeners();
         }
         catch ( e ) {}
 
-        this.socket.end();
-        this.socket.destroy();
-        this.socket.removeAllListeners();
-        this.emitter.emit( 'close' );
+        this.emitter.emit( 'close', code ?? 1000, reason ?? '' );
+    }
+
+    close( code?: number, reason?: string ) 
+    {
+        this.finalizeClose( code, reason, true );
     }
 
     on( event: string, cb: Function ) 

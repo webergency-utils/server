@@ -47,8 +47,8 @@ export class SwaggerSpecGenerator
 
         for( const ep of registry.endpoints ) 
         {
-            // WS and SSE custom event connections are not mapped to standard HTTP verbs in Swagger
-            if( ep.httpMethod === 'WS' ) { continue }
+            // WS and internal-only routes are not part of the public HTTP OpenAPI spec
+            if( ep.httpMethod === 'WS' || ep.internal || ep.meta?.internal ) { continue }
 
             const controllerInfo = registry.controllers.get( ep.controller );
 
@@ -66,7 +66,7 @@ export class SwaggerSpecGenerator
                 {
                     for( const member of node.members ) 
                     {
-                        if( ts.isMethodDeclaration( member ) && member.name.getText() === ep.methodName ) 
+                        if( ts.isMethodDeclaration( member ) && member.name.getText( sourceFile ) === ep.methodName ) 
                         {
                             methodDecl = member;
                             break;
@@ -112,16 +112,21 @@ export class SwaggerSpecGenerator
                         schema
                     });
                 }
-                else if( paramMeta.source === 'Query' ) 
+                else if( paramMeta.source === 'Query' || paramMeta.source === 'Header' || paramMeta.source === 'Headers' || paramMeta.source === 'Cookie' || paramMeta.source === 'Cookies' ) 
                 {
+                    const inLocation = ( paramMeta.source === 'Header' || paramMeta.source === 'Headers' )
+                        ? 'header'
+                        : ( paramMeta.source === 'Cookie' || paramMeta.source === 'Cookies' )
+                            ? 'cookie'
+                            : 'query';
                     const schema = registerSchema( buildJsonSchema( type, checker ));
 
                     if( paramMeta.name ) 
                     {
                         queryParams.push({
                             name     : paramMeta.name,
-                            in       : 'query',
-                            required : !paramDecl.questionToken,
+                            in       : inLocation,
+                            required : !paramDecl.questionToken && !paramMeta.optional,
                             schema
                         });
                     }
@@ -131,7 +136,7 @@ export class SwaggerSpecGenerator
                         {
                             queryParams.push({
                                 name     : k,
-                                in       : 'query',
+                                in       : inLocation,
                                 required : ( schema.required || []).includes( k ),
                                 schema   : v
                             });
@@ -303,6 +308,7 @@ export class SwaggerSpecGenerator
             }
 
             const operation: any = {
+        tags      : [ep.controller],
         summary   : `${ep.controller}.${ep.methodName}`,
         responses : {
             '200' : {

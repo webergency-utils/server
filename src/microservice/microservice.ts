@@ -9,6 +9,10 @@ export class Microservice
 {
     public readonly registry = new ApplicationRegistry();
     private bootstrapped = false;
+    private bootstrapping? : Promise<void>;
+    private isShuttingDown = false;
+    private activeRequests = 0;
+    private drainResolvers : Array<() => void> = [];
     private readonly rpcHandlers = new Map<string, any>();
 
     constructor(
@@ -20,23 +24,42 @@ export class Microservice
     {
         if( this.bootstrapped ){ return }
 
-        await runWithRegistry( this.registry, async () =>
+        if( this.bootstrapping )
         {
-            bootstrapRegistry( this.registry, this.options );
-            await this.registry.resolveAll();
-        });
-
-        this.rpcHandlers.clear();
-
-        for( const ep of this.registry.getEndpoints())
-        {
-            if( ep.httpMethod === 'RPC' )
-            {
-                this.rpcHandlers.set( ep.path, ep );
-            }
+            return this.bootstrapping;
         }
 
-        this.bootstrapped = true;
+        const p = ( async () =>
+        {
+            await runWithRegistry( this.registry, async () =>
+            {
+                bootstrapRegistry( this.registry, this.options );
+                await this.registry.resolveAll();
+            });
+
+            this.rpcHandlers.clear();
+
+            for( const ep of this.registry.getEndpoints())
+            {
+                if( ep.httpMethod === 'RPC' )
+                {
+                    this.rpcHandlers.set( ep.path, ep );
+                }
+            }
+
+            this.bootstrapped = true;
+        })();
+
+        this.bootstrapping = p;
+
+        try
+        {
+            await p;
+        }
+        finally
+        {
+            this.bootstrapping = undefined;
+        }
     }
 
     async start(): Promise<void> 
@@ -45,50 +68,91 @@ export class Microservice
 
         await this.adapter.listen( async ( pattern, payload ) => 
         {
-            return runWithRegistry( this.registry, async () =>
+            const endpoint = this.rpcHandlers.get( pattern );
+
+            if( this.isShuttingDown )
             {
-                const endpoint = this.rpcHandlers.get( pattern );
-
-                if( !endpoint ) 
+                if( endpoint?.meta?.event )
                 {
-                    throw new Error( `Pattern "${pattern}" not registered` );
-                }
-
-                // @EventPattern: fire-and-forget — no reply envelope, errors stay local.
-                if( endpoint.meta?.event )
-                {
-                    try
-                    {
-                        await RequestProcessor.executeRpc( endpoint, payload );
-                    }
-                    catch ( err: any )
-                    {
-                        console.error( `[EventPattern ${pattern}]`, err?.message || err );
-                    }
-
                     return MicroserviceNoReply;
                 }
 
-                try 
+                throw new Error( 'Service Unavailable (Shutting Down)' );
+            }
+
+            this.activeRequests++;
+
+            try
+            {
+                return await runWithRegistry( this.registry, async () =>
                 {
-                    return await RequestProcessor.executeRpc( endpoint, payload );
-                }
-                catch ( err: any ) 
-                {
-                    if( err.data ) 
+                    if( !endpoint ) 
                     {
-                        throw err;
+                        throw new Error( `Pattern "${pattern}" not registered` );
                     }
-                    throw new Error( err.message || 'Internal RPC error', { cause : err });
+
+                    // @EventPattern: fire-and-forget — no reply envelope, errors stay local.
+                    if( endpoint.meta?.event )
+                    {
+                        try
+                        {
+                            await RequestProcessor.executeRpc( endpoint, payload );
+                        }
+                        catch ( err: any )
+                        {
+                            console.error( `[EventPattern ${pattern}]`, err?.message || err );
+                        }
+
+                        return MicroserviceNoReply;
+                    }
+
+                    try 
+                    {
+                        return await RequestProcessor.executeRpc( endpoint, payload );
+                    }
+                    catch ( err: any ) 
+                    {
+                        if( err.data ) 
+                        {
+                            throw err;
+                        }
+                        throw new Error( err.message || 'Internal RPC error', { cause : err });
+                    }
+                });
+            }
+            finally
+            {
+                if( --this.activeRequests === 0 && this.drainResolvers.length > 0 )
+                {
+                    const resolvers = this.drainResolvers.splice( 0 );
+
+                    for( const resolve of resolvers )
+                    {
+                        resolve();
+                    }
                 }
-            });
+            }
         });
     }
 
-    async shutdown(): Promise<void> 
+    async shutdown( timeoutMs = 10000 ): Promise<void> 
     {
+        this.isShuttingDown = true;
         await this.adapter.close();
-        this.rpcHandlers.clear();
+
+        if( this.activeRequests > 0 )
+        {
+            await new Promise<void>(( resolve ) =>
+            {
+                const timer = setTimeout( resolve, timeoutMs );
+                this.drainResolvers.push(() =>
+                {
+                    clearTimeout( timer );
+                    resolve();
+                });
+            });
+        }
+
         await runWithRegistry( this.registry, async () =>
         {
             await this.registry.destroyAll();

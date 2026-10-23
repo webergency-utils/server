@@ -13,12 +13,13 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { createBeforeTransformers, readTsPatchPlugins, TsPatchPlugin } from './emit-transformers.js';
 
-interface CachedProgram {
-    program     : ts.Program
-    plugins     : TsPatchPlugin[]
-    configDir   : string
-    sourceMtime : number
-    configMtime : number
+interface CachedProgram
+{
+    program      : ts.Program
+    plugins      : TsPatchPlugin[]
+    configDir    : string
+    sourceMtimes : Map<string, number>
+    configMtime  : number
 }
 
 const programCache = new Map<string, CachedProgram>();
@@ -37,14 +38,32 @@ function mtimeOf( file: string ): number
 
 /**
  * A `ts.Program` snapshots file contents at creation, so a long-lived process would keep
- * type-checking against the source as it was on first load. Rebuild whenever the requested
+ * type-checking against the source as it was on first load. Rebuild whenever a requested
  * file or its tsconfig has a different mtime than when the cached program was built.
  */
 function isStale( cached: CachedProgram, fileName: string, configPath?: string ): boolean
 {
-    if( mtimeOf( fileName ) !== cached.sourceMtime ) { return true }
+    if( configPath !== undefined && mtimeOf( configPath ) !== cached.configMtime )
+    {
+        return true;
+    }
 
-    return configPath !== undefined && mtimeOf( configPath ) !== cached.configMtime;
+    const currentMtime = mtimeOf( fileName );
+    const recordedMtime = cached.sourceMtimes.get( fileName );
+
+    if( recordedMtime !== undefined )
+    {
+        return currentMtime !== recordedMtime;
+    }
+
+    if( !cached.program.getSourceFile( fileName ))
+    {
+        return true;
+    }
+
+    cached.sourceMtimes.set( fileName, currentMtime );
+
+    return false;
 }
 
 function compileContextFor( fileName: string ): CachedProgram
@@ -84,17 +103,22 @@ function compileContextFor( fileName: string ): CachedProgram
             configDir
         );
         options = { ...parsed.options, experimentalDecorators : true };
-        rootNames = parsed.fileNames.length ? parsed.fileNames : [fileName];
+        rootNames = parsed.fileNames.length
+            ? ( parsed.fileNames.includes( fileName ) ? parsed.fileNames : [ ...parsed.fileNames, fileName ])
+            : [fileName];
         plugins = readTsPatchPlugins( configFile.config?.compilerOptions );
     }
 
     const program = ts.createProgram({ rootNames, options });
+    const sourceMtimes = new Map<string, number>();
+    sourceMtimes.set( fileName, mtimeOf( fileName ));
+
     const entry: CachedProgram =
     {
         program,
         plugins,
         configDir,
-        sourceMtime : mtimeOf( fileName ),
+        sourceMtimes,
         configMtime : configPath ? mtimeOf( configPath ) : 0
     };
     programCache.set( cacheKey, entry );

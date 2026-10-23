@@ -69,15 +69,15 @@ function effectiveMethods( method: Method ): string[]
 
 interface Shape {
     /** Identity of the pattern ignoring param names, for overlap detection. */
-    key         : string
+    key            : string
     /** A path made only of literal text can be matched by string equality. */
-    isStatic    : boolean
-    /** Static first path segment when guaranteed (e.g. `users` for `/users/:id`), else `null`. */
-    firstPrefix : string | null
-    wildcards   : number
-    groups      : number
-    params      : number
-    literalLen  : number
+    isStatic       : boolean
+    /** Leading complete static path segments before any parameter, wildcard, or group. */
+    staticSegments : string[]
+    wildcards      : number
+    groups         : number
+    params         : number
+    literalLen     : number
 }
 
 function describeTokens( tokens: Token[], shape: Shape ): string
@@ -115,61 +115,42 @@ function describeTokens( tokens: Token[], shape: Shape ): string
     return key;
 }
 
-function extractStaticFirstSegment( tokens: Token[]): string | null
+const NO_SEGMENTS: string[] = [];
+
+function extractStaticSegments( tokens: Token[]): string[]
 {
     const first = tokens[0];
 
     if( !first || first.type !== 'text' || !first.value.startsWith( '/' ))
     {
-        return null;
+        return NO_SEGMENTS;
     }
 
-    const slashIdx = first.value.indexOf( '/', 1 );
+    const lastSlash = first.value.lastIndexOf( '/' );
 
-    if( slashIdx > 1 )
+    if( lastSlash <= 1 )
     {
-        return first.value.slice( 1, slashIdx );
+        return NO_SEGMENTS;
     }
 
-    return null;
-}
-
-function extractFirstSegmentFromPath( path: string ): string
-{
-    if( !path.startsWith( '/' ) || path.length <= 1 )
-    {
-        return '';
-    }
-
-    const slashIdx = path.indexOf( '/', 1 );
-
-    return slashIdx === -1 ? path.slice( 1 ) : path.slice( 1, slashIdx );
+    return first.value.slice( 1, lastSlash ).split( '/' );
 }
 
 function describe( path: string ): Shape
 {
     const shape: Shape = {
-        key         : '',
-        isStatic    : true,
-        firstPrefix : null,
-        wildcards   : 0,
-        groups      : 0,
-        params      : 0,
-        literalLen  : 0
+        key            : '',
+        isStatic       : true,
+        staticSegments : NO_SEGMENTS,
+        wildcards      : 0,
+        groups         : 0,
+        params         : 0,
+        literalLen     : 0
     };
 
-    // An unparsable path is left to pathMatcher to reject; treat it as opaquely dynamic.
-    try
-    {
-        const parsedTokens = parse( path ).tokens;
-        shape.key = describeTokens( parsedTokens, shape );
-        shape.firstPrefix = extractStaticFirstSegment( parsedTokens );
-    }
-    catch
-    {
-        shape.isStatic = false;
-        shape.key = path;
-    }
+    const parsedTokens = parse( path ).tokens;
+    shape.key = describeTokens( parsedTokens, shape );
+    shape.staticSegments = extractStaticSegments( parsedTokens );
 
     return shape;
 }
@@ -180,10 +161,12 @@ interface Entry {
     order : number
 }
 
-interface MethodDynamicBucket {
-    byPrefix   : Map<string, Entry[]>
-    rootRoutes : Entry[]
+interface PrefixTrieNode {
+    entries  : Entry[]
+    children : Map<string, PrefixTrieNode> | undefined
 }
+
+const EMPTY_ENTRIES: Entry[] = [];
 
 /**
  * Most specific first: wildcards and optional groups match the widest, then fewer params and
@@ -198,6 +181,102 @@ function bySpecificity( a: Entry, b: Entry ): number
         || a.order - b.order;
 }
 
+function byRegistrationOrder( a: Entry, b: Entry ): number
+{
+    return a.order - b.order;
+}
+
+function buildPrefixTrie(
+    sortedList: Entry[],
+    compareFn: ( a: Entry, b: Entry ) => number = bySpecificity
+): PrefixTrieNode
+{
+    const root: PrefixTrieNode = { entries : [], children : undefined };
+
+    for( const entry of sortedList )
+    {
+        let node = root;
+
+        for( const seg of entry.shape.staticSegments )
+        {
+            if( !node.children )
+            {
+                node.children = new Map();
+            }
+
+            let child = node.children.get( seg );
+
+            if( !child )
+            {
+                child = { entries : [], children : undefined };
+                node.children.set( seg, child );
+            }
+
+            node = child;
+        }
+
+        node.entries.push( entry );
+    }
+
+    const propagate = ( node: PrefixTrieNode, inherited: Entry[]): void =>
+    {
+        if( inherited.length > 0 )
+        {
+            if( node.entries.length === 0 )
+            {
+                node.entries = inherited;
+            }
+            else
+            {
+                node.entries = [ ...inherited, ...node.entries ].sort( compareFn );
+            }
+        }
+
+        if( !node.children ){ return }
+
+        for( const child of node.children.values())
+        {
+            propagate( child, node.entries );
+        }
+    };
+
+    propagate( root, EMPTY_ENTRIES );
+
+    return root;
+}
+
+function lookupTrieCandidates( root: PrefixTrieNode | undefined, path: string ): Entry[]
+{
+    if( !root ){ return EMPTY_ENTRIES }
+
+    let node = root;
+
+    if( !node.children || !path.startsWith( '/' ) || path.length <= 1 )
+    {
+        return node.entries;
+    }
+
+    let start = 1;
+    const len = path.length;
+
+    while( node.children && start < len )
+    {
+        const slashIdx = path.indexOf( '/', start );
+        const end = slashIdx === -1 ? len : slashIdx;
+        const next = node.children.get( path.slice( start, end ));
+
+        if( !next ){ break }
+
+        node = next;
+
+        if( slashIdx === -1 ){ break }
+
+        start = slashIdx + 1;
+    }
+
+    return node.entries;
+}
+
 const EMPTY_PARAMS: Record<string, any> = Object.freeze( Object.create( null ));
 
 export class Router 
@@ -209,10 +288,10 @@ export class Router
     private staticRoutes = new Map<string, Route>();
     /** Per exact path: the methods serving it and the first route registered, for `Allow`. */
     private staticPaths = new Map<string, { methods : Set<string>, first : Route }>();
-    /** Pattern routes bucketed per method and first static segment, specificity-sorted. */
-    private dynamicRoutes = new Map<string, MethodDynamicBucket>();
-    /** Every HTTP-facing pattern route, for the `Allow` fallback scan. */
-    private dynamicHttp : Entry[] = [];
+    /** Pattern routes indexed per method in a static-prefix trie, specificity-sorted. */
+    private dynamicRoutes = new Map<string, PrefixTrieNode>();
+    /** HTTP-facing pattern routes indexed in a static-prefix trie, for the `Allow` fallback scan. */
+    private dynamicHttpTrie? : PrefixTrieNode;
 
     /** Overlap diagnostics collected while compiling; read after the last `add`. */
     public readonly warnings : string[] = [];
@@ -241,11 +320,12 @@ export class Router
         this.staticRoutes.clear();
         this.staticPaths.clear();
         this.dynamicRoutes.clear();
-        this.dynamicHttp = [];
+        this.dynamicHttpTrie = undefined;
         this.warnings.length = 0;
 
         const seen = new Map<string, Route>();
         const rawDynamic = new Map<string, Entry[]>();
+        const dynamicHttpList: Entry[] = [];
 
         for( const entry of this.entries )
         {
@@ -291,40 +371,18 @@ export class Router
                 if( !known ){ this.staticPaths.set( shape.key, known = { methods : new Set(), first : route }) }
                 known.methods.add( route.method );
             }
-            else { this.dynamicHttp.push( entry ) }
+            else { dynamicHttpList.push( entry ) }
         }
 
         for( const [ method, list ] of rawDynamic.entries())
         {
             list.sort( bySpecificity );
+            this.dynamicRoutes.set( method, buildPrefixTrie( list, bySpecificity ));
+        }
 
-            const byPrefix = new Map<string, Entry[]>();
-            const rootRoutes: Entry[] = [];
-
-            for( const entry of list )
-            {
-                if( entry.shape.firstPrefix === null )
-                {
-                    rootRoutes.push( entry );
-                }
-                else if( !byPrefix.has( entry.shape.firstPrefix ))
-                {
-                    byPrefix.set( entry.shape.firstPrefix, []);
-                }
-            }
-
-            for( const [ prefix, prefixBucket ] of byPrefix.entries())
-            {
-                for( const entry of list )
-                {
-                    if( entry.shape.firstPrefix === prefix || entry.shape.firstPrefix === null )
-                    {
-                        prefixBucket.push( entry );
-                    }
-                }
-            }
-
-            this.dynamicRoutes.set( method, { byPrefix, rootRoutes });
+        if( dynamicHttpList.length > 0 )
+        {
+            this.dynamicHttpTrie = buildPrefixTrie( dynamicHttpList, byRegistrationOrder );
         }
 
         this.compiled = true;
@@ -336,16 +394,24 @@ export class Router
      */
     public lookup( method: string, path: string ): RouteLookup
     {
-        this.compile();
-
-        const match = this.matchMethod( method, path )
-            || ( method === 'HEAD' ? this.matchMethod( 'GET', path ) : null );
+        const match = this.match( method, path );
 
         if( match ){ return { match, allowed : NO_METHODS, fallback : null } }
 
-        const probe = this.probePath( path );
+        let probe: { allowed : string[], fallback : RouteMatch | null } | undefined;
+        const getProbe = () => probe ?? ( probe = this.probePath( path ));
 
-        return { match : null, allowed : probe.allowed, fallback : probe.fallback };
+        return {
+            match : null,
+            get allowed(): string[]
+            {
+                return getProbe().allowed;
+            },
+            get fallback(): RouteMatch | null
+            {
+                return getProbe().fallback;
+            }
+        };
     }
 
     public find( method: string, path: string ): RouteMatch | null
@@ -353,6 +419,18 @@ export class Router
         this.compile();
 
         return this.matchMethod( method, path );
+    }
+
+    /**
+     * Hot-path route match for `method`+`path` (including RFC 9110 HEAD → GET fallback),
+     * without scanning other HTTP verbs via `probePath` on a miss.
+     */
+    public match( method: string, path: string ): RouteMatch | null
+    {
+        this.compile();
+
+        return this.matchMethod( method, path )
+            || ( method === 'HEAD' ? this.matchMethod( 'GET', path ) : null );
     }
 
     /**
@@ -398,7 +476,9 @@ export class Router
             fallback = { metadata : staticHit.first.metadata, params : EMPTY_PARAMS };
         }
 
-        for( const entry of this.dynamicHttp )
+        const dynamicCandidates = lookupTrieCandidates( this.dynamicHttpTrie, path );
+
+        for( const entry of dynamicCandidates )
         {
             const match = entry.route.matchFn( path );
 
@@ -412,20 +492,9 @@ export class Router
         return { allowed : toAllowList( matched ), fallback };
     }
 
-    private getDynamicCandidates( method: string, path: string ): Entry[] | undefined
+    private getDynamicCandidates( method: string, path: string ): Entry[]
     {
-        const methodBucket = this.dynamicRoutes.get( method );
-
-        if( !methodBucket ){ return undefined }
-
-        if( methodBucket.byPrefix.size === 0 )
-        {
-            return methodBucket.rootRoutes;
-        }
-
-        const firstSeg = extractFirstSegmentFromPath( path );
-
-        return methodBucket.byPrefix.get( firstSeg ) ?? methodBucket.rootRoutes;
+        return lookupTrieCandidates( this.dynamicRoutes.get( method ), path );
     }
 
     private matchMethod( method: string, path: string ): RouteMatch | null

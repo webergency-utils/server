@@ -139,17 +139,9 @@ export function generateManifestCode( registry: ProjectRegistry, controllerMap: 
         });
 
         // Replace __raw_code__ placeholders before cleaning up quotes
-        epJson = epJson.replace( /\{\s*"__raw_code__":\s*"([^"]+)"\s*\}/g, ( match, rawCode ) => 
-        {
-            try 
-            {
-                return JSON.parse( '"' + rawCode + '"' );
-            }
-            catch 
-            {
-                return rawCode;
-            }
-        });
+        epJson = epJson.replace( /\{\s*"__raw_code__":\s*"([^"]+)"\s*\}/g, ( _match, rawCode ) =>
+            JSON.parse( '"' + rawCode + '"' )
+        );
 
         // Clean up JSON for JS (remove quotes from keys, use single quotes)
         epJson = epJson
@@ -194,14 +186,9 @@ export function objectToExpression( obj: any ): ts.Expression
         if( typeof obj.__raw_code__ === 'string' ) 
         {
             const tempSourceFile = ts.createSourceFile( 'temp_ast.ts', `(${obj.__raw_code__})`, ts.ScriptTarget.Latest, true );
-            const statement = tempSourceFile.statements[0];
+            const statement = tempSourceFile.statements[0] as ts.ExpressionStatement;
 
-            if( statement && ts.isExpressionStatement( statement )) 
-            {
-                return detachGeneratedExpression( statement.expression );
-            }
-
-            return ts.factory.createIdentifier( obj.__raw_code__ );
+            return detachGeneratedExpression( statement.expression );
         }
         const properties: ts.ObjectLiteralElementLike[] = [];
 

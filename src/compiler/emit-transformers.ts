@@ -2,7 +2,7 @@ import ts from 'typescript';
 import * as path from 'path';
 import { createRequire } from 'node:module';
 import typecheckerTransformer from '@webergency-utils/typechecker/transformer';
-import compilerPlugin from './plugin.js';
+import compilerPlugin from './transformer.js';
 import type { PluginExtras } from './plugin.js';
 
 export const TYPECHECKER_TRANSFORM = '@webergency-utils/typechecker/transformer';

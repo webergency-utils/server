@@ -251,9 +251,12 @@ export class MultiBuffer
         }
 
         let offset = 0;
+        const last = this.buffers.length - 1;
 
-        for( const buf of this.buffers )
+        for( let i = 0; i < last; i++ )
         {
+            const buf = this.buffers[i];
+
             if( index < offset + buf.length )
             {
                 return buf[index - offset];
@@ -261,7 +264,7 @@ export class MultiBuffer
             offset += buf.length;
         }
 
-        return undefined;
+        return this.buffers[last][index - offset];
     }
 
     equals( buffer: Buffer, offset = 0, length = Infinity ): boolean
@@ -287,7 +290,7 @@ export class MultiBuffer
 
         if( offset < 0 )
         {
-            offset = this.totalLength - offset;
+            offset = Math.max( 0, this.totalLength + offset );
         }
 
         if( buffer.length === 0 )

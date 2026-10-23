@@ -55,7 +55,7 @@ export function seedInstanceController(
     registry: ApplicationRegistry,
     name: string,
     instance: any,
-    endpoints: Omit<EndpointMetadata, 'controller'>[]
+    endpoints: EndpointDefinition[]
 )
 {
     runWithRegistry( registry, () =>

@@ -1,5 +1,6 @@
-import type { EndpointMetadata, ParamMetadata } from './types.js';
+import type { EndpointMetadata, GuardMetadata, ParamMetadata } from './types.js';
 import type { Scope } from '../decorators.js';
+import { Context } from './context.js';
 
 /** Well-known Symbol.for keys for AOT metadata attached to classes / methods. */
 export const WEBERGENCY_CONTROLLER = Symbol.for( 'webergency.server.controller' );
@@ -17,8 +18,12 @@ export type ControllerAotMeta =
     };
 
 /** Endpoint as stored on the controller class (controller name filled at bootstrap). */
-export type EndpointDefinition = Omit<EndpointMetadata, 'controller'> & {
-    controller? : string
+export type EndpointDefinition = Omit<EndpointMetadata, 'controller' | 'params' | 'guards' | 'interceptors' | 'meta'> & {
+    controller?   : string
+    params?       : ParamMetadata[]
+    guards?       : Array<Pick<GuardMetadata, 'type' | 'name'> & Partial<GuardMetadata>>
+    interceptors? : string[]
+    meta?         : Record<string, any>
 };
 
 export type ModuleAotMeta =
@@ -109,7 +114,74 @@ export function ensureCustomMetadataBag( target: any ): Record<string | symbol, 
     return target[WEBERGENCY_METADATA];
 }
 
+const fallbackBranchSerializers = new WeakMap<object, ( val: any ) => string>();
+let fallbackHasEntries = false;
+
+function upgradeBranchSerializersMap( map: WeakMap<object, ( val: any ) => string> ): WeakMap<object, ( val: any ) => string>
+{
+    if(( map as any ).__webergencyContextAware ){ return map }
+
+    if( map !== fallbackBranchSerializers )
+    {
+        fallbackHasEntries = true;
+    }
+
+    const origGet = map.get.bind( map );
+    const origSet = map.set.bind( map );
+    const origHas = map.has.bind( map );
+    const origDelete = map.delete.bind( map );
+
+    map.get = ( key: object ) => Context.get()?.branchSerializers?.get( key ) ?? ( fallbackHasEntries ? origGet( key ) : undefined );
+    map.set = ( key: object, value: ( val: any ) => string ) =>
+    {
+        const ctx = Context.get();
+
+        if( ctx )
+        {
+            ( ctx.branchSerializers ?? ( ctx.branchSerializers = new WeakMap())).set( key, value );
+
+            return map;
+        }
+
+        fallbackHasEntries = true;
+
+        return origSet( key, value );
+    };
+    map.has = ( key: object ) => ( Context.get()?.branchSerializers?.has( key ) ?? false ) || ( fallbackHasEntries && origHas( key ));
+    map.delete = ( key: object ) =>
+    {
+        const ctx = Context.get();
+
+        if( ctx?.branchSerializers?.delete( key )){ return true }
+
+        return fallbackHasEntries ? origDelete( key ) : false;
+    };
+    ( map as any ).__webergencyContextAware = true;
+
+    return map;
+}
+
+const contextAwareBranchSerializers = upgradeBranchSerializersMap( fallbackBranchSerializers );
+( globalThis as any )[WEBERGENCY_BRANCH_SERIALIZERS] = contextAwareBranchSerializers;
+
+export function hasFallbackBranchSerializers(): boolean
+{
+    return fallbackHasEntries || ( globalThis as any )[WEBERGENCY_BRANCH_SERIALIZERS] !== contextAwareBranchSerializers;
+}
+
 export function getBranchSerializers(): WeakMap<object, ( val: any ) => string>
 {
-    return (( globalThis as any )[WEBERGENCY_BRANCH_SERIALIZERS] ||= new WeakMap());
+    const current = ( globalThis as any )[WEBERGENCY_BRANCH_SERIALIZERS];
+
+    if( current === contextAwareBranchSerializers )
+    {
+        return current;
+    }
+
+    if( current instanceof WeakMap )
+    {
+        return upgradeBranchSerializersMap( current as WeakMap<object, ( val: any ) => string> );
+    }
+
+    return (( globalThis as any )[WEBERGENCY_BRANCH_SERIALIZERS] = contextAwareBranchSerializers );
 }

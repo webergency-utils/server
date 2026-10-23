@@ -3,12 +3,17 @@ import { EndpointMetadata } from './types.js';
 import type { ServerRequest } from './server-request.js';
 import type { ApplicationRegistry } from './registry.js';
 
-export interface RequestContext {
-    request           : ServerRequest
-    metadata          : EndpointMetadata
-    requestId?        : string
-    requestInstances? : Map<string, any>
-    registry?         : ApplicationRegistry
+export interface RequestContext
+{
+    request            : ServerRequest
+    metadata           : EndpointMetadata
+    requestId?         : string
+    requestInstances?  : Map<string, any>
+    requestInflight?   : Map<string, Promise<any>>
+    branchSerializers? : WeakMap<object, ( val: any ) => string>
+    registry?          : ApplicationRegistry
+    wsCleanedUp?       : boolean
+    wsController?      : any
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

@@ -89,11 +89,11 @@ For local TypeScript without a prior `dist` emit:
 node --import @webergency-utils/server/register ./src/main.ts
 ```
 
-`Server({ module })` / `Server({ controllers, providers, guards, interceptors })` walks the graph on first `start()` or `fetch()` and fails fast if a declared controller host has no AOT meta.
+`Server({ module })` / `Server({ controllers, providers, guards, interceptors })` walks the graph on first `start()` or `ensureReady()` and fails fast if a declared controller host has no AOT meta.
 
 **Library packages:** compile with `webergency-tsc` (or the transformer). Do not re-bundle with tsup/esbuild in a way that strips `Symbol.for(...)` or `__injections__`. Guard `@Header` / `@Request` AOT lives on the guard class (`webergency.server.guard`); apps only need `@Protect(LibGuard)` plus their own webergency-tsc emit. See [ADR 0009](docs/adr/0009-portable-host-aot.md).
 
-This package’s `npm run build` is `webergency-tsc` (ESM + `.d.ts`) then tsup CJS with treeshake/minify off. `prepublishOnly` runs that build before `npm publish`.
+This package’s `npm run build` is `webergency-tsc` (ESM + `.d.ts`) then tsup CJS. `prepublishOnly` runs that build before `npm publish`.
 
 Entry points:
 
@@ -106,7 +106,7 @@ Entry points:
 ## Architecture & Internals
 
 1. **AOT transformer / `webergency-tsc`** — Analyzes controllers at build time; emits `Symbol.for` meta + typechecker validators into each file’s JS. Decorators are no-ops without that emit.
-2. **Per-Server registry** — `ApplicationRegistry` is owned by each `Server` / `Microservice`. Bootstrap walks modules/controllers lazily on first `start()`/`fetch()`. Active registry is available to the request/DI stack via `getRegistry()` / `runWithRegistry()`.
+2. **Per-Server registry** — `ApplicationRegistry` is owned by each `Server` / `Microservice`. Bootstrap walks modules/controllers lazily on first `start()` / `ensureReady()`. Active registry is available to the request/DI stack via `getRegistry()` / `runWithRegistry()`.
 3. **Adapters** — Maps Web Standard `Request` / `Response` to `Bun.serve`, `Deno.serve`, or Node `http`/`https` (Node 22+). Runtime is auto-detected.
 4. **Pipeline** — Match route → security checks → middlewares → guards → interceptors → handler → response merge (`ServerResponse` headers/status).
 5. **Routing** — Exact paths resolve through a per-method map with no regex. Pattern routes are bucketed per method and tried most-specific first, so `/users/me` beats `/users/:id` and `/files/:name` beats `/files/*rest` no matter what order they were registered in. Registration order only breaks ties between equally specific patterns, and a pattern that can never be reached (e.g. a second `/u/:key` after `/u/:id`) is warned about at bootstrap. A request whose path matches only under other verbs gets **405** with `Allow`; an unknown path is still 404. A WebSocket upgrade to a non-WS path stays 404, since WS is a transport rather than an advertised method. **SEO / Internal:** `@Seo` endpoints form a high-priority group tried before public routes; they return `{ method, path, query?, body? }` or void (fallthrough). `@Internal` paths are forward-only (direct HTTP → 404). `ServerResponse.forward` / SEO returns re-dispatch on public ∪ internal (SEO skipped; nested hops allowed, cycles rejected). See `docs/adr/0008-seo-internal-dispatch.md`.
@@ -150,6 +150,7 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `module?` | `any \| any[]` | Application module(s) |
 | `cors?` | `CorsOptions` | Global CORS |
 | `security?` | `SecurityOptions \| boolean` | Global security / headers. `maxBodySize` defaults to `1mb`; set `0` (or `security: false`) for no cap |
+| `files?` | `FileOptions` | Global multipart / upload defaults (merged under `Module.files` and `@File`) |
 | `responseMode?` | `'strict' \| 'relaxed' \| 'strip'` | Default response validation mode |
 | `tls?` | `TlsOptions` | TLS / mTLS |
 | `headersTimeout?` | `number` | Node only: time to receive complete headers (default `60000`) |
@@ -160,8 +161,9 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `reviver?` | `Reviver \| null` | JSON.parse-style reviver for typed JSON / query `parse` and untyped JSON / urlencoded bodies. Overridden by Module.reviver and `@Reviver`. `null` opts out. |
 | `logger?` / `logs?` | `Logger` / `boolean` | Logging |
 | `shutdownTimeout?` | `number` | Graceful shutdown wait |
+| `signals?` | `boolean` | Register `SIGTERM` / `SIGINT` listeners for graceful shutdown (default `true`) |
 
-**Methods:** `start()`, `shutdown()`, `fetch(request)` (in-process), `ensureReady()`, `getBody` / `getRawBody`, `on` / `off` for `start` | `beforeShutdown` | `shutdown` | `request` | `error`.  
+**Methods:** `start()`, `shutdown()`, `ensureReady()`, `on` / `off` for `start` | `beforeShutdown` | `shutdown` | `request` | `error`.  
 **Property:** `registry` — the owning `ApplicationRegistry`.
 
 ```typescript
@@ -227,7 +229,8 @@ await ms.shutdown();
 ```
 
 **Constructor:** `new Microservice(adapter, options?)` — `options` mirrors flat/`module` bootstrap fields on `ServerOptions`.  
-**Property:** `registry`. **Methods:** `ensureReady()`, `start()`, `shutdown()`.  
+**Property:** `registry`. **Methods:** `ensureReady()`, `start()`, `shutdown()` (drains in-flight RPC requests before closing the adapter and destroying providers).  
+**Client:** `new TcpClient({ port, host?, timeoutMs? })` — `connect()`, `send(pattern, payload?, timeoutMs?)`, `emit(pattern, payload?)`, `close()`. Both adapter and client enforce a `1 MiB` NDJSON frame cap (`TCP_MAX_LINE_BYTES`).  
 `MicroserviceNoReply` — sentinel returned for `@EventPattern` so adapters never write a reply envelope.
 
 ### Route decorators
@@ -268,7 +271,7 @@ await ms.shutdown();
 
 * `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `parser` (`from: 'json'`); `text/plain` → string; urlencoded → `parserQuery` (`from: 'query'`); **`multipart/form-data` → bag + AOT validator (`from: 'query'`)** so DTOs like `{ title: string; documents: UploadedFile[] }` coerce strings and keep file instances. Missing CT sniffs JSON then form; unsupported CT → **415**; bad JSON → **400**.
 * `@BodyHash(hasher, options?)` — Injects calculated cryptographic hash or HMAC of the raw request body. `hasher` is an algorithm name (e.g. `'sha256'`) or a hasher class/factory/instance implementing `{ update, digest }`. Options: `{ encoding?: BinaryToTextEncoding | 'buffer', key?: string | Buffer, length?: number }`. Defaults to `'base64url'` encoding. Providing `key` computes an HMAC (`createHmac`). Providing `length` sets `outputLength` for variable-length/XOF algorithms (`shake256`, `blake2b`).
-* `@File` / `@Files` — Streaming multipart uploads. Class/method `@File({ dest, maxFileSize, onFile, fields })` configures handling (merged ServerOptions.files → Module.files → controller → endpoint). Parameter `@File('field')` injects `UploadedFile`; `@Files()` injects all files. Prefer `dest` for temp/disk paths, or `onFile` for custom sinks (e.g. S3). For the full form bag use `@Body()` with multipart Content-Type.
+* `@File` / `@Files` — Streaming multipart uploads. Class/method `@File({ dest, maxFileSize, maxFiles, maxFieldSize, maxFields, maxTotalSize, onFile, fields })` configures handling (merged `ServerOptions.files` → `Module.files` → controller → endpoint; default caps: `32` files, `128` fields, `10mb` per file, `1mb` per field). Parameter `@File('field')` injects `UploadedFile`; `@Files()` injects all files. Prefer `dest` for temp/disk paths, or `onFile` for custom sinks (e.g. S3). For the full form bag use `@Body()` with multipart Content-Type.
 * `@Query(name?, mode?)` — No name + typed: raw URL search text → `parse` `from: 'query'`. No name + untyped: `req.query` bag. Named scalar → `from: 'string'`. Named array/object → assert `from: 'query'`.
 * `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie scalar (`from: 'string'`).
 * `@Headers` / `@Cookies` — Whole string maps, AOT-**asserted** against the parameter type (`from: 'query'`). `parse` is not used (not wire text).
@@ -374,6 +377,7 @@ Coercion via `from`:
 ### Types & helpers
 
 * `ServerRequest` / `ServerResponse` / `EndpointRequest` / `EndpointResponse` / `ResponseBag` (alias) / `CookieOptions` / `Middleware` / `MiddlewareClass`
+* `UploadedFile`, `FileOptions`, `FileFieldOptions`, `FileHandler`, `MultipartPayload`, `MultipartParser`, `MultiBuffer`, `DEFAULT_MAX_FILES`, `DEFAULT_MAX_FIELDS`, `DEFAULT_MAX_FILE_SIZE`, `DEFAULT_MAX_FIELD_SIZE`
 * `ServerWebSocket`, `PeerCert`, `PeerCertSubject`, `TlsOptions`
 * `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
 * `Scope` (`SINGLETON` | `TRANSIENT` | `REQUEST`)
@@ -381,11 +385,12 @@ Coercion via `from`:
 * `ConsoleLogger` / `NoOpLogger`
 * `ApplicationRegistry`, `getRegistry`, `tryGetRegistry`, `runWithRegistry`
 * `Router`, `Reflector`, `RequestContext` / `RequestContextStore`
-* Symbol keys: `WEBERGENCY_CONTROLLER`, `WEBERGENCY_MODULE`, `WEBERGENCY_INJECTABLE`, `WEBERGENCY_METADATA`
-* Meta readers: `getControllerMeta`, `getModuleMeta`, `getInjectableMeta`
+* Symbol keys: `WEBERGENCY_CONTROLLER`, `WEBERGENCY_MODULE`, `WEBERGENCY_INJECTABLE`, `WEBERGENCY_METADATA`, `WEBERGENCY_GUARD`
+* Meta readers: `getControllerMeta`, `getModuleMeta`, `getInjectableMeta`, `getGuardMeta`
 * Path helpers: `pathCompiler`, `pathMatcher`, `pathToRE`, …
 * IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`, `TRUST_PROXY_LOOPBACK`, `TrustProxy`
 * Peer helpers: `normalizePeerCert`, `needsNodeTlsCompat`, `tlsMaterialToString`
+* Error & redaction helpers: `clientErrorBody`, `errorLogFields`, `redactSecrets`, `REDACTED`, `SECRET_KEYS` (5xx client bodies return generic `'Internal Server Error'` while structured logs redact secret keys)
 
 ### Errors
 
