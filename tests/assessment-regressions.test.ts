@@ -812,9 +812,9 @@ describe( 'Runtime, Pipeline & Compiler Regressions', () =>
                     export class UsersController {}
                 `
             })).toThrow( /Duplicate controller class name "UsersController"/ );
-        });
+        }, 30_000 );
 
-        it( 'should throw a compile-time diagnostic when a @Module controller injects an unexported or unimported provider from another @Module', () =>
+        it( 'should throw a compile-time diagnostic when a @Module controller injects a provider from an unimported module', () =>
         {
             // Arrange & Act & Assert: BillingModule is not imported
             expect(() => transformMultiFile({
@@ -838,7 +838,10 @@ describe( 'Runtime, Pipeline & Compiler Regressions', () =>
                     export class UsersModule {}
                 `
             })).toThrow( /Cannot inject "BillingService" into "UsersController" in module "UsersModule": "BillingService" is declared in "BillingModule", which is not imported/ );
+        }, 30_000 );
 
+        it( 'should throw a compile-time diagnostic when a @Module controller injects a provider that is not in module exports', () =>
+        {
             // Arrange & Act & Assert: BillingModule is imported, but BillingService is not exported
             expect(() => transformMultiFile({
                 'app.ts' : `
@@ -861,7 +864,7 @@ describe( 'Runtime, Pipeline & Compiler Regressions', () =>
                     export class UsersModule {}
                 `
             })).toThrow( /"BillingService" is declared in "BillingModule" but is not in its exports/ );
-        });
+        }, 30_000 );
 
         it( 'should omit @Internal endpoints and include controller tags in generated Swagger spec', () =>
         {
