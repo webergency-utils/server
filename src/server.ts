@@ -693,7 +693,6 @@ export class Server extends EventEmitter
         sreq.forwardBody = target.body ? target.body : undefined;
 
         const securityConfig = this.resolveEndpointSecurity( match.metadata );
-        this.enforceSecurityGates( securityConfig, sreq.raw, sreq, method, match.metadata.path );
 
         // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
         return await this.runEndpoint( match.metadata, sreq, securityConfig );

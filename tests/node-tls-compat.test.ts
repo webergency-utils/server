@@ -125,11 +125,11 @@ describe( 'NodeTlsCompat', () =>
                 // Assert
                 expect( serveCalls.map(( c ) => c.hostname )).toEqual([ '127.0.0.1', '::1' ]);
                 adapter.closeAllConnections();
-                expect( stopSpies[0] ).toHaveBeenCalledWith( true );
-                expect( stopSpies[1] ).toHaveBeenCalledWith( true );
+                expect( stopSpies[0]).toHaveBeenCalledWith( true );
+                expect( stopSpies[1]).toHaveBeenCalledWith( true );
                 await adapter.close();
-                expect( stopSpies[0] ).toHaveBeenCalledWith();
-                expect( stopSpies[1] ).toHaveBeenCalledWith();
+                expect( stopSpies[0]).toHaveBeenCalledWith();
+                expect( stopSpies[1]).toHaveBeenCalledWith();
 
                 // Act — rollback on second host failure
                 serveCalls.length = 0;
@@ -137,7 +137,7 @@ describe( 'NodeTlsCompat', () =>
                 await expect(
                     adapter.listen( 3000, handler, undefined, undefined, [ '127.0.0.1', '192.0.2.99' ])
                 ).rejects.toThrow( 'EADDRNOTAVAIL' );
-                expect( stopSpies[0] ).toHaveBeenCalledWith( true );
+                expect( stopSpies[0]).toHaveBeenCalledWith( true );
             });
         }
         finally
@@ -180,8 +180,8 @@ describe( 'NodeTlsCompat', () =>
             // Assert
             expect( serveCalls.map(( c ) => c.hostname )).toEqual([ '127.0.0.1', '::1' ]);
             await adapter.close();
-            expect( shutdownSpies[0] ).toHaveBeenCalledTimes( 1 );
-            expect( shutdownSpies[1] ).toHaveBeenCalledTimes( 1 );
+            expect( shutdownSpies[0]).toHaveBeenCalledTimes( 1 );
+            expect( shutdownSpies[1]).toHaveBeenCalledTimes( 1 );
 
             // Act — rollback on second host failure
             serveCalls.length = 0;
@@ -189,7 +189,7 @@ describe( 'NodeTlsCompat', () =>
             await expect(
                 adapter.listen( 3000, handler, undefined, undefined, [ '127.0.0.1', '192.0.2.99' ])
             ).rejects.toThrow( 'EADDRNOTAVAIL' );
-            expect( shutdownSpies[0] ).toHaveBeenCalledTimes( 1 );
+            expect( shutdownSpies[0]).toHaveBeenCalledTimes( 1 );
         }
         finally
         {

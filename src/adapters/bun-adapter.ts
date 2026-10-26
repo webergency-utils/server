@@ -7,8 +7,8 @@ import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 
 export class BunAdapter implements ServerAdapter
 {
-    private server?          : any;
-    private servers          : any[] = [];
+    private server? : any;
+    private servers : any[] = [];
     private readonly nodeTls = new NodeTlsCompat();
 
     async listen(

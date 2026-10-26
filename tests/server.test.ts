@@ -1465,17 +1465,18 @@ describe( 'Server & Metadata', () =>
             const { createServer } = await import( 'http' );
             vi.mocked( createServer ).mockImplementation(() =>
             {
+                const listenFn = ( ...args: any[]) =>
+                {
+                    const cb = args.find(( a ) => typeof a === 'function' );
+                    cb?.();
+                };
                 const srv = {
-                    listen                : vi.fn(( ...args: any[] ) =>
-                    {
-                        const cb = args.find(( a ) => typeof a === 'function' );
-                        cb?.();
-                    }),
-                    close                 : vi.fn(( cb?: () => void ) => cb?.()),
-                    closeAllConnections   : vi.fn(),
-                    on                    : vi.fn(),
-                    once                  : vi.fn(),
-                    removeListener        : vi.fn()
+                    listen              : vi.fn( listenFn ),
+                    close               : vi.fn(( cb?: () => void ) => cb?.()),
+                    closeAllConnections : vi.fn(),
+                    on                  : vi.fn(),
+                    once                : vi.fn(),
+                    removeListener      : vi.fn()
                 };
                 createdServers.push( srv );
 
