@@ -509,5 +509,131 @@ describe( 'Security Helper & Integration Tests', () =>
             expect(( await make( '203.0.113.1' )).status ).toBe( 429 );
             expect(( await make( '203.0.113.2' )).status ).toBe( 200 );
         });
+
+        it( 'should enforce allowedHosts across GET, POST, and WS upgrades and return 403 Forbidden', async () =>
+        {
+            const server = new Server({
+                port     : 0,
+                security : { allowedHosts : [ 'localhost', '.example.com' ] }
+            });
+            class DummyController
+            {
+                getOk(){ return 'ok' }
+                postOk(){ return 'ok' }
+                wsOk(){}
+            }
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [
+                {
+                    methodName : 'getOk',
+                    httpMethod : 'GET',
+                    path       : '/host-test'
+                },
+                {
+                    methodName : 'postOk',
+                    httpMethod : 'POST',
+                    path       : '/host-test'
+                },
+                {
+                    methodName : 'wsOk',
+                    httpMethod : 'WS',
+                    path       : '/ws-host-test'
+                }
+            ]);
+
+            // Matching hosts -> 200
+            const getLocal = await server.fetch( new Request( 'http://localhost/host-test', {
+                headers : { host : 'localhost:3000' }
+            }));
+            expect( getLocal.status ).toBe( 200 );
+
+            const getSub = await server.fetch( new Request( 'http://localhost/host-test', {
+                headers : { host : 'api.example.com:8080' }
+            }));
+            expect( getSub.status ).toBe( 200 );
+
+            // Disallowed host -> 403 Forbidden
+            const getEvil = await server.fetch( new Request( 'http://localhost/host-test', {
+                headers : { host : 'evil.com' }
+            }));
+            expect( getEvil.status ).toBe( 403 );
+            expect( await getEvil.json()).toEqual({
+                success : false,
+                error   : 'Forbidden: Disallowed Host'
+            });
+
+            // Missing Host header -> 403 Forbidden
+            const getMissing = await server.fetch( new Request( 'http://localhost/host-test' ));
+            expect( getMissing.status ).toBe( 403 );
+
+            // Malformed Host header -> 403 Forbidden
+            const postMalformed = await server.fetch( new Request( 'http://localhost/host-test', {
+                method  : 'POST',
+                headers : { host : 'localhost:99999' }
+            }));
+            expect( postMalformed.status ).toBe( 403 );
+
+            // WS upgrade with disallowed Host -> 403 Forbidden
+            const wsEvil = await server.fetch( new Request( 'http://localhost/ws-host-test', {
+                headers : { upgrade : 'websocket', host : 'evil.com' }
+            }));
+            expect( wsEvil.status ).toBe( 403 );
+        });
+
+        it( 'should support route-level allowedHosts overrides and keep /health and /ready probes accessible', async () =>
+        {
+            const server = new Server({
+                port     : 0,
+                health   : true,
+                security : { allowedHosts : ['api.example.com'] }
+            });
+            class DummyController
+            {
+                webhook(){ return 'webhook-ok' }
+                partner(){ return 'partner-ok' }
+            }
+            seedInstanceController( server.registry, 'DummyController', new DummyController(), [
+                {
+                    methodName : 'webhook',
+                    httpMethod : 'POST',
+                    path       : '/webhook',
+                    security   : { allowedHosts : true }
+                },
+                {
+                    methodName : 'partner',
+                    httpMethod : 'GET',
+                    path       : '/partner',
+                    security   : { allowedHosts : ['partner.org'] }
+                }
+            ]);
+
+            // Route with allowedHosts: true accepts any Host
+            const webhookRes = await server.fetch( new Request( 'http://localhost/webhook', {
+                method  : 'POST',
+                headers : { host : 'any-caller.internal' }
+            }));
+            expect( webhookRes.status ).toBe( 200 );
+
+            // Route with allowedHosts: ['partner.org'] accepts partner.org and rejects api.example.com
+            const partnerOk = await server.fetch( new Request( 'http://localhost/partner', {
+                headers : { host : 'partner.org' }
+            }));
+            expect( partnerOk.status ).toBe( 200 );
+
+            const partnerBlocked = await server.fetch( new Request( 'http://localhost/partner', {
+                headers : { host : 'api.example.com' }
+            }));
+            expect( partnerBlocked.status ).toBe( 403 );
+
+            // Pre-routing /health and /ready probes bypass allowedHosts when queried by pod IP
+            const healthRes = await server.fetch( new Request( 'http://10.0.0.12:3000/health', {
+                headers : { host : '10.0.0.12:3000' }
+            }));
+            expect( healthRes.status ).toBe( 200 );
+
+            const readyRes = await server.fetch( new Request( 'http://10.0.0.12:3000/ready', {
+                headers : { host : '10.0.0.12:3000' }
+            }));
+            expect( readyRes.status ).toBe( 200 );
+        });
     });
 });

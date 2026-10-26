@@ -1458,6 +1458,64 @@ describe( 'Server & Metadata', () =>
             
             consoleSpy.mockRestore();
         });
+
+        it.skipIf( !isNodeRuntime )( 'should pass host option to adapter.listen and format bound hosts in startup log', async () =>
+        {
+            const createdServers: any[] = [];
+            const { createServer } = await import( 'http' );
+            vi.mocked( createServer ).mockImplementation(() =>
+            {
+                const srv = {
+                    listen                : vi.fn(( ...args: any[] ) =>
+                    {
+                        const cb = args.find(( a ) => typeof a === 'function' );
+                        cb?.();
+                    }),
+                    close                 : vi.fn(( cb?: () => void ) => cb?.()),
+                    closeAllConnections   : vi.fn(),
+                    on                    : vi.fn(),
+                    once                  : vi.fn(),
+                    removeListener        : vi.fn()
+                };
+                createdServers.push( srv );
+
+                return srv as any;
+            });
+
+            const logger = {
+                info  : vi.fn(),
+                warn  : vi.fn(),
+                error : vi.fn(),
+                debug : vi.fn()
+            };
+
+            const server = setupServer( 3005, ( registry ) =>
+            {
+                registry.registerController( 'HostCtrl', { ping : () => ({ pong : true }) });
+                registry.registerEndpoint({
+                    controller   : 'HostCtrl', methodName   : 'ping', httpMethod   : 'GET', path         : '/ping',
+                    params       : [], guards       : [], interceptors : [], meta         : {}
+                });
+            }, {
+                host : [ '127.0.0.1', '::1' ],
+                logs : true,
+                logger
+            });
+
+            await server.start();
+
+            expect( createdServers ).toHaveLength( 2 );
+            expect( createdServers[0].listen ).toHaveBeenCalledWith( 3005, '127.0.0.1', expect.any( Function ));
+            expect( createdServers[1].listen ).toHaveBeenCalledWith( 3005, '::1', expect.any( Function ));
+            expect( logger.info ).toHaveBeenCalledWith(
+                'Node server running at http://127.0.0.1:3005, http://[::1]:3005',
+                expect.objectContaining({ type : 'server_start', port : 3005 })
+            );
+
+            await server.shutdown();
+            expect( createdServers[0].close ).toHaveBeenCalled();
+            expect( createdServers[1].close ).toHaveBeenCalled();
+        });
     });
 
     describe( 'ConsoleLogger and event off()', () =>

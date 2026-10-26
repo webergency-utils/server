@@ -8,12 +8,12 @@ import { ServerRequest } from './core/server-request.js';
 import { Context, type RequestContext } from './core/context.js';
 import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
 import { handleCors, isPreflight } from './helpers/cors.js';
-import { mergeSecurityConfigs, generateSecurityHeaders, getAllowedContentTypesSet } from './helpers/security.js';
+import { mergeSecurityConfigs, generateSecurityHeaders, getAllowedContentTypesSet, isHostAllowed } from './helpers/security.js';
 
 import { RequestProcessor } from './core/request-processor.js';
 import { invokeGuards } from './core/guard-runner.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
-import { ServerAdapter } from './adapters/adapter.js';
+import { ServerAdapter, normalizeHostList } from './adapters/adapter.js';
 import type { TlsOptions, NodeHttpOptions } from './adapters/adapter.js';
 export type { TlsOptions, NodeHttpOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
@@ -59,6 +59,13 @@ export class NoOpLogger implements Logger
 
 export interface ServerOptions {
     port              : number
+    /**
+     * Network interface(s) or hostname(s) to bind the OS socket listener(s) to.
+     * - Omitted / `undefined` / `[]`: runtime default wildcard binding.
+     * - `string`: bind a single interface/hostname (e.g. `'127.0.0.1'`, `'0.0.0.0'`, `'::1'`).
+     * - `string[]`: bind one listener per unique non-empty entry on `port`.
+     */
+    host?             : string | string[]
     cors?             : CorsOptions
     security?         : SecurityOptions | boolean
     /** Global multipart / upload defaults (merged under module / `@File`). */
@@ -515,13 +522,23 @@ export class Server extends EventEmitter
         }
 
         this.serverAdapter = this.selectAdapter( runtime );
+        const hosts = normalizeHostList( this.options.host );
         await runWithRegistry( this.registry, async () =>
         {
-            await this.serverAdapter!.listen( port, this.fetch, this.options.tls, {
+            const httpOpts = {
                 headersTimeout   : this.options.headersTimeout,
                 requestTimeout   : this.options.requestTimeout,
                 keepAliveTimeout : this.options.keepAliveTimeout
-            });
+            };
+
+            if( hosts.length > 0 )
+            {
+                await this.serverAdapter!.listen( port, this.fetch, this.options.tls, httpOpts, this.options.host );
+            }
+            else
+            {
+                await this.serverAdapter!.listen( port, this.fetch, this.options.tls, httpOpts );
+            }
         });
 
         this.listening = true;
@@ -530,7 +547,12 @@ export class Server extends EventEmitter
 
         if( this.options.logs ) 
         {
-            this.logger.info( `${runtime} server running at ${protocol}://localhost:${port}`, {
+            const displayHosts = hosts.length > 0 ? hosts : ['localhost'];
+            const urls = displayHosts
+                .map(( h ) => `${protocol}://${h.includes( ':' ) && !h.startsWith( '[' ) ? `[${h}]` : h}:${port}` )
+                .join( ', ' );
+
+            this.logger.info( `${runtime} server running at ${urls}`, {
                 type : 'server_start',
                 runtime,
                 port
@@ -671,6 +693,7 @@ export class Server extends EventEmitter
         sreq.forwardBody = target.body ? target.body : undefined;
 
         const securityConfig = this.resolveEndpointSecurity( match.metadata );
+        this.enforceSecurityGates( securityConfig, sreq.raw, sreq, method, match.metadata.path );
 
         // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
         return await this.runEndpoint( match.metadata, sreq, securityConfig );
@@ -812,6 +835,15 @@ export class Server extends EventEmitter
         routeKey: string
     ): void
     {
+        // Enforce allowedHosts (HTTP Host header allowlist)
+        if( cfg?.allowedHosts && cfg.allowedHosts !== true && cfg.allowedHosts.length > 0 )
+        {
+            if( !isHostAllowed( request.headers.get( 'host' ), cfg ))
+            {
+                throw Object.assign( new Error( 'Forbidden: Disallowed Host' ), { status : 403 });
+            }
+        }
+
         // Enforce allowedContentTypes (require a matching CT when a body is indicated)
         if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'WS' ) 
         {
