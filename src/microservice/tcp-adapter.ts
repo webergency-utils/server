@@ -1,5 +1,6 @@
 import { MicroserviceAdapter, MessageConnection, MicroserviceNoReply } from './adapter.js';
 import { NdjsonLineFramer, TCP_MAX_LINE_BYTES } from './ndjson-framer.js';
+import { normalizeHostList } from '../adapters/adapter.js';
 import net from 'node:net';
 
 export { TCP_MAX_LINE_BYTES };
@@ -7,13 +8,14 @@ export { TCP_MAX_LINE_BYTES };
 export class TcpMessageAdapter implements MicroserviceAdapter 
 {
     private server? : net.Server;
+    private servers : net.Server[] = [];
     private connections = new Set<net.Socket>();
 
-    constructor( private port: number ) {}
+    constructor( private port: number, private host?: string | string[] ) {}
 
     async listen( handler: ( pattern: string, payload: any, connection: MessageConnection ) => Promise<any> ): Promise<void> 
     {
-        this.server = net.createServer(( socket ) => 
+        const createTcpServer = () => net.createServer(( socket ) => 
         {
             this.connections.add( socket );
             const framer = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
@@ -106,14 +108,59 @@ export class TcpMessageAdapter implements MicroserviceAdapter
             });
         });
 
-        return new Promise<void>(( resolve, reject ) => 
+        const hosts = normalizeHostList( this.host );
+        this.servers = [];
+
+        if( hosts.length === 0 )
         {
-            this.server!.listen( this.port, () => 
+            const server = createTcpServer();
+            this.server = server;
+            this.servers = [server];
+
+            return new Promise<void>(( resolve, reject ) => 
             {
-                resolve();
+                const onError = ( err: Error ) => reject( err );
+                server.once( 'error', onError );
+                server.listen( this.port, () => 
+                {
+                    server.off( 'error', onError );
+                    resolve();
+                });
             });
-            this.server!.on( 'error', ( err ) => reject( err ));
-        });
+        }
+
+        for( const h of hosts )
+        {
+            const server = createTcpServer();
+
+            try
+            {
+                await new Promise<void>(( resolve, reject ) =>
+                {
+                    const onError = ( err: Error ) => reject( err );
+                    server.once( 'error', onError );
+                    server.listen( this.port, h, () =>
+                    {
+                        server.off( 'error', onError );
+                        resolve();
+                    });
+                });
+
+                this.servers.push( server );
+            }
+            catch( err )
+            {
+                await Promise.all(
+                    this.servers.map( s => new Promise<void>( r => s.close(() => r())))
+                );
+                this.servers = [];
+                this.server = undefined;
+
+                throw err;
+            }
+        }
+
+        this.server = this.servers[0];
     }
 
     async close(): Promise<void> 
@@ -124,12 +171,12 @@ export class TcpMessageAdapter implements MicroserviceAdapter
         }
         this.connections.clear();
 
-        if( this.server ) 
-        {
-            return new Promise<void>(( resolve ) => 
-            {
-                this.server!.close(() => resolve());
-            });
-        }
+        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
+        this.servers = [];
+        this.server = undefined;
+
+        await Promise.all(
+            targets.map( srv => new Promise<void>( resolve => srv.close(() => resolve())))
+        );
     }
 }

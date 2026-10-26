@@ -1,4 +1,4 @@
-import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList } from './adapter.js';
 import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, attachBunClientCert } from '../helpers/peer-cert.js';
 import { NodeTlsCompat } from './node-tls-compat.js';
@@ -7,22 +7,25 @@ import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 
 export class BunAdapter implements ServerAdapter
 {
-    private server? : any;
+    private server?          : any;
+    private servers          : any[] = [];
     private readonly nodeTls = new NodeTlsCompat();
 
     async listen(
         port: number,
         handler: ( request: Request ) => Promise<Response>,
         tls?: TlsOptions,
-        http?: NodeHttpOptions
+        http?: NodeHttpOptions,
+        host?: string | string[]
     ): Promise<void>
     {
         // Bun.serve TLS works for cert/key, but peer certificates for @Peer are unreliable.
         // mTLS (requestCert) and SNI callbacks use Node's https adapter under Bun.
         if( needsNodeTlsCompat( tls ))
         {
-            await this.nodeTls.listen( port, handler, tls, http );
+            await this.nodeTls.listen( port, handler, tls, http, host );
             this.server = this.nodeTls.server;
+            this.servers = this.server ? [this.server] : [];
 
             return;
         }
@@ -112,7 +115,38 @@ export class BunAdapter implements ServerAdapter
             serveOptions.fetch = wrapFetch;
         }
 
-        this.server = ( globalThis as any ).Bun.serve( serveOptions );
+        const hosts = normalizeHostList( host );
+        this.servers = [];
+
+        if( hosts.length === 0 )
+        {
+            this.server = ( globalThis as any ).Bun.serve( serveOptions );
+            this.servers = [this.server];
+
+            return;
+        }
+
+        for( const h of hosts )
+        {
+            try
+            {
+                const srv = ( globalThis as any ).Bun.serve({ ...serveOptions, hostname : h });
+                this.servers.push( srv );
+            }
+            catch( err )
+            {
+                for( const s of this.servers )
+                {
+                    if( s && typeof s.stop === 'function' ){ s.stop( true ) }
+                }
+                this.servers = [];
+                this.server = undefined;
+
+                throw err;
+            }
+        }
+
+        this.server = this.servers[0];
     }
 
     upgrade( request: Request, metadata: any, params: any ): Response | Promise<Response>
@@ -154,9 +188,14 @@ export class BunAdapter implements ServerAdapter
             return;
         }
 
-        if( this.server && typeof this.server.stop === 'function' )
+        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
+
+        for( const srv of targets )
         {
-            this.server.stop();
+            if( srv && typeof srv.stop === 'function' )
+            {
+                srv.stop();
+            }
         }
     }
 
@@ -169,9 +208,14 @@ export class BunAdapter implements ServerAdapter
             return;
         }
 
-        if( this.server && typeof this.server.stop === 'function' )
+        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
+
+        for( const srv of targets )
         {
-            this.server.stop( true );
+            if( srv && typeof srv.stop === 'function' )
+            {
+                srv.stop( true );
+            }
         }
     }
 }

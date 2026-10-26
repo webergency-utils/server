@@ -37,10 +37,33 @@ export interface ServerAdapter {
         port: number,
         handler: ( request: Request ) => Promise<Response>,
         tls?: TlsOptions,
-        http?: NodeHttpOptions
+        http?: NodeHttpOptions,
+        host?: string | string[]
     ): Promise<void>
     close(): Promise<void>
     /** Drop every remaining socket after the graceful drain window. Node only. */
     closeAllConnections?(): void
     upgrade?( request: Request, metadata: any, params: any ): Response | Promise<Response>
+}
+
+export function normalizeHostList( host?: string | string[]): string[]
+{
+    if( !host ){ return [] }
+
+    const raw = Array.isArray( host ) ? host : [host];
+    const seen = new Set<string>();
+
+    for( const entry of raw )
+    {
+        if( typeof entry !== 'string' ){ continue }
+
+        const trimmed = entry.trim();
+
+        if( trimmed )
+        {
+            seen.add( trimmed );
+        }
+    }
+
+    return Array.from( seen );
 }

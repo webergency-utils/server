@@ -652,4 +652,113 @@ describe( 'NodeAdapter', () =>
             expect( closeAll ).toHaveBeenCalledTimes( 1 );
         });
     });
+
+    describe( 'multi-host binding and rollback', () =>
+    {
+        it( 'should bind multiple deduplicated host interfaces and close all on shutdown', async () =>
+        {
+            // Arrange
+            const port = await new Promise<number>(( resolve, reject ) =>
+            {
+                const s = net.createServer();
+                s.listen( 0, '127.0.0.1', () =>
+                {
+                    const addr = s.address();
+                    const p = typeof addr === 'object' && addr ? addr.port : 0;
+                    s.close(() => resolve( p ));
+                });
+                s.on( 'error', reject );
+            });
+
+            const adapter = new NodeAdapter();
+            const registry = new ApplicationRegistry();
+
+            // Act
+            await runWithRegistry( registry, async () =>
+            {
+                await adapter.listen(
+                    port,
+                    async () => new Response( 'multi-ok' ),
+                    undefined,
+                    undefined,
+                    [ '127.0.0.1', '::1', '127.0.0.1' ]
+                );
+            });
+
+            // Assert
+            const servers = ( adapter as any ).nodeServers;
+            expect( servers ).toHaveLength( 2 );
+            expect(( adapter as any ).nodeServer ).toBe( servers[0]);
+
+            const resV4 = await fetch( `http://127.0.0.1:${port}/` );
+            expect( resV4.status ).toBe( 200 );
+            expect( await resV4.text()).toBe( 'multi-ok' );
+
+            const resV6 = await fetch( `http://[::1]:${port}/` );
+            expect( resV6.status ).toBe( 200 );
+            expect( await resV6.text()).toBe( 'multi-ok' );
+
+            await adapter.close();
+            adapter.closeAllConnections();
+        });
+
+        it( 'should roll back already-bound listeners if a subsequent host fails to bind', async () =>
+        {
+            // Arrange
+            const port = await new Promise<number>(( resolve, reject ) =>
+            {
+                const s = net.createServer();
+                s.listen( 0, '127.0.0.1', () =>
+                {
+                    const addr = s.address();
+                    const p = typeof addr === 'object' && addr ? addr.port : 0;
+                    s.close(() => resolve( p ));
+                });
+                s.on( 'error', reject );
+            });
+
+            // Occupy ::1 on `port` so the second host in the list fails with EADDRINUSE
+            const blocker = net.createServer();
+            await new Promise<void>(( resolve, reject ) =>
+            {
+                blocker.listen( port, '::1', () => resolve());
+                blocker.on( 'error', reject );
+            });
+
+            const adapter = new NodeAdapter();
+            const registry = new ApplicationRegistry();
+
+            try
+            {
+                // Act & Assert
+                await expect(
+                    runWithRegistry( registry, async () =>
+                    {
+                        await adapter.listen(
+                            port,
+                            async () => new Response( 'ok' ),
+                            undefined,
+                            undefined,
+                            [ '127.0.0.1', '::1' ]
+                        );
+                    })
+                ).rejects.toThrow();
+
+                // Verify first listener (127.0.0.1) was rolled back and port is free on 127.0.0.1
+                const probe = net.createServer();
+                await new Promise<void>(( resolve, reject ) =>
+                {
+                    probe.listen( port, '127.0.0.1', () =>
+                    {
+                        probe.close(() => resolve());
+                    });
+                    probe.on( 'error', reject );
+                });
+            }
+            finally
+            {
+                await new Promise<void>( resolve => blocker.close(() => resolve()));
+            }
+        });
+    });
 });

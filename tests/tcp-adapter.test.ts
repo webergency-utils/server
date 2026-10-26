@@ -258,4 +258,68 @@ describe( 'TcpMessageAdapter', () =>
         expect( handled ).toBe( false );
         expect(( adapter as any ).connections.size ).toBe( 0 );
     });
+
+    it( 'should bind to deduplicated host interfaces and roll back on partial bind failure', async () =>
+    {
+        // Arrange
+        const port = await freePort();
+        adapter = new TcpMessageAdapter( port, [ '127.0.0.1', '::1', '127.0.0.1' ]);
+        await adapter.listen( async ( _pattern, payload ) => ({ echo : payload }));
+
+        // Act — connect via IPv4 and IPv6
+        const sendAndRead = async ( host: string ) =>
+        {
+            const client = net.connect( port, host );
+            await new Promise<void>(( resolve, reject ) =>
+            {
+                client.once( 'connect', () => resolve());
+                client.once( 'error', reject );
+            });
+            const replyP = readLine( client );
+            client.write( JSON.stringify({ id : 'h1', pattern : 'ping', payload : host }) + '\n' );
+            const line = await replyP;
+            client.end();
+
+            return JSON.parse( line! );
+        };
+
+        const resV4 = await sendAndRead( '127.0.0.1' );
+        const resV6 = await sendAndRead( '::1' );
+
+        // Assert
+        expect(( adapter as any ).servers ).toHaveLength( 2 );
+        expect( resV4 ).toEqual({ id : 'h1', status : 'success', data : { echo : '127.0.0.1' } });
+        expect( resV6 ).toEqual({ id : 'h1', status : 'success', data : { echo : '::1' } });
+        await adapter.close();
+        adapter = undefined;
+
+        // Now test rollback when second host fails to bind
+        const blocker = net.createServer();
+        await new Promise<void>(( resolve, reject ) =>
+        {
+            blocker.listen( port, '::1', () => resolve());
+            blocker.on( 'error', reject );
+        });
+
+        try
+        {
+            const failingAdapter = new TcpMessageAdapter( port, [ '127.0.0.1', '::1' ]);
+            await expect( failingAdapter.listen( async () => 'ok' )).rejects.toThrow();
+
+            // Verify 127.0.0.1 was rolled back
+            const probe = net.createServer();
+            await new Promise<void>(( resolve, reject ) =>
+            {
+                probe.listen( port, '127.0.0.1', () =>
+                {
+                    probe.close(() => resolve());
+                });
+                probe.on( 'error', reject );
+            });
+        }
+        finally
+        {
+            await new Promise<void>( resolve => blocker.close(() => resolve()));
+        }
+    });
 });

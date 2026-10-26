@@ -1,4 +1,4 @@
-import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList } from './adapter.js';
 import { MultiBuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { toAllowList } from '../core/router.js';
@@ -60,13 +60,35 @@ function endUpgradeSocket( socket: any, rawHttp: string ): void
 
 export class NodeAdapter implements ServerAdapter 
 {
-    private nodeServer? : any;
+    private nodeServers : any[] = [];
+
+    public get nodeServer(): any
+    {
+        return this.nodeServers[0];
+    }
+
+    public set nodeServer( val: any )
+    {
+        if( val === undefined )
+        {
+            this.nodeServers = [];
+        }
+        else if( this.nodeServers.length === 0 )
+        {
+            this.nodeServers = [val];
+        }
+        else
+        {
+            this.nodeServers[0] = val;
+        }
+    }
 
     async listen(
         port: number,
         handler: ( request: Request ) => Promise<Response>,
         tls?: TlsOptions,
-        http?: NodeHttpOptions
+        http?: NodeHttpOptions,
+        host?: string | string[]
     ): Promise<void> 
     {
         const registry = getRegistry();
@@ -162,6 +184,8 @@ export class NodeAdapter implements ServerAdapter
             else { res.end() }
         };
 
+        let serverFactory: () => any;
+
         if( tls ) 
         {
             const { createServer } = await import( 'https' );
@@ -209,78 +233,147 @@ export class NodeAdapter implements ServerAdapter
                 };
             }
 
-            this.nodeServer = createServer( options, connectionHandler );
+            serverFactory = () => createServer( options, connectionHandler );
         }
         else 
         {
             const { createServer } = await import( 'http' );
-            this.nodeServer = createServer( connectionHandler );
+            serverFactory = () => createServer( connectionHandler );
         }
-
-        applyHttpTimeouts( this.nodeServer, http );
 
         const hasWs = registry.getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
 
-        if( hasWs && this.nodeServer && typeof this.nodeServer.on === 'function' ) 
+        const configureServer = ( server: any ) =>
         {
-            this.nodeServer.on( 'upgrade', async ( req: any, socket: any, head: any ) => 
+            applyHttpTimeouts( server, http );
+
+            if( hasWs && server && typeof server.on === 'function' ) 
             {
-                let fetchReq: Request;
-
-                try
+                server.on( 'upgrade', async ( req: any, socket: any, head: any ) => 
                 {
-                    fetchReq = new Request( resolveRequestUrl( req ), {
-                        method  : 'GET',
-                        headers : req.headers as any
-                    });
-                }
-                catch
-                {
-                    endUpgradeSocket( socket, 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n' );
+                    let fetchReq: Request;
 
-                    return;
-                }
-
-                ( fetchReq as any ).nodeSocket = socket;
-                ( fetchReq as any ).nodeHead = head;
-
-                if( req.socket?.remoteAddress )
-                {
-                    ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
-                }
-
-                try
-                {
-                    const response = await handler( fetchReq );
-
-                    if( !( fetchReq as any ).__wsUpgraded && !socket.destroyed )
+                    try
                     {
-                        const bodyText = await response.text();
-                        const status = response.status || 400;
-                        const statusText = response.statusText || ( status === 404 ? 'Not Found' : 'Bad Request' );
-                        const rawHttp =
-                            `HTTP/1.1 ${status} ${statusText}\r\n` +
-                            'Connection: close\r\n' +
-                            `Content-Length: ${Buffer.byteLength( bodyText )}\r\n\r\n` +
-                            bodyText;
-
-                        endUpgradeSocket( socket, rawHttp );
+                        fetchReq = new Request( resolveRequestUrl( req ), {
+                            method  : 'GET',
+                            headers : req.headers as any
+                        });
                     }
-                }
-                catch
+                    catch
+                    {
+                        endUpgradeSocket( socket, 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n' );
+
+                        return;
+                    }
+
+                    ( fetchReq as any ).nodeSocket = socket;
+                    ( fetchReq as any ).nodeHead = head;
+
+                    if( req.socket?.remoteAddress )
+                    {
+                        ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
+                    }
+
+                    try
+                    {
+                        const response = await handler( fetchReq );
+
+                        if( !( fetchReq as any ).__wsUpgraded && !socket.destroyed )
+                        {
+                            const bodyText = await response.text();
+                            const status = response.status || 400;
+                            const statusText = response.statusText || ( status === 404 ? 'Not Found' : 'Bad Request' );
+                            const rawHttp =
+                                `HTTP/1.1 ${status} ${statusText}\r\n` +
+                                'Connection: close\r\n' +
+                                `Content-Length: ${Buffer.byteLength( bodyText )}\r\n\r\n` +
+                                bodyText;
+
+                            endUpgradeSocket( socket, rawHttp );
+                        }
+                    }
+                    catch
+                    {
+                        endUpgradeSocket( socket, 'HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n' );
+                    }
+                });
+            }
+        };
+
+        const hosts = normalizeHostList( host );
+        this.nodeServers = [];
+
+        if( hosts.length === 0 )
+        {
+            const server = serverFactory();
+            configureServer( server );
+            this.nodeServers.push( server );
+
+            return new Promise<void>(( resolve, reject ) => 
+            {
+                const onError = ( err: Error ) => reject( err );
+
+                if( typeof server.once === 'function' )
                 {
-                    endUpgradeSocket( socket, 'HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n' );
+                    server.once( 'error', onError );
                 }
+
+                server.listen( port, () => 
+                {
+                    if( typeof server.off === 'function' )
+                    {
+                        server.off( 'error', onError );
+                    }
+
+                    resolve();
+                });
             });
         }
-    
-        return new Promise<void>(( resolve ) => 
+
+        for( const h of hosts )
         {
-            this.nodeServer.listen( port, () => 
+            const server = serverFactory();
+            configureServer( server );
+
+            try
             {
-                resolve();
-            });
-        });
+                await new Promise<void>(( resolve, reject ) =>
+                {
+                    const onError = ( err: Error ) => reject( err );
+
+                    if( typeof server.once === 'function' )
+                    {
+                        server.once( 'error', onError );
+                    }
+                    else if( typeof server.on === 'function' )
+                    {
+                        server.on( 'error', onError );
+                    }
+
+                    server.listen( port, h, () =>
+                    {
+                        if( typeof server.off === 'function' )
+                        {
+                            server.off( 'error', onError );
+                        }
+
+                        resolve();
+                    });
+                });
+
+                this.nodeServers.push( server );
+            }
+            catch( err )
+            {
+                await Promise.all(
+                    this.nodeServers.map( s => new Promise<void>( r => s.close(() => r())))
+                );
+                this.nodeServers = [];
+
+                throw err;
+            }
+        }
     }
 
     async upgrade( request: Request, metadata: any, params: any ): Promise<Response> 
@@ -324,23 +417,29 @@ export class NodeAdapter implements ServerAdapter
 
     async close(): Promise<void> 
     {
-        if( !this.nodeServer ) { return }
+        if( this.nodeServers.length === 0 ) { return }
 
         // Stop accepting new connections without waiting for active ones — Server.shutdown
         // drains activeRequests, then calls closeAllConnections for anything left.
-        this.nodeServer.close(() => {});
-
-        if( typeof this.nodeServer.closeIdleConnections === 'function' )
+        for( const server of this.nodeServers )
         {
-            this.nodeServer.closeIdleConnections();
+            server.close(() => {});
+
+            if( typeof server.closeIdleConnections === 'function' )
+            {
+                server.closeIdleConnections();
+            }
         }
     }
 
     closeAllConnections(): void
     {
-        if( this.nodeServer && typeof this.nodeServer.closeAllConnections === 'function' )
+        for( const server of this.nodeServers )
         {
-            this.nodeServer.closeAllConnections();
+            if( server && typeof server.closeAllConnections === 'function' )
+            {
+                server.closeAllConnections();
+            }
         }
     }
 }

@@ -24,12 +24,21 @@ export class NodeTlsCompat
         port: number,
         handler: ( request: Request ) => Promise<Response>,
         tls?: TlsOptions,
-        http?: NodeHttpOptions
+        http?: NodeHttpOptions,
+        host?: string | string[]
     ): Promise<void>
     {
         const { NodeAdapter } = await import( './node-adapter.js' );
         this.adapter = new NodeAdapter();
-        await this.adapter.listen( port, handler, tls, http );
+
+        if( host !== undefined )
+        {
+            await this.adapter.listen( port, handler, tls, http, host );
+        }
+        else
+        {
+            await this.adapter.listen( port, handler, tls, http );
+        }
     }
 
     public upgrade( request: Request, metadata: any, params: any ): Promise<Response> | Response

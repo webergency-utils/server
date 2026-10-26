@@ -1,4 +1,4 @@
-import { ServerAdapter, TlsOptions, NodeHttpOptions } from './adapter.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList } from './adapter.js';
 import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, tlsMaterialToString, attachClientCert } from '../helpers/peer-cert.js';
 import { NodeTlsCompat } from './node-tls-compat.js';
@@ -8,6 +8,7 @@ import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 export class DenoAdapter implements ServerAdapter
 {
     private server?          : any;
+    private servers          : any[] = [];
     private abortController? : AbortController;
     private readonly nodeTls = new NodeTlsCompat();
 
@@ -15,15 +16,17 @@ export class DenoAdapter implements ServerAdapter
         port: number,
         handler: ( request: Request ) => Promise<Response>,
         tls?: TlsOptions,
-        http?: NodeHttpOptions
+        http?: NodeHttpOptions,
+        host?: string | string[]
     ): Promise<void>
     {
         // Native Deno.serve supports cert/key TLS, but not requestCert/SNI/@Peer.
         // mTLS and SNI callbacks use Node's https adapter under Deno.
         if( needsNodeTlsCompat( tls ))
         {
-            await this.nodeTls.listen( port, handler, tls, http );
+            await this.nodeTls.listen( port, handler, tls, http, host );
             this.server = this.nodeTls.server;
+            this.servers = this.server ? [this.server] : [];
 
             return;
         }
@@ -48,7 +51,7 @@ export class DenoAdapter implements ServerAdapter
             options.key = key;
         }
 
-        this.server = ( globalThis as any ).Deno.serve( options, ( req: Request, info: any ) =>
+        const serveHandler = ( req: Request, info: any ) =>
         {
             if( info?.remoteAddr?.hostname )
             {
@@ -62,7 +65,45 @@ export class DenoAdapter implements ServerAdapter
             }
 
             return handler( req );
-        });
+        };
+
+        const hosts = normalizeHostList( host );
+        this.servers = [];
+
+        if( hosts.length === 0 )
+        {
+            this.server = ( globalThis as any ).Deno.serve( options, serveHandler );
+            this.servers = [this.server];
+
+            return;
+        }
+
+        for( const h of hosts )
+        {
+            try
+            {
+                const srv = ( globalThis as any ).Deno.serve({ ...options, hostname : h }, serveHandler );
+                this.servers.push( srv );
+            }
+            catch( err )
+            {
+                this.abortController.abort();
+                await Promise.all(
+                    this.servers.map( async ( s ) =>
+                    {
+                        if( typeof s?.shutdown === 'function' ){ await s.shutdown() }
+
+                        await s?.finished;
+                    })
+                );
+                this.servers = [];
+                this.server = undefined;
+
+                throw err;
+            }
+        }
+
+        this.server = this.servers[0];
     }
 
     async upgrade( request: Request, metadata: any, params: any ): Promise<Response>
@@ -129,13 +170,16 @@ export class DenoAdapter implements ServerAdapter
             this.abortController.abort();
         }
 
-        if( this.server )
+        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
+
+        for( const srv of targets )
         {
-            if( typeof this.server.shutdown === 'function' )
+            if( typeof srv?.shutdown === 'function' )
             {
-                await this.server.shutdown();
+                await srv.shutdown();
             }
-            await this.server.finished;
+
+            await srv?.finished;
         }
     }
 
