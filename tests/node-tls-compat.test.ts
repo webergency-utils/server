@@ -94,22 +94,29 @@ describe( 'NodeTlsCompat', () =>
         // Arrange
         const serveCalls: any[] = [];
         const stopSpies: any[] = [];
-        ( globalThis as any ).Bun = {
-            serve : vi.fn(( opts: any ) =>
+        const hadBun = typeof ( globalThis as any ).Bun !== 'undefined';
+        const mockServe = vi.fn(( opts: any ) =>
+        {
+            serveCalls.push( opts );
+
+            if( opts.hostname === '192.0.2.99' )
             {
-                serveCalls.push( opts );
+                throw new Error( 'EADDRNOTAVAIL' );
+            }
 
-                if( opts.hostname === '192.0.2.99' )
-                {
-                    throw new Error( 'EADDRNOTAVAIL' );
-                }
+            const stop = vi.fn();
+            stopSpies.push( stop );
 
-                const stop = vi.fn();
-                stopSpies.push( stop );
+            return { stop };
+        });
+        const serveSpy = hadBun
+            ? vi.spyOn(( globalThis as any ).Bun, 'serve' ).mockImplementation( mockServe )
+            : undefined;
 
-                return { stop };
-            })
-        };
+        if( !hadBun )
+        {
+            ( globalThis as any ).Bun = { serve : mockServe };
+        }
 
         try
         {
@@ -151,7 +158,14 @@ describe( 'NodeTlsCompat', () =>
         }
         finally
         {
-            delete ( globalThis as any ).Bun;
+            if( serveSpy )
+            {
+                serveSpy.mockRestore();
+            }
+            else
+            {
+                delete ( globalThis as any ).Bun;
+            }
         }
     });
 
@@ -160,23 +174,30 @@ describe( 'NodeTlsCompat', () =>
         // Arrange
         const serveCalls: any[] = [];
         const shutdownSpies: any[] = [];
-        ( globalThis as any ).Deno = {
-            serve : vi.fn(( opts: any ) =>
+        const hadDeno = typeof ( globalThis as any ).Deno !== 'undefined';
+        const mockServe = vi.fn(( opts: any ) =>
+        {
+            serveCalls.push( opts );
+
+            if( opts.hostname === '192.0.2.99' )
             {
-                serveCalls.push( opts );
+                throw new Error( 'EADDRNOTAVAIL' );
+            }
 
-                if( opts.hostname === '192.0.2.99' )
-                {
-                    throw new Error( 'EADDRNOTAVAIL' );
-                }
+            const shutdown = vi.fn( async () => {});
+            shutdownSpies.push( shutdown );
+            opts.onListen?.();
 
-                const shutdown = vi.fn( async () => {});
-                shutdownSpies.push( shutdown );
-                opts.onListen?.();
+            return { shutdown };
+        });
+        const serveSpy = hadDeno
+            ? vi.spyOn(( globalThis as any ).Deno, 'serve' ).mockImplementation( mockServe )
+            : undefined;
 
-                return { shutdown };
-            })
-        };
+        if( !hadDeno )
+        {
+            ( globalThis as any ).Deno = { serve : mockServe };
+        }
 
         try
         {
@@ -202,7 +223,14 @@ describe( 'NodeTlsCompat', () =>
         }
         finally
         {
-            delete ( globalThis as any ).Deno;
+            if( serveSpy )
+            {
+                serveSpy.mockRestore();
+            }
+            else
+            {
+                delete ( globalThis as any ).Deno;
+            }
         }
     });
 });
