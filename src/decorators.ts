@@ -353,6 +353,7 @@ export interface SecurityOptions {
      */
     rateLimit?           : { max : number, window? : string | number, strategy? : 'fixed' | 'sliding' }
     allowedContentTypes? : string[]
+    allowedHosts?        : string[] | true
 
     /** Response Headers */
     frameguard?                   : boolean | 'deny' | 'sameorigin' | { action : 'deny' | 'sameorigin' }

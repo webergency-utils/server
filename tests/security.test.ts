@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Server } from '../src/server.js';
+import { ServerRequest } from '../src/core/server-request.js';
 import { seedInstanceController } from './helpers/testing.js';
-import { mergeSecurityConfigs, generateSecurityHeaders } from '../src/helpers/security.js';
+import { mergeSecurityConfigs, generateSecurityHeaders, isHostAllowed } from '../src/helpers/security.js';
 
 describe( 'Security Helper & Integration Tests', () =>
 {
@@ -24,6 +25,7 @@ describe( 'Security Helper & Integration Tests', () =>
             const merged = mergeSecurityConfigs([true, false]);
             expect( merged ).toEqual({
                 maxBodySize                  : 0,
+                allowedHosts                 : true,
                 frameguard                   : false,
                 noSniff                      : false,
                 hsts                         : false,
@@ -36,6 +38,27 @@ describe( 'Security Helper & Integration Tests', () =>
                 coop                         : false,
                 corp                         : false
             });
+        });
+
+        it( 'should merge allowedHosts and allow child true or false override', () =>
+        {
+            const overriddenList = mergeSecurityConfigs([
+                { allowedHosts : ['a.com'] },
+                { allowedHosts : ['b.com'] }
+            ]);
+            expect( overriddenList?.allowedHosts ).toEqual(['b.com']);
+
+            const overriddenTrue = mergeSecurityConfigs([
+                { allowedHosts : ['a.com'] },
+                { allowedHosts : true }
+            ]);
+            expect( overriddenTrue?.allowedHosts ).toBe( true );
+
+            const overriddenFalse = mergeSecurityConfigs([
+                { allowedHosts : ['a.com'] },
+                false
+            ]);
+            expect( overriddenFalse?.allowedHosts ).toBe( true );
         });
 
         it( 'should merge objects hierarchically', () =>
@@ -180,6 +203,79 @@ describe( 'Security Helper & Integration Tests', () =>
             expect( asString['Permissions-Policy']).toBe( 'fullscreen=(self)' );
             expect( asObject['Permissions-Policy']).toBe( "camera=(), geolocation=('self'), microphone=(*)" );
             expect( off['Permissions-Policy']).toBeUndefined();
+        });
+    });
+
+    describe( 'isHostAllowed helper and ServerRequest allowedHosts', () =>
+    {
+        it( 'should match exact hostnames and leading-dot subdomain wildcards case-insensitively', () =>
+        {
+            const cfg = { allowedHosts : [ 'localhost', '.example.com' ] };
+
+            expect( isHostAllowed( 'localhost', cfg )).toBe( true );
+            expect( isHostAllowed( 'localhost:3000', cfg )).toBe( true );
+            expect( isHostAllowed( 'EXAMPLE.COM', cfg )).toBe( true );
+            expect( isHostAllowed( 'example.com:443', cfg )).toBe( true );
+            expect( isHostAllowed( 'sub.example.com:8080', cfg )).toBe( true );
+            expect( isHostAllowed( 'a.b.example.com', cfg )).toBe( true );
+        });
+
+        it( 'should match IPv6 bracket literals configured with or without brackets', () =>
+        {
+            const cfgBracketed = { allowedHosts : ['[::1]'] };
+            const cfgBare = { allowedHosts : ['::1'] };
+
+            expect( isHostAllowed( '[::1]:3000', cfgBracketed )).toBe( true );
+            expect( isHostAllowed( '[::1]', cfgBracketed )).toBe( true );
+            expect( isHostAllowed( '[::1]:3000', cfgBare )).toBe( true );
+            expect( isHostAllowed( '[::1]', cfgBare )).toBe( true );
+        });
+
+        it( 'should reject missing, malformed, or non-matching Host headers', () =>
+        {
+            const cfg = { allowedHosts : [ 'localhost', '.example.com', '[::1]' ] };
+
+            expect( isHostAllowed( null, cfg )).toBe( false );
+            expect( isHostAllowed( '', cfg )).toBe( false );
+            expect( isHostAllowed( '   ', cfg )).toBe( false );
+            expect( isHostAllowed( 'evil.com', cfg )).toBe( false );
+            expect( isHostAllowed( 'badexample.com', cfg )).toBe( false );
+            expect( isHostAllowed( 'example.com:0', cfg )).toBe( false );
+            expect( isHostAllowed( 'example.com:abc', cfg )).toBe( false );
+            expect( isHostAllowed( 'example.com:99999', cfg )).toBe( false );
+            expect( isHostAllowed( '[::1', cfg )).toBe( false );
+            expect( isHostAllowed( '[]', cfg )).toBe( false );
+            expect( isHostAllowed( '[::1]:abc', cfg )).toBe( false );
+            expect( isHostAllowed( '[::1]extra', cfg )).toBe( false );
+            expect( isHostAllowed( '::1:3000', cfg )).toBe( false );
+            expect( isHostAllowed( ':3000', cfg )).toBe( false );
+        });
+
+        it( 'should allow any host when allowedHosts is undefined, true, or empty array', () =>
+        {
+            expect( isHostAllowed( null, {})).toBe( true );
+            expect( isHostAllowed( 'anything.com', { allowedHosts : true })).toBe( true );
+            expect( isHostAllowed( 'anything.com', { allowedHosts : [] })).toBe( true );
+        });
+
+        it( 'should forward direct allowedHosts option on ServerRequest init', () =>
+        {
+            const sreq = new ServerRequest(
+                new Request( 'http://localhost/test' ),
+                { allowedHosts : ['localhost'] }
+            );
+            expect( sreq ).toBeDefined();
+            // Verify ServerRequest recognizes allowedHosts alone as a direct SecurityOptions field
+            // by checking that a second ServerRequest.from call does not overwrite existing #security
+            const reused = ServerRequest.from( sreq, { maxBodySize : '5b' });
+            const sreqWithBody = new ServerRequest(
+                new Request( 'http://localhost/test', { method : 'POST', body : '"12345678901"' }),
+                { allowedHosts : ['localhost'] }
+            );
+            ServerRequest.from( sreqWithBody, { maxBodySize : '5b' });
+
+            return expect( reused.rawBody()).resolves.toBeDefined()
+                .then(() => expect( sreqWithBody.rawBody()).resolves.toBeDefined());
         });
     });
 

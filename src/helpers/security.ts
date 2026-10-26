@@ -44,6 +44,14 @@ const CROSS_DOMAIN_POLICIES = new Set([ 'none', 'master-only', 'by-content-type'
 const mergedSecurityPairCache = new WeakMap<object, Map<unknown, SecurityOptions | undefined>>();
 const allowedContentTypesCache = new WeakMap<SecurityOptions, Set<string>>();
 
+export interface CompiledAllowedHosts
+{
+    exact    : Set<string>
+    suffixes : Array<{ root : string, suffix : string }>
+}
+
+const allowedHostsCache = new WeakMap<SecurityOptions, CompiledAllowedHosts>();
+
 export function getAllowedContentTypesSet( cfg: SecurityOptions ): Set<string> | undefined
 {
     if( !cfg.allowedContentTypes ) { return undefined }
@@ -57,6 +65,140 @@ export function getAllowedContentTypesSet( cfg: SecurityOptions ): Set<string> |
     }
 
     return set;
+}
+
+export function getCompiledAllowedHosts( cfg: SecurityOptions ): CompiledAllowedHosts | undefined
+{
+    if( !cfg.allowedHosts || cfg.allowedHosts === true || cfg.allowedHosts.length === 0 )
+    {
+        return undefined;
+    }
+
+    let compiled = allowedHostsCache.get( cfg );
+
+    if( !compiled )
+    {
+        const exact = new Set<string>();
+        const suffixes: Array<{ root : string, suffix : string }> = [];
+
+        for( const raw of cfg.allowedHosts )
+        {
+            const entry = raw.trim().toLowerCase();
+
+            if( !entry ){ continue }
+
+            if( entry.startsWith( '.' ))
+            {
+                const root = entry.slice( 1 );
+
+                if( root )
+                {
+                    suffixes.push({ root, suffix : entry });
+                }
+            }
+            else if( entry.includes( ':' ) && !entry.startsWith( '[' ))
+            {
+                exact.add( entry );
+                exact.add( `[${entry}]` );
+            }
+            else
+            {
+                exact.add( entry );
+            }
+        }
+
+        compiled = { exact, suffixes };
+        allowedHostsCache.set( cfg, compiled );
+    }
+
+    return compiled;
+}
+
+function isValidPortString( portStr: string ): boolean
+{
+    if( !/^\d{1,5}$/.test( portStr )){ return false }
+
+    const port = Number( portStr );
+
+    return port >= 1 && port <= 65535;
+}
+
+export function extractHostname( hostHeader: string ): string | null
+{
+    const trimmed = hostHeader.trim();
+
+    if( !trimmed ){ return null }
+
+    if( trimmed.startsWith( '[' ))
+    {
+        const closeIdx = trimmed.indexOf( ']' );
+
+        if( closeIdx <= 1 ){ return null }
+
+        const rest = trimmed.slice( closeIdx + 1 );
+
+        if( rest.length > 0 )
+        {
+            if( !rest.startsWith( ':' ) || !isValidPortString( rest.slice( 1 )))
+            {
+                return null;
+            }
+        }
+
+        return trimmed.slice( 0, closeIdx + 1 ).toLowerCase();
+    }
+
+    const firstColon = trimmed.indexOf( ':' );
+
+    if( firstColon === -1 )
+    {
+        return trimmed.toLowerCase();
+    }
+
+    if( trimmed.indexOf( ':', firstColon + 1 ) !== -1 )
+    {
+        return null;
+    }
+
+    const hostname = trimmed.slice( 0, firstColon );
+    const portStr = trimmed.slice( firstColon + 1 );
+
+    if( !hostname || !isValidPortString( portStr ))
+    {
+        return null;
+    }
+
+    return hostname.toLowerCase();
+}
+
+export function isHostAllowed( hostHeader: string | null, cfg?: SecurityOptions ): boolean
+{
+    if( !cfg || !cfg.allowedHosts || cfg.allowedHosts === true || cfg.allowedHosts.length === 0 )
+    {
+        return true;
+    }
+
+    if( !hostHeader ){ return false }
+
+    const hostname = extractHostname( hostHeader );
+
+    if( !hostname ){ return false }
+
+    const compiled = getCompiledAllowedHosts( cfg );
+
+    if( !compiled ){ return true }
+
+    if( compiled.exact.has( hostname )){ return true }
+
+    for( const { root, suffix } of compiled.suffixes )
+    {
+        if( hostname === root || hostname.endsWith( suffix ))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | undefined )[]): SecurityOptions | undefined 
@@ -122,6 +264,7 @@ function computeMergedSecurityConfigs( configs: ( SecurityOptions | boolean | un
             merged = {
                 // `0` disables the default body cap; `security: false` opts out of protection wholesale.
                 maxBodySize                  : 0,
+                allowedHosts                 : true,
                 frameguard                   : false,
                 noSniff                      : false,
                 hsts                         : false,

@@ -74,6 +74,7 @@ function hasDirectSecurityOption( obj: ServerRequestInit ): boolean
         || obj.timeout !== undefined
         || obj.rateLimit !== undefined
         || obj.allowedContentTypes !== undefined
+        || obj.allowedHosts !== undefined
         || obj.hsts !== undefined
         || obj.frameguard !== undefined
         || obj.noSniff !== undefined
