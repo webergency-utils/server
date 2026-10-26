@@ -1490,32 +1490,45 @@ describe( 'Server & Metadata', () =>
                 debug : vi.fn()
             };
 
-            const server = setupServer( 3005, ( registry ) =>
+            try
             {
-                registry.registerController( 'HostCtrl', { ping : () => ({ pong : true }) });
-                registry.registerEndpoint({
-                    controller   : 'HostCtrl', methodName   : 'ping', httpMethod   : 'GET', path         : '/ping',
-                    params       : [], guards       : [], interceptors : [], meta         : {}
+                const server = setupServer( 3005, ( registry ) =>
+                {
+                    registry.registerController( 'HostCtrl', { ping : () => ({ pong : true }) });
+                    registry.registerEndpoint({
+                        controller   : 'HostCtrl', methodName   : 'ping', httpMethod   : 'GET', path         : '/ping',
+                        params       : [], guards       : [], interceptors : [], meta         : {}
+                    });
+                }, {
+                    host : [ '127.0.0.1', '[::1]' ],
+                    logs : true,
+                    logger
                 });
-            }, {
-                host : [ '127.0.0.1', '::1' ],
-                logs : true,
-                logger
-            });
 
-            await server.start();
+                await server.start();
 
-            expect( createdServers ).toHaveLength( 2 );
-            expect( createdServers[0].listen ).toHaveBeenCalledWith( 3005, '127.0.0.1', expect.any( Function ));
-            expect( createdServers[1].listen ).toHaveBeenCalledWith( 3005, '::1', expect.any( Function ));
-            expect( logger.info ).toHaveBeenCalledWith(
-                'Node server running at http://127.0.0.1:3005, http://[::1]:3005',
-                expect.objectContaining({ type : 'server_start', port : 3005 })
-            );
+                expect( createdServers ).toHaveLength( 2 );
+                expect( createdServers[0].listen ).toHaveBeenCalledWith( 3005, '127.0.0.1', expect.any( Function ));
+                expect( createdServers[1].listen ).toHaveBeenCalledWith( 3005, '::1', expect.any( Function ));
+                expect( logger.info ).toHaveBeenCalledWith(
+                    'Node server running at http://127.0.0.1:3005, http://[::1]:3005',
+                    expect.objectContaining({ type : 'server_start', port : 3005 })
+                );
 
-            await server.shutdown();
-            expect( createdServers[0].close ).toHaveBeenCalled();
-            expect( createdServers[1].close ).toHaveBeenCalled();
+                await server.shutdown();
+                expect( createdServers[0].close ).toHaveBeenCalled();
+                expect( createdServers[1].close ).toHaveBeenCalled();
+            }
+            finally
+            {
+                vi.mocked( createServer ).mockImplementation(() => ({
+                    listen         : vi.fn(( ...args: any[]) => args.find(( a ) => typeof a === 'function' )?.()),
+                    close          : vi.fn(( cb?: () => void ) => cb?.()),
+                    on             : vi.fn(),
+                    once           : vi.fn(),
+                    removeListener : vi.fn()
+                }) as any );
+            }
         });
     });
 

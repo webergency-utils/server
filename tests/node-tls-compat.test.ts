@@ -131,6 +131,15 @@ describe( 'NodeTlsCompat', () =>
                 expect( stopSpies[0]).toHaveBeenCalledWith();
                 expect( stopSpies[1]).toHaveBeenCalledWith();
 
+                // Act — default listen with host omitted
+                serveCalls.length = 0;
+                stopSpies.length = 0;
+                await adapter.listen( 3000, handler );
+                expect( serveCalls ).toHaveLength( 1 );
+                expect( serveCalls[0].hostname ).toBeUndefined();
+                await adapter.close();
+                expect( stopSpies[0]).toHaveBeenCalledWith();
+
                 // Act — rollback on second host failure
                 serveCalls.length = 0;
                 stopSpies.length = 0;

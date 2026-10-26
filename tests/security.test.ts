@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Server } from '../src/server.js';
+import { ForwardIntent } from '../src/core/types.js';
 import { ServerRequest } from '../src/core/server-request.js';
 import { seedInstanceController } from './helpers/testing.js';
 import { mergeSecurityConfigs, generateSecurityHeaders, isHostAllowed } from '../src/helpers/security.js';
@@ -249,6 +250,12 @@ describe( 'Security Helper & Integration Tests', () =>
             expect( isHostAllowed( '[::1]extra', cfg )).toBe( false );
             expect( isHostAllowed( '::1:3000', cfg )).toBe( false );
             expect( isHostAllowed( ':3000', cfg )).toBe( false );
+            expect( isHostAllowed( 'localhost, evil.com', cfg )).toBe( false );
+            expect( isHostAllowed( 'local host', cfg )).toBe( false );
+            expect( isHostAllowed( '.', cfg )).toBe( false );
+            expect( isHostAllowed( 'example.com..', cfg )).toBe( false );
+            expect( isHostAllowed( 'localhost.', cfg )).toBe( true );
+            expect( isHostAllowed( 'sub.example.com.:8080', cfg )).toBe( true );
         });
 
         it( 'should allow any host when allowedHosts is undefined, true, or empty array', () =>
@@ -634,6 +641,51 @@ describe( 'Security Helper & Integration Tests', () =>
                 headers : { host : '10.0.0.12:3000' }
             }));
             expect( readyRes.status ).toBe( 200 );
+        });
+
+        it( 'should enforce target route allowedHosts when forwarded from a permissive route', async () =>
+        {
+            const server = new Server({
+                port     : 0,
+                security : { allowedHosts : ['internal.example.com'] }
+            });
+            class ForwardController
+            {
+                entry()
+                {
+                    throw new ForwardIntent({ method : 'GET', path : '/restricted' });
+                }
+
+                restricted()
+                {
+                    return 'secret-ok';
+                }
+            }
+            seedInstanceController( server.registry, 'ForwardController', new ForwardController(), [
+                {
+                    methodName : 'entry',
+                    httpMethod : 'GET',
+                    path       : '/entry',
+                    security   : { allowedHosts : true }
+                },
+                {
+                    methodName : 'restricted',
+                    httpMethod : 'GET',
+                    path       : '/restricted',
+                    security   : { allowedHosts : ['internal.example.com'] }
+                }
+            ]);
+
+            const blocked = await server.fetch( new Request( 'http://localhost/entry', {
+                headers : { host : 'evil.com' }
+            }));
+            expect( blocked.status ).toBe( 403 );
+
+            const allowed = await server.fetch( new Request( 'http://localhost/entry', {
+                headers : { host : 'internal.example.com' }
+            }));
+            expect( allowed.status ).toBe( 200 );
+            expect( await allowed.text()).toBe( 'secret-ok' );
         });
     });
 });

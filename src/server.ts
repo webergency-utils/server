@@ -598,7 +598,8 @@ export class Server extends EventEmitter
     private async runEndpoint(
         metadata: EndpointMetadata,
         sreq: ServerRequest,
-        securityConfig?: SecurityOptions
+        securityConfig: SecurityOptions | undefined,
+        request: Request
     ): Promise<Response>
     {
         try
@@ -609,7 +610,7 @@ export class Server extends EventEmitter
         {
             if( err instanceof ForwardIntent )
             {
-                return this.executeForward( err.target, sreq );
+                return this.executeForward( err.target, sreq, request );
             }
 
             throw err;
@@ -658,7 +659,7 @@ export class Server extends EventEmitter
      * Internal rewrite: look up `method`+`path` on public ∪ internal (SEO skipped).
      * Nested forwards are allowed up to {@link MAX_FORWARD_DEPTH}; cycles are rejected.
      */
-    private async executeForward( target: SeoForward, sreq: ServerRequest ): Promise<Response>
+    private async executeForward( target: SeoForward, sreq: ServerRequest, request: Request ): Promise<Response>
     {
         const method = target.method.toUpperCase();
         const path = target.path.startsWith( '/' ) ? target.path : `/${target.path}`;
@@ -693,9 +694,10 @@ export class Server extends EventEmitter
         sreq.forwardBody = target.body ? target.body : undefined;
 
         const securityConfig = this.resolveEndpointSecurity( match.metadata );
+        this.enforceSecurityGates( securityConfig, request, sreq, method, match.metadata.path );
 
         // runEndpoint (not Timed alone) so a nested ForwardIntent can hop again.
-        return await this.runEndpoint( match.metadata, sreq, securityConfig );
+        return await this.runEndpoint( match.metadata, sreq, securityConfig, request );
     }
 
     /** @internal */
@@ -1119,7 +1121,7 @@ export class Server extends EventEmitter
 
                 try
                 {
-                    response = await this.runEndpoint( seoMatch.metadata, sreq, activeSecurity );
+                    response = await this.runEndpoint( seoMatch.metadata, sreq, activeSecurity, request );
                     break;
                 }
                 catch( err: any )
@@ -1159,7 +1161,7 @@ export class Server extends EventEmitter
                 activeSecurity = this.resolveEndpointSecurity( pubMatch.metadata );
                 activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
                 this.enforceSecurityGates( activeSecurity, request, sreq, method, pubMatch.metadata.path );
-                response = await this.runEndpoint( pubMatch.metadata, sreq, activeSecurity );
+                response = await this.runEndpoint( pubMatch.metadata, sreq, activeSecurity, request );
             }
 
             // RFC 9110: an OPTIONS response should advertise Allow.

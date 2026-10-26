@@ -10,16 +10,6 @@ export class TcpMessageAdapter implements MicroserviceAdapter
     private servers : net.Server[] = [];
     private connections = new Set<net.Socket>();
 
-    private get server(): net.Server | undefined
-    {
-        return this.servers[0];
-    }
-
-    private set server( srv: net.Server | undefined )
-    {
-        this.servers = srv ? [srv] : [];
-    }
-
     constructor( private port: number, private host?: string | string[]) {}
 
     async listen( handler: ( pattern: string, payload: any, connection: MessageConnection ) => Promise<any> ): Promise<void> 

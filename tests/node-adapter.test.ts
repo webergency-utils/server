@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import { NodeAdapter } from '../src/adapters/node-adapter.js';
+import { normalizeHostList } from '../src/adapters/adapter.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
 import { RequestProcessor } from '../src/core/request-processor.js';
 import { SimpleMultibuffer, WebsocketFrame } from '../src/helpers/ws-frame.js';
@@ -759,6 +760,16 @@ describe( 'NodeAdapter', () =>
             {
                 await new Promise<void>( resolve => blocker.close(() => resolve()));
             }
+        });
+
+        it( 'should normalize single string, whitespace, and bracketed IPv6 host inputs in normalizeHostList', () =>
+        {
+            expect( normalizeHostList()).toEqual([]);
+            expect( normalizeHostList( '' )).toEqual([]);
+            expect( normalizeHostList( '   ' )).toEqual([]);
+            expect( normalizeHostList( '127.0.0.1' )).toEqual(['127.0.0.1']);
+            expect( normalizeHostList( ' [::1] ' )).toEqual(['::1']);
+            expect( normalizeHostList([ '127.0.0.1', '[::1]', '::1', '  ', '[]' ])).toEqual([ '127.0.0.1', '::1' ]);
         });
     });
 });

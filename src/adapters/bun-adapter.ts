@@ -10,16 +10,6 @@ export class BunAdapter implements ServerAdapter
     private servers : any[] = [];
     private readonly nodeTls = new NodeTlsCompat();
 
-    private get server(): any
-    {
-        return this.servers[0];
-    }
-
-    private set server( srv: any )
-    {
-        this.servers = srv ? [srv] : [];
-    }
-
     async listen(
         port: number,
         handler: ( request: Request ) => Promise<Response>,

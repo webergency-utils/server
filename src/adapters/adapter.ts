@@ -46,15 +46,27 @@ export interface ServerAdapter {
     upgrade?( request: Request, metadata: any, params: any ): Response | Promise<Response>
 }
 
+function unbracketHost( raw: string ): string
+{
+    const trimmed = raw.trim();
+
+    if( trimmed.startsWith( '[' ) && trimmed.endsWith( ']' ))
+    {
+        return trimmed.slice( 1, -1 ).trim();
+    }
+
+    return trimmed;
+}
+
 export function normalizeHostList( host?: string | string[]): string[]
 {
     if( !host ){ return [] }
 
     if( typeof host === 'string' )
     {
-        const trimmed = host.trim();
+        const clean = unbracketHost( host );
 
-        return trimmed ? [trimmed] : [];
+        return clean ? [clean] : [];
     }
 
     const seen = new Set<string>();
@@ -63,11 +75,11 @@ export function normalizeHostList( host?: string | string[]): string[]
     {
         if( typeof entry !== 'string' ){ continue }
 
-        const trimmed = entry.trim();
+        const clean = unbracketHost( entry );
 
-        if( trimmed )
+        if( clean )
         {
-            seen.add( trimmed );
+            seen.add( clean );
         }
     }
 

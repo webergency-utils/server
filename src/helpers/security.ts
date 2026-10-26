@@ -83,7 +83,8 @@ export function getCompiledAllowedHosts( cfg: SecurityOptions ): CompiledAllowed
 
         for( const raw of cfg.allowedHosts )
         {
-            const entry = raw.trim().toLowerCase();
+            const trimmed = raw.trim().toLowerCase();
+            const entry = trimmed.endsWith( '.' ) ? trimmed.slice( 0, -1 ) : trimmed;
 
             if( !entry ){ continue }
 
@@ -138,7 +139,10 @@ export function extractHostname( hostHeader: string ): string | null
 {
     const trimmed = hostHeader.trim();
 
-    if( !trimmed ){ return null }
+    if( !trimmed || trimmed.includes( ',' ) || /\s/.test( trimmed ))
+    {
+        return null;
+    }
 
     if( trimmed.startsWith( '[' ))
     {
@@ -158,18 +162,29 @@ export function extractHostname( hostHeader: string ): string | null
     }
 
     const firstColon = trimmed.indexOf( ':' );
+    let rawHost = trimmed;
 
-    if( firstColon === -1 )
+    if( firstColon !== -1 )
     {
-        return trimmed.toLowerCase();
+        if( firstColon === 0 || trimmed.indexOf( ':', firstColon + 1 ) !== -1 || !isValidPortRange( trimmed, firstColon + 1, trimmed.length ))
+        {
+            return null;
+        }
+
+        rawHost = trimmed.slice( 0, firstColon );
     }
 
-    if( firstColon === 0 || trimmed.indexOf( ':', firstColon + 1 ) !== -1 || !isValidPortRange( trimmed, firstColon + 1, trimmed.length ))
+    if( rawHost.endsWith( '.' ))
     {
-        return null;
+        if( rawHost.length <= 1 || rawHost.endsWith( '..' ))
+        {
+            return null;
+        }
+
+        rawHost = rawHost.slice( 0, -1 );
     }
 
-    return trimmed.slice( 0, firstColon ).toLowerCase();
+    return rawHost.toLowerCase();
 }
 
 export function isHostAllowed( hostHeader: string | null, cfg?: SecurityOptions ): boolean
