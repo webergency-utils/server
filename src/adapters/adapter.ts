@@ -50,10 +50,16 @@ export function normalizeHostList( host?: string | string[]): string[]
 {
     if( !host ){ return [] }
 
-    const raw = Array.isArray( host ) ? host : [host];
+    if( typeof host === 'string' )
+    {
+        const trimmed = host.trim();
+
+        return trimmed ? [trimmed] : [];
+    }
+
     const seen = new Set<string>();
 
-    for( const entry of raw )
+    for( const entry of host )
     {
         if( typeof entry !== 'string' ){ continue }
 
@@ -66,4 +72,44 @@ export function normalizeHostList( host?: string | string[]): string[]
     }
 
     return Array.from( seen );
+}
+
+export function listenNodeServer( server: any, port: number, host?: string ): Promise<void>
+{
+    return new Promise<void>(( resolve, reject ) =>
+    {
+        const onError = ( err: Error ) => reject( err );
+
+        if( typeof server.once === 'function' )
+        {
+            server.once( 'error', onError );
+        }
+        else if( typeof server.on === 'function' )
+        {
+            server.on( 'error', onError );
+        }
+
+        const onListening = () =>
+        {
+            if( typeof server.off === 'function' )
+            {
+                server.off( 'error', onError );
+            }
+            else if( typeof server.removeListener === 'function' )
+            {
+                server.removeListener( 'error', onError );
+            }
+
+            resolve();
+        };
+
+        if( host !== undefined )
+        {
+            server.listen( port, host, onListening );
+        }
+        else
+        {
+            server.listen( port, onListening );
+        }
+    });
 }

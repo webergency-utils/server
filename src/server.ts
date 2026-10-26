@@ -835,12 +835,9 @@ export class Server extends EventEmitter
     ): void
     {
         // Enforce allowedHosts (HTTP Host header allowlist)
-        if( cfg?.allowedHosts && cfg.allowedHosts !== true && cfg.allowedHosts.length > 0 )
+        if( cfg?.allowedHosts && !isHostAllowed( request.headers.get( 'host' ), cfg ))
         {
-            if( !isHostAllowed( request.headers.get( 'host' ), cfg ))
-            {
-                throw Object.assign( new Error( 'Forbidden: Disallowed Host' ), { status : 403 });
-            }
+            throw Object.assign( new Error( 'Forbidden: Disallowed Host' ), { status : 403 });
         }
 
         // Enforce allowedContentTypes (require a matching CT when a body is indicated)

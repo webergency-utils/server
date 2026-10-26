@@ -7,9 +7,18 @@ import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 
 export class BunAdapter implements ServerAdapter
 {
-    private server? : any;
     private servers : any[] = [];
     private readonly nodeTls = new NodeTlsCompat();
+
+    private get server(): any
+    {
+        return this.servers[0];
+    }
+
+    private set server( srv: any )
+    {
+        this.servers = srv ? [srv] : [];
+    }
 
     async listen(
         port: number,
@@ -24,8 +33,7 @@ export class BunAdapter implements ServerAdapter
         if( needsNodeTlsCompat( tls ))
         {
             await this.nodeTls.listen( port, handler, tls, http, host );
-            this.server = this.nodeTls.server;
-            this.servers = this.server ? [this.server] : [];
+            this.servers = this.nodeTls.server ? [this.nodeTls.server] : [];
 
             return;
         }
@@ -120,8 +128,7 @@ export class BunAdapter implements ServerAdapter
 
         if( hosts.length === 0 )
         {
-            this.server = ( globalThis as any ).Bun.serve( serveOptions );
-            this.servers = [this.server];
+            this.servers = [( globalThis as any ).Bun.serve( serveOptions )];
 
             return;
         }
@@ -140,13 +147,10 @@ export class BunAdapter implements ServerAdapter
                     if( s && typeof s.stop === 'function' ){ s.stop( true ) }
                 }
                 this.servers = [];
-                this.server = undefined;
 
                 throw err;
             }
         }
-
-        this.server = this.servers[0];
     }
 
     upgrade( request: Request, metadata: any, params: any ): Response | Promise<Response>
@@ -188,9 +192,7 @@ export class BunAdapter implements ServerAdapter
             return;
         }
 
-        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
-
-        for( const srv of targets )
+        for( const srv of this.servers )
         {
             if( srv && typeof srv.stop === 'function' )
             {
@@ -208,9 +210,7 @@ export class BunAdapter implements ServerAdapter
             return;
         }
 
-        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
-
-        for( const srv of targets )
+        for( const srv of this.servers )
         {
             if( srv && typeof srv.stop === 'function' )
             {

@@ -114,11 +114,22 @@ export function getCompiledAllowedHosts( cfg: SecurityOptions ): CompiledAllowed
     return compiled;
 }
 
-function isValidPortString( portStr: string ): boolean
+function isValidPortRange( str: string, start: number, end: number ): boolean
 {
-    if( !/^\d{1,5}$/.test( portStr )){ return false }
+    const len = end - start;
 
-    const port = Number( portStr );
+    if( len < 1 || len > 5 ){ return false }
+
+    let port = 0;
+
+    for( let i = start; i < end; i++ )
+    {
+        const code = str.charCodeAt( i ) - 48;
+
+        if( code < 0 || code > 9 ){ return false }
+
+        port = port * 10 + code;
+    }
 
     return port >= 1 && port <= 65535;
 }
@@ -135,11 +146,9 @@ export function extractHostname( hostHeader: string ): string | null
 
         if( closeIdx <= 1 ){ return null }
 
-        const rest = trimmed.slice( closeIdx + 1 );
-
-        if( rest.length > 0 )
+        if( closeIdx + 1 < trimmed.length )
         {
-            if( !rest.startsWith( ':' ) || !isValidPortString( rest.slice( 1 )))
+            if( trimmed.charCodeAt( closeIdx + 1 ) !== 58 || !isValidPortRange( trimmed, closeIdx + 2, trimmed.length ))
             {
                 return null;
             }
@@ -155,20 +164,12 @@ export function extractHostname( hostHeader: string ): string | null
         return trimmed.toLowerCase();
     }
 
-    if( trimmed.indexOf( ':', firstColon + 1 ) !== -1 )
+    if( firstColon === 0 || trimmed.indexOf( ':', firstColon + 1 ) !== -1 || !isValidPortRange( trimmed, firstColon + 1, trimmed.length ))
     {
         return null;
     }
 
-    const hostname = trimmed.slice( 0, firstColon );
-    const portStr = trimmed.slice( firstColon + 1 );
-
-    if( !hostname || !isValidPortString( portStr ))
-    {
-        return null;
-    }
-
-    return hostname.toLowerCase();
+    return trimmed.slice( 0, firstColon ).toLowerCase();
 }
 
 export function isHostAllowed( hostHeader: string | null, cfg?: SecurityOptions ): boolean

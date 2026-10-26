@@ -1,4 +1,4 @@
-import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList } from './adapter.js';
+import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList, listenNodeServer } from './adapter.js';
 import { MultiBuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { toAllowList } from '../core/router.js';
@@ -310,25 +310,7 @@ export class NodeAdapter implements ServerAdapter
             configureServer( server );
             this.nodeServers.push( server );
 
-            return new Promise<void>(( resolve, reject ) => 
-            {
-                const onError = ( err: Error ) => reject( err );
-
-                if( typeof server.once === 'function' )
-                {
-                    server.once( 'error', onError );
-                }
-
-                server.listen( port, () => 
-                {
-                    if( typeof server.off === 'function' )
-                    {
-                        server.off( 'error', onError );
-                    }
-
-                    resolve();
-                });
-            });
+            return listenNodeServer( server, port );
         }
 
         for( const h of hosts )
@@ -338,30 +320,7 @@ export class NodeAdapter implements ServerAdapter
 
             try
             {
-                await new Promise<void>(( resolve, reject ) =>
-                {
-                    const onError = ( err: Error ) => reject( err );
-
-                    if( typeof server.once === 'function' )
-                    {
-                        server.once( 'error', onError );
-                    }
-                    else if( typeof server.on === 'function' )
-                    {
-                        server.on( 'error', onError );
-                    }
-
-                    server.listen( port, h, () =>
-                    {
-                        if( typeof server.off === 'function' )
-                        {
-                            server.off( 'error', onError );
-                        }
-
-                        resolve();
-                    });
-                });
-
+                await listenNodeServer( server, port, h );
                 this.nodeServers.push( server );
             }
             catch( err )

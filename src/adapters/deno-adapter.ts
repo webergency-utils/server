@@ -7,10 +7,19 @@ import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
 
 export class DenoAdapter implements ServerAdapter
 {
-    private server?          : any;
     private servers          : any[] = [];
     private abortController? : AbortController;
     private readonly nodeTls = new NodeTlsCompat();
+
+    private get server(): any
+    {
+        return this.servers[0];
+    }
+
+    private set server( srv: any )
+    {
+        this.servers = srv ? [srv] : [];
+    }
 
     async listen(
         port: number,
@@ -25,8 +34,7 @@ export class DenoAdapter implements ServerAdapter
         if( needsNodeTlsCompat( tls ))
         {
             await this.nodeTls.listen( port, handler, tls, http, host );
-            this.server = this.nodeTls.server;
-            this.servers = this.server ? [this.server] : [];
+            this.servers = this.nodeTls.server ? [this.nodeTls.server] : [];
 
             return;
         }
@@ -72,8 +80,7 @@ export class DenoAdapter implements ServerAdapter
 
         if( hosts.length === 0 )
         {
-            this.server = ( globalThis as any ).Deno.serve( options, serveHandler );
-            this.servers = [this.server];
+            this.servers = [( globalThis as any ).Deno.serve( options, serveHandler )];
 
             return;
         }
@@ -97,13 +104,10 @@ export class DenoAdapter implements ServerAdapter
                     })
                 );
                 this.servers = [];
-                this.server = undefined;
 
                 throw err;
             }
         }
-
-        this.server = this.servers[0];
     }
 
     async upgrade( request: Request, metadata: any, params: any ): Promise<Response>
@@ -170,17 +174,17 @@ export class DenoAdapter implements ServerAdapter
             this.abortController.abort();
         }
 
-        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
-
-        for( const srv of targets )
-        {
-            if( typeof srv?.shutdown === 'function' )
+        await Promise.all(
+            this.servers.map( async ( srv ) =>
             {
-                await srv.shutdown();
-            }
+                if( typeof srv?.shutdown === 'function' )
+                {
+                    await srv.shutdown();
+                }
 
-            await srv?.finished;
-        }
+                await srv?.finished;
+            })
+        );
     }
 
     closeAllConnections(): void

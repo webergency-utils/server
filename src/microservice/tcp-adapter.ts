@@ -1,15 +1,24 @@
 import { MicroserviceAdapter, MessageConnection, MicroserviceNoReply } from './adapter.js';
 import { NdjsonLineFramer, TCP_MAX_LINE_BYTES } from './ndjson-framer.js';
-import { normalizeHostList } from '../adapters/adapter.js';
+import { normalizeHostList, listenNodeServer } from '../adapters/adapter.js';
 import net from 'node:net';
 
 export { TCP_MAX_LINE_BYTES };
 
 export class TcpMessageAdapter implements MicroserviceAdapter 
 {
-    private server? : net.Server;
     private servers : net.Server[] = [];
     private connections = new Set<net.Socket>();
+
+    private get server(): net.Server | undefined
+    {
+        return this.servers[0];
+    }
+
+    private set server( srv: net.Server | undefined )
+    {
+        this.servers = srv ? [srv] : [];
+    }
 
     constructor( private port: number, private host?: string | string[]) {}
 
@@ -114,19 +123,9 @@ export class TcpMessageAdapter implements MicroserviceAdapter
         if( hosts.length === 0 )
         {
             const server = createTcpServer();
-            this.server = server;
             this.servers = [server];
 
-            return new Promise<void>(( resolve, reject ) => 
-            {
-                const onError = ( err: Error ) => reject( err );
-                server.once( 'error', onError );
-                server.listen( this.port, () => 
-                {
-                    server.off( 'error', onError );
-                    resolve();
-                });
-            });
+            return listenNodeServer( server, this.port );
         }
 
         for( const h of hosts )
@@ -135,17 +134,7 @@ export class TcpMessageAdapter implements MicroserviceAdapter
 
             try
             {
-                await new Promise<void>(( resolve, reject ) =>
-                {
-                    const onError = ( err: Error ) => reject( err );
-                    server.once( 'error', onError );
-                    server.listen( this.port, h, () =>
-                    {
-                        server.off( 'error', onError );
-                        resolve();
-                    });
-                });
-
+                await listenNodeServer( server, this.port, h );
                 this.servers.push( server );
             }
             catch( err )
@@ -154,13 +143,10 @@ export class TcpMessageAdapter implements MicroserviceAdapter
                     this.servers.map( s => new Promise<void>( r => s.close(() => r())))
                 );
                 this.servers = [];
-                this.server = undefined;
 
                 throw err;
             }
         }
-
-        this.server = this.servers[0];
     }
 
     async close(): Promise<void> 
@@ -171,9 +157,8 @@ export class TcpMessageAdapter implements MicroserviceAdapter
         }
         this.connections.clear();
 
-        const targets = this.servers.length > 0 ? this.servers : ( this.server ? [this.server] : []);
+        const targets = this.servers;
         this.servers = [];
-        this.server = undefined;
 
         await Promise.all(
             targets.map( srv => new Promise<void>( resolve => srv.close(() => resolve())))
