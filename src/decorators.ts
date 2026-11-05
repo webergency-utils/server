@@ -313,14 +313,14 @@ export function Unuse( ...args: any[]): any
 
 export interface CorsOptions {
     origin?         : string | string[] | boolean | Function
-    methods?        : string | string[] | Function
-    allowedHeaders? : string | string[] | Function
+    methods?        : string | string[] | boolean | Function
+    allowedHeaders? : string | string[] | boolean | Function
     exposedHeaders? : string | string[]
     credentials?    : boolean
-    maxAge?         : number
+    maxAge?         : number | false
 }
 
-export function Cors( config?: CorsOptions | string ): any { return () => {} }
+export function Cors( config?: CorsOptions | boolean | string | null ): any { return () => {} }
 
 /**
  * JSON.parse-style reviver applied to typed JSON and query parse, and to untyped JSON / urlencoded bodies.
@@ -345,7 +345,7 @@ export type ReferrerPolicyValue =
 
 export interface SecurityOptions {
     /** Request Protection */
-    maxBodySize?         : string | number
+    maxBodySize?         : string | number | false
     timeout?             : number
     /**
      * Per-process, keyed by `path:ip`. `fixed` (default) can permit up to 2x `max` across a
@@ -353,7 +353,7 @@ export interface SecurityOptions {
      */
     rateLimit?           : { max : number, window? : string | number, strategy? : 'fixed' | 'sliding' }
     allowedContentTypes? : string[]
-    allowedHosts?        : string[] | true
+    allowedHosts?        : string[] | boolean
 
     /** Response Headers */
     frameguard?                   : boolean | 'deny' | 'sameorigin' | { action : 'deny' | 'sameorigin' }

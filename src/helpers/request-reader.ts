@@ -219,8 +219,8 @@ const DEFAULT_BODY_LIMIT: BodyLimitDescriptor = {
 
 const bodyLimitCache = new WeakMap<SecurityOptions, BodyLimitDescriptor>();
 
-/** `0` and `Infinity` opt out of the cap entirely. */
-function resolveBodyLimit( securityConfig?: SecurityOptions ): BodyLimitDescriptor
+/** `false`, `0`, and `Infinity` opt out of the cap entirely. */
+export function resolveBodyLimit( securityConfig?: SecurityOptions ): BodyLimitDescriptor
 {
     if( !securityConfig || securityConfig.maxBodySize === undefined )
     {
@@ -235,8 +235,8 @@ function resolveBodyLimit( securityConfig?: SecurityOptions ): BodyLimitDescript
     }
 
     const configured = securityConfig.maxBodySize;
-    const resolved: BodyLimitDescriptor = ( configured === 0 || configured === Infinity )
-        ? { limit : undefined, label : configured }
+    const resolved: BodyLimitDescriptor = ( configured === false || configured === 0 || configured === Infinity )
+        ? { limit : undefined, label : configured === false ? 0 : configured }
         : { limit : parseSize( configured ), label : configured };
 
     bodyLimitCache.set( securityConfig, resolved );

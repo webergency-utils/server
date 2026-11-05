@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { mergeFileConfigs } from '../helpers/file-upload.js';
 
 export const HTTP_METHOD_DECORATORS = ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Head', 'Options', 'All', 'Ws', 'Sse', 'MessagePattern', 'EventPattern'];
 
@@ -197,31 +198,11 @@ export function extractFileConfig( decorators: readonly ts.Decorator[] | undefin
         if( typeof first === 'string' )
         {
             const fieldOpts = args.length > 1 ? parseExpression( args[1], sourceFile ) : {};
-            merged = merged ? { ...merged } : {};
-            merged.fields = { ...( merged.fields || {}), [first] : { ...( merged.fields?.[first] || {}), ...( fieldOpts || {}) } };
+            merged = mergeFileConfigs([ merged, { fields : { [first] : fieldOpts || {} } }]);
         }
         else if( first && typeof first === 'object' )
         {
-            const fields =
-            {
-                ...( merged?.fields || {}),
-                ...( first.fields || {})
-            };
-
-            if( merged?.fields && first.fields )
-            {
-                for( const key of Object.keys( first.fields ))
-                {
-                    fields[key] = { ...( merged.fields[key] || {}), ...first.fields[key] };
-                }
-            }
-
-            merged =
-            {
-                ...( merged || {}),
-                ...first,
-                fields : Object.keys( fields ).length ? fields : undefined
-            };
+            merged = mergeFileConfigs([ merged, first ]);
         }
     }
 

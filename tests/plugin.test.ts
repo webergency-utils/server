@@ -949,6 +949,53 @@ describe( 'TypeScript Compiler Plugin Transformer', () =>
         expect( compiled ).toContain( 'isAsync: true' );
         expect( compiled ).toContain( 'source: "Header"' );
     });
+
+    it( 'should merge method-level @Security, @Cors, and @File with class-level options and rewrite nested paths with undefined', () =>
+    {
+        // Arrange
+        const code = `
+      import { Controller, Get, Post, Security, Cors, File, Reviver, ResponseMode } from '../decorators.js';
+
+      export const baseReviver = ( k, v ) => v;
+
+      @Security({ frameguard: 'deny', timeout: 5000, hsts: { maxAge: 63072000, preload: true }, csp: { 'default-src': ["'self'"], 'img-src': ['https://cdn.example'] } })
+      @Cors({ origin: 'https://app.example', credentials: true, exposedHeaders: ['X-Total'] })
+      @File({ dest: '/uploads', maxFileSize: '10mb', fields: { avatar: { dest: '/avatars', maxFileSize: '2mb' } } })
+      @Reviver(baseReviver)
+      @ResponseMode('strict')
+      @Controller('/merged')
+      export class BaseMergedCtrl {}
+
+      @Controller('/child')
+      export class ChildMergedCtrl extends BaseMergedCtrl {
+        @Security({ maxBodySize: '512mb', timeout: undefined, hsts: { preload: undefined }, csp: { 'img-src': undefined } })
+        @Cors({ origin: 'https://override.example', exposedHeaders: undefined })
+        @File({ fields: { avatar: { dest: undefined } } })
+        @Post('/upload')
+        upload() { return { ok: true } }
+
+        @Security()
+        @Cors(false)
+        @File()
+        @Reviver(null)
+        @ResponseMode('relaxed')
+        @Get('/reset')
+        reset(): { a: number } { return { a: 1 } }
+      }
+    `;
+
+        // Act
+        const compiled = compileAndTransform( code );
+
+        // Assert — upload endpoint merges class security and rewrites timeout, hsts.preload, and csp['img-src'] to undefined
+        expect( compiled ).toMatch( /methodName:\s*"upload"[\s\S]*security:\s*\{\s*frameguard:\s*"deny",\s*timeout:\s*undefined,\s*hsts:\s*\{\s*maxAge:\s*63072000,\s*preload:\s*undefined\s*\},\s*csp:\s*\{\s*"default-src":\s*\[\s*"'self'"\s*\],\s*"img-src":\s*undefined\s*\},\s*maxBodySize:\s*"512mb"\s*\}/ );
+        // Assert — upload endpoint merges class cors and rewrites exposedHeaders to undefined
+        expect( compiled ).toMatch( /methodName:\s*"upload"[\s\S]*cors:\s*\{\s*origin:\s*"https:\/\/override\.example",\s*credentials:\s*true,\s*exposedHeaders:\s*undefined\s*\}/ );
+        // Assert — upload endpoint merges class files and rewrites fields.avatar.dest to undefined while keeping maxFileSize: '2mb'
+        expect( compiled ).toMatch( /methodName:\s*"upload"[\s\S]*files:\s*\{\s*dest:\s*"\/uploads",\s*maxFileSize:\s*"10mb",\s*fields:\s*\{\s*avatar:\s*\{\s*dest:\s*undefined,\s*maxFileSize:\s*"2mb"\s*\}\s*\}\s*\}/ );
+        // Assert — reset endpoint sets returnTypeMode to 'relaxed', disables cors (false), resets security to {}, resets files to {}, and opts out of reviver (null)
+        expect( compiled ).toMatch( /methodName:\s*"reset"[\s\S]*returnTypeMode:\s*"relaxed"[\s\S]*cors:\s*false[\s\S]*security:\s*\{\}[\s\S]*files:\s*\{\}[\s\S]*reviver:\s*null/ );
+    });
 });
 
 function collectGeneratedLocals( js: string ): string

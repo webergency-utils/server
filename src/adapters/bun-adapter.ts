@@ -4,6 +4,55 @@ import { needsNodeTlsCompat, attachBunClientCert } from '../helpers/peer-cert.js
 import { NodeTlsCompat } from './node-tls-compat.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
 import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
+import { resolveBodyLimit } from '../helpers/request-reader.js';
+import { resolveMultipartTotalLimit } from '../helpers/file-upload.js';
+
+function endpointUsesFiles( ep: any ): boolean
+{
+    if( ep?.files && typeof ep.files === 'object' )
+    {
+        return true;
+    }
+
+    return Array.isArray( ep?.params ) && ep.params.some(( p: any ) => p?.source === 'File' || p?.source === 'Files' );
+}
+
+function resolveEndpointsMaxBodySize( endpoints: any[]): number
+{
+    let maxBytes = endpoints.length === 0 ? ( resolveBodyLimit( undefined ).limit ?? Number.MAX_SAFE_INTEGER ) : 0;
+
+    for( const ep of endpoints )
+    {
+        const bodyLimit = resolveBodyLimit( ep?.security ).limit;
+
+        if( bodyLimit === undefined )
+        {
+            return Number.MAX_SAFE_INTEGER;
+        }
+
+        if( bodyLimit > maxBytes )
+        {
+            maxBytes = bodyLimit;
+        }
+
+        if( endpointUsesFiles( ep ))
+        {
+            const fileLimit = resolveMultipartTotalLimit( ep?.security, ep?.files );
+
+            if( fileLimit === undefined )
+            {
+                return Number.MAX_SAFE_INTEGER;
+            }
+
+            if( fileLimit > maxBytes )
+            {
+                maxBytes = fileLimit;
+            }
+        }
+    }
+
+    return maxBytes;
+}
 
 export class BunAdapter implements ServerAdapter
 {
@@ -29,10 +78,12 @@ export class BunAdapter implements ServerAdapter
         }
 
         const { getRegistry } = await import( '../core/registry.js' );
-        const hasWs = getRegistry().getEndpoints().some(( ep: any ) => ep.httpMethod === 'WS' );
+        const endpoints = getRegistry().getEndpoints();
+        const hasWs = endpoints.some(( ep: any ) => ep.httpMethod === 'WS' );
 
         const serveOptions: any = {
-            port
+            port,
+            maxRequestBodySize : http?.maxRequestBodySize ?? resolveEndpointsMaxBodySize( endpoints )
         };
 
         if( tls )

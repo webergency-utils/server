@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Server } from '../src/server.js';
 import { ForwardIntent } from '../src/core/types.js';
 import { ServerRequest } from '../src/core/server-request.js';
 import { seedInstanceController } from './helpers/testing.js';
-import { mergeSecurityConfigs, generateSecurityHeaders, isHostAllowed } from '../src/helpers/security.js';
+import { mergeSecurityConfigs, generateSecurityHeaders, isHostAllowed, getAllowedContentTypesSet } from '../src/helpers/security.js';
+import { resolveBodyLimit } from '../src/helpers/request-reader.js';
+import { BunAdapter } from '../src/adapters/bun-adapter.js';
+import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
 
 describe( 'Security Helper & Integration Tests', () =>
 {
@@ -73,6 +76,36 @@ describe( 'Security Helper & Integration Tests', () =>
                 hsts       : { maxAge : 100 },
                 csp        : { 'default-src' : ["'self'"] }
             });
+        });
+
+        it( 'should reset accumulated security options to defaults when true or empty object is encountered', () =>
+        {
+            // Arrange / Act
+            const resetWithTrue = mergeSecurityConfigs([
+                { maxBodySize : '512mb', frameguard : 'deny' },
+                true
+            ]);
+            const resetWithEmpty = mergeSecurityConfigs([
+                { maxBodySize : '512mb', frameguard : 'deny' },
+                {}
+            ]);
+
+            // Assert
+            expect( resetWithTrue ).toEqual({});
+            expect( resetWithEmpty ).toEqual({});
+        });
+
+        it( 'should support false and undefined in getAllowedContentTypesSet and resolveBodyLimit', () =>
+        {
+            // Arrange / Act / Assert
+            expect( getAllowedContentTypesSet({ allowedContentTypes : false })).toBeUndefined();
+            expect( getAllowedContentTypesSet({ allowedContentTypes : [] })).toBeUndefined();
+            expect( getAllowedContentTypesSet({ allowedContentTypes : ['application/json'] })?.has( 'application/json' )).toBe( true );
+
+            expect( resolveBodyLimit({ maxBodySize : false }).limit ).toBeUndefined();
+            expect( resolveBodyLimit({ maxBodySize : 0 }).limit ).toBeUndefined();
+            expect( resolveBodyLimit({ maxBodySize : undefined }).limit ).toBe( 1024 * 1024 );
+            expect( resolveBodyLimit({ maxBodySize : '512mb' }).limit ).toBe( 512 * 1024 * 1024 );
         });
     });
 
@@ -686,6 +719,215 @@ describe( 'Security Helper & Integration Tests', () =>
             }));
             expect( allowed.status ).toBe( 200 );
             expect( await allowed.text()).toBe( 'secret-ok' );
+        });
+
+        it( 'should unwrap ServerRequestInit.security in ServerRequest.from when a guard reads the body before the endpoint', async () =>
+        {
+            // Arrange — Guard reads body first; ServerRequest.from(request, { security }) is called inside invokeGuards
+            const sreq = new ServerRequest(
+                new Request( 'http://localhost/upload', {
+                    method  : 'POST',
+                    body    : JSON.stringify({ data : 'x'.repeat( 200 ) }),
+                    headers : { 'Content-Type' : 'application/json' }
+                })
+            );
+
+            // Act — Simulate invokeGuards passing { security: { maxBodySize: '512mb' } }
+            ServerRequest.from( sreq, { security : { maxBodySize : '512mb' } });
+            const parsed = await sreq.body();
+
+            // Assert
+            expect( sreq.securityOptions?.maxBodySize ).toBe( '512mb' );
+            expect( parsed.data.length ).toBe( 200 );
+        });
+
+        it( 'should support maxBodySize: false to disable body limits and maxBodySize: undefined to reset to 1mb default', async () =>
+        {
+            // Arrange
+            const server = new Server({
+                port     : 0,
+                security : { maxBodySize : '10b' }
+            });
+            class BodyController
+            {
+                unlimited( body: any ) { return body }
+                resetDefault( body: any ) { return body }
+            }
+            seedInstanceController( server.registry, 'BodyController', new BodyController(), [
+                {
+                    methodName : 'unlimited',
+                    httpMethod : 'POST',
+                    path       : '/unlimited',
+                    params     : [{ source : 'Body' }],
+                    security   : { maxBodySize : false }
+                },
+                {
+                    methodName : 'resetDefault',
+                    httpMethod : 'POST',
+                    path       : '/reset-default',
+                    params     : [{ source : 'Body' }],
+                    security   : { maxBodySize : undefined }
+                }
+            ]);
+
+            // Act
+            const resUnlimited = await server.fetch( new Request( 'http://localhost/unlimited', {
+                method  : 'POST',
+                body    : JSON.stringify({ text : 'this payload is much larger than 10 bytes' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+            const resReset = await server.fetch( new Request( 'http://localhost/reset-default', {
+                method  : 'POST',
+                body    : JSON.stringify({ text : 'also larger than 10 bytes but under 1mb' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+
+            // Assert
+            expect( resUnlimited.status ).toBe( 200 );
+            expect( resReset.status ).toBe( 200 );
+        });
+
+        it( 'should rewrite nested object paths when explicitly unset with undefined in mergeSecurityConfigs', () =>
+        {
+            // Arrange & Act
+            const merged = mergeSecurityConfigs([
+                {
+                    timeout           : 5000,
+                    hsts              : { maxAge : 63072000, includeSubDomains : true, preload : true },
+                    csp               : { 'default-src' : [ "'self'" ], 'img-src' : [ 'https://cdn.example.com' ] },
+                    permissionsPolicy : { camera : [ 'self' ], microphone : [] }
+                },
+                {
+                    timeout           : undefined,
+                    hsts              : { preload : undefined },
+                    csp               : { 'img-src' : undefined },
+                    permissionsPolicy : { camera : undefined }
+                }
+            ]);
+            const headers = generateSecurityHeaders( merged );
+
+            // Assert
+            expect( merged?.timeout ).toBeUndefined();
+            expect( merged?.hsts ).toEqual({ maxAge : 63072000, includeSubDomains : true, preload : undefined });
+            expect( headers['Strict-Transport-Security']).toBe( 'max-age=63072000; includeSubDomains' );
+            expect( headers['Content-Security-Policy']).toBe( "default-src 'self'" );
+            expect( headers['Permissions-Policy']).toBe( 'microphone=()' );
+        });
+
+        it( 'should reset sreq.securityOptions when forwarding from a strict route to an unrestricted route', async () =>
+        {
+            // Arrange
+            const server = new Server({ port : 0 });
+            class HopController
+            {
+                entry()
+                {
+                    throw new ForwardIntent({ method : 'POST', path : '/target' });
+                }
+
+                target( body: any )
+                {
+                    return body;
+                }
+            }
+            seedInstanceController( server.registry, 'HopController', new HopController(), [
+                {
+                    methodName : 'entry',
+                    httpMethod : 'POST',
+                    path       : '/entry',
+                    security   : { maxBodySize : '5b' }
+                },
+                {
+                    methodName : 'target',
+                    httpMethod : 'POST',
+                    path       : '/target',
+                    params     : [{ source : 'Body' }]
+                }
+            ]);
+
+            // Act
+            const res = await server.fetch( new Request( 'http://localhost/entry', {
+                method  : 'POST',
+                body    : JSON.stringify({ ok : 'more than 5 bytes' }),
+                headers : { 'Content-Type' : 'application/json' }
+            }));
+
+            // Assert
+            expect( res.status ).toBe( 200 );
+        });
+
+        it( 'should always pass the resolved maxRequestBodySize to Bun.serve across default, custom, file, and unlimited limits', async () =>
+        {
+            // Arrange
+            const hadBun = typeof ( globalThis as any ).Bun !== 'undefined';
+            const serveMock = vi.fn().mockReturnValue({ stop : vi.fn() });
+            const serveSpy = hadBun
+                ? vi.spyOn(( globalThis as any ).Bun, 'serve' ).mockImplementation( serveMock )
+                : undefined;
+
+            if( !hadBun )
+            {
+                ( globalThis as any ).Bun = { serve : serveMock };
+            }
+
+            try
+            {
+                const server64kb = new Server({
+                    port     : 3090,
+                    signals  : false,
+                    security : { maxBodySize : '64kb' }
+                });
+                await server64kb.start();
+                await server64kb.shutdown();
+
+                const server512 = new Server({
+                    port     : 3091,
+                    signals  : false,
+                    security : { maxBodySize : '512mb' }
+                });
+                await server512.start();
+                await server512.shutdown();
+
+                const regUnlimited = new ApplicationRegistry();
+                regUnlimited.registerEndpoint({
+                    controller   : 'C',
+                    methodName   : 'm',
+                    httpMethod   : 'POST',
+                    path         : '/u',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    security     : { maxBodySize : false },
+                    meta         : {}
+                });
+                const adapter = new BunAdapter();
+                await runWithRegistry( regUnlimited, () => adapter.listen( 3092, async () => new Response( 'ok' )));
+
+                // Assert
+                expect( serveMock ).toHaveBeenNthCalledWith( 1, expect.objectContaining({
+                    port               : 3090,
+                    maxRequestBodySize : 64 * 1024
+                }));
+                expect( serveMock ).toHaveBeenNthCalledWith( 2, expect.objectContaining({
+                    port               : 3091,
+                    maxRequestBodySize : 512 * 1024 * 1024
+                }));
+                expect( serveMock ).toHaveBeenNthCalledWith( 3, expect.objectContaining({
+                    port               : 3092,
+                    maxRequestBodySize : Number.MAX_SAFE_INTEGER
+                }));
+            }
+            finally
+            {
+                if( serveSpy )
+                {
+                    serveSpy.mockRestore();
+                }
+                else
+                {
+                    delete ( globalThis as any ).Bun;
+                }
+            }
         });
     });
 });

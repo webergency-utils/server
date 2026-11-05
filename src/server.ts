@@ -7,8 +7,9 @@ import { EndpointMetadata, Logger, LogContext, SeoFallthrough, ForwardIntent, Se
 import { ServerRequest } from './core/server-request.js';
 import { Context, type RequestContext } from './core/context.js';
 import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
-import { handleCors, isPreflight } from './helpers/cors.js';
+import { handleCors, isPreflight, mergeCorsConfigs } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders, getAllowedContentTypesSet, isHostAllowed } from './helpers/security.js';
+import { mergeFileConfigs, resolveMultipartTotalLimit } from './helpers/file-upload.js';
 
 import { RequestProcessor } from './core/request-processor.js';
 import { invokeGuards } from './core/guard-runner.js';
@@ -19,7 +20,7 @@ export type { TlsOptions, NodeHttpOptions };
 import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
-import { getContentType, requestLikelyHasBody } from './helpers/request-reader.js';
+import { getContentType, requestLikelyHasBody, resolveBodyLimit } from './helpers/request-reader.js';
 import { compileTrustProxy, type CompiledTrustProxy } from './helpers/client-ip.js';
 import { httpStatusFromError } from './errors.js';
 import { clientErrorBody, errorLogFields } from './helpers/error-response.js';
@@ -66,7 +67,7 @@ export interface ServerOptions {
      * - `string[]`: bind one listener per unique non-empty entry on `port`.
      */
     host?             : string | string[]
-    cors?             : CorsOptions
+    cors?             : CorsOptions | boolean | string | null
     security?         : SecurityOptions | boolean
     /** Global multipart / upload defaults (merged under module / `@File`). */
     files?            : FileOptions
@@ -215,6 +216,8 @@ export class Server extends EventEmitter
     private hasSeoRoutes = false;
     private baseSecurityConfig : SecurityOptions | undefined;
     private routeSecurityCache = new WeakMap<EndpointMetadata, SecurityOptions | undefined>();
+    private baseCorsConfig     : CorsOptions | undefined;
+    private routeCorsCache = new WeakMap<EndpointMetadata, CorsOptions | undefined>();
     public logger              : Logger;
 
     public get isShuttingDown(): boolean 
@@ -248,6 +251,7 @@ export class Server extends EventEmitter
             : new NoOpLogger();
         this.compiledTrustProxy = compileTrustProxy( options.trustProxy );
         this.baseSecurityConfig = mergeSecurityConfigs([ options.security ]);
+        this.baseCorsConfig = mergeCorsConfigs([ options.cors ]);
 
         if( options.signals !== false )
         {
@@ -525,10 +529,11 @@ export class Server extends EventEmitter
         const hosts = normalizeHostList( this.options.host );
         await runWithRegistry( this.registry, async () =>
         {
-            const httpOpts = {
-                headersTimeout   : this.options.headersTimeout,
-                requestTimeout   : this.options.requestTimeout,
-                keepAliveTimeout : this.options.keepAliveTimeout
+            const httpOpts: NodeHttpOptions = {
+                headersTimeout     : this.options.headersTimeout,
+                requestTimeout     : this.options.requestTimeout,
+                keepAliveTimeout   : this.options.keepAliveTimeout,
+                maxRequestBodySize : this.resolveMaxRequestBodySize()
             };
 
             if( hosts.length > 0 )
@@ -793,6 +798,94 @@ export class Server extends EventEmitter
         return merged;
     }
 
+    private resolveEndpointCors( metadata?: EndpointMetadata ): CorsOptions | undefined
+    {
+        if( !metadata || metadata.cors === undefined )
+        {
+            return this.baseCorsConfig;
+        }
+
+        if( this.routeCorsCache.has( metadata ))
+        {
+            return this.routeCorsCache.get( metadata );
+        }
+
+        const merged = mergeCorsConfigs([ this.baseCorsConfig, metadata.cors ]);
+        this.routeCorsCache.set( metadata, merged );
+
+        return merged;
+    }
+
+    private resolveMaxRequestBodySize(): number
+    {
+        const baseLimit = resolveBodyLimit( this.baseSecurityConfig ).limit;
+
+        if( baseLimit === undefined )
+        {
+            return Number.MAX_SAFE_INTEGER;
+        }
+
+        let maxBytes = baseLimit;
+
+        if( this.options.files )
+        {
+            const globalFileLimit = resolveMultipartTotalLimit( this.baseSecurityConfig, this.options.files );
+
+            if( globalFileLimit === undefined )
+            {
+                return Number.MAX_SAFE_INTEGER;
+            }
+
+            if( globalFileLimit > maxBytes )
+            {
+                maxBytes = globalFileLimit;
+            }
+        }
+
+        for( const ep of this.registry.getEndpoints())
+        {
+            const sec = this.resolveEndpointSecurity( ep );
+            const bodyLimit = resolveBodyLimit( sec ).limit;
+
+            if( bodyLimit === undefined )
+            {
+                return Number.MAX_SAFE_INTEGER;
+            }
+
+            if( bodyLimit > maxBytes )
+            {
+                maxBytes = bodyLimit;
+            }
+
+            const controllerModule = this.registry.getTokenModule( ep.controller );
+            const moduleFiles = controllerModule?.files;
+            const usesFiles = Boolean(
+                ep.files
+                || moduleFiles
+                || this.options.files
+                || ( Array.isArray( ep.params ) && ep.params.some(( p: any ) => p?.source === 'File' || p?.source === 'Files' ))
+            );
+
+            if( usesFiles )
+            {
+                const mergedFiles = mergeFileConfigs([ this.options.files, moduleFiles, ep.files ]);
+                const fileLimit = resolveMultipartTotalLimit( sec, mergedFiles );
+
+                if( fileLimit === undefined )
+                {
+                    return Number.MAX_SAFE_INTEGER;
+                }
+
+                if( fileLimit > maxBytes )
+                {
+                    maxBytes = fileLimit;
+                }
+            }
+        }
+
+        return maxBytes;
+    }
+
     /**
      * Apply CORS, security, optional Allow, and `X-Request-Id` in one pass.
      * Falls back to cloning the Response if its headers are immutable.
@@ -837,13 +930,13 @@ export class Server extends EventEmitter
     ): void
     {
         // Enforce allowedHosts (HTTP Host header allowlist)
-        if( cfg?.allowedHosts && !isHostAllowed( request.headers.get( 'host' ), cfg ))
+        if( cfg?.allowedHosts && cfg.allowedHosts !== true && !isHostAllowed( request.headers.get( 'host' ), cfg ))
         {
             throw Object.assign( new Error( 'Forbidden: Disallowed Host' ), { status : 403 });
         }
 
         // Enforce allowedContentTypes (require a matching CT when a body is indicated)
-        if( cfg?.allowedContentTypes && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'WS' ) 
+        if( cfg?.allowedContentTypes && cfg.allowedContentTypes.length > 0 && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'WS' ) 
         {
             const contentType = getContentType( request );
             const allowed = getAllowedContentTypesSet( cfg );
@@ -911,7 +1004,7 @@ export class Server extends EventEmitter
         {
             const res = new Response( 'Service Unavailable (Shutting Down)', { status : 503 });
 
-            return this.finalizeResponse( res, request, requestId, this.options.cors, this.baseSecurityConfig );
+            return this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
         }
 
         this.activeRequests++;
@@ -961,7 +1054,7 @@ export class Server extends EventEmitter
                 ? (( this.hasSeoRoutes ? this.seoRouter.lookup( method, path ).fallback : null ) || publicLookup.fallback )
                 : null );
 
-            const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
+            const corsConfig = this.resolveEndpointCors( finalMatch?.metadata );
             const securityConfig = this.resolveEndpointSecurity( finalMatch?.metadata );
 
             // A genuine CORS preflight is answered here, before guards run. Browsers omit
@@ -1021,7 +1114,7 @@ export class Server extends EventEmitter
                     headers : wrongMethod ? { Allow : externalAllowed.join( ', ' ) } : undefined
                 });
 
-                return this.finalizeResponse( res, request, requestId, this.options.cors, this.baseSecurityConfig );
+                return this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
             }
 
             if( isUpgrade ) 
@@ -1116,7 +1209,7 @@ export class Server extends EventEmitter
             {
                 this.applyMatchBags( sreq, seoMatch );
                 activeSecurity = this.resolveEndpointSecurity( seoMatch.metadata );
-                activeCors = seoMatch.metadata.cors !== undefined ? seoMatch.metadata.cors : this.options.cors;
+                activeCors = this.resolveEndpointCors( seoMatch.metadata );
                 this.enforceSecurityGates( activeSecurity, request, sreq, method, seoMatch.metadata.path );
 
                 try
@@ -1154,12 +1247,12 @@ export class Server extends EventEmitter
 
                     this.logRequestEnd( startTime, method, path, status, requestId, wrongMethod ? 'Method Not Allowed' : 'Not Found' );
 
-                    return this.finalizeResponse( res, request, requestId, this.options.cors, this.baseSecurityConfig );
+                    return this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
                 }
 
                 this.applyMatchBags( sreq, pubMatch );
                 activeSecurity = this.resolveEndpointSecurity( pubMatch.metadata );
-                activeCors = pubMatch.metadata.cors !== undefined ? pubMatch.metadata.cors : this.options.cors;
+                activeCors = this.resolveEndpointCors( pubMatch.metadata );
                 this.enforceSecurityGates( activeSecurity, request, sreq, method, pubMatch.metadata.path );
                 response = await this.runEndpoint( pubMatch.metadata, sreq, activeSecurity, request );
             }
@@ -1211,7 +1304,7 @@ export class Server extends EventEmitter
                 this.logRequestEnd( startTime, method, path, statusCode, requestId );
             }
       
-            const corsConfig = finalMatch ? ( finalMatch.metadata.cors !== undefined ? finalMatch.metadata.cors : this.options.cors ) : this.options.cors;
+            const corsConfig = this.resolveEndpointCors( finalMatch?.metadata );
             const errSecurityConfig = this.resolveEndpointSecurity( finalMatch?.metadata );
       
             const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };

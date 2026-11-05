@@ -1366,7 +1366,11 @@ describe( 'Server & Metadata', () =>
             {
                 const server = new Server({ port : 3001, signals : false });
                 await server.start();
-                expect(( globalThis as any ).Bun.serve ).toHaveBeenCalledWith({ port : 3001, fetch : expect.any( Function ) });
+                expect(( globalThis as any ).Bun.serve ).toHaveBeenCalledWith({
+                    port               : 3001,
+                    maxRequestBodySize : 1024 * 1024,
+                    fetch              : expect.any( Function )
+                });
             }
             finally 
             {

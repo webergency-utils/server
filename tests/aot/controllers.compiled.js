@@ -4079,7 +4079,8 @@ InheritedController[Symbol.for("webergency.server.controller")] = {
             returnTypeValidator: __val_473287f8298dba71,
             returnTypeSerializer: __ser_473287f8298dba71_strip_json,
             security: {
-                frameguard: false
+                frameguard: false,
+                timeout: 500
             }
         }
     ]

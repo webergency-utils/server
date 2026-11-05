@@ -25,11 +25,13 @@ export interface TlsOptions {
  */
 export interface NodeHttpOptions {
     /** Time to receive the complete HTTP headers. Default: 60_000. */
-    headersTimeout?   : number
+    headersTimeout?     : number
     /** Time for the entire request to complete. Default: 300_000. */
-    requestTimeout?   : number
+    requestTimeout?     : number
     /** Idle keep-alive socket timeout. Default: 5_000. */
-    keepAliveTimeout? : number
+    keepAliveTimeout?   : number
+    /** Max request body size in bytes (used by Bun.serve when exceeding Bun's 128 MB default). */
+    maxRequestBodySize? : number
 }
 
 export interface ServerAdapter {

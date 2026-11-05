@@ -24,8 +24,11 @@ import { parseAnyJson, parseAnyQuery, type Reviver } from '../helpers/reviver.js
 import
 {
     cleanupUploadedFiles,
+    DEFAULT_MAX_FILE_BYTES,
+    DEFAULT_MAX_FIELD_BYTES,
     mergeFileConfigs,
     processMultipartUpload,
+    resolveMultipartTotalLimit,
     type FileOptions,
     type MultipartParseResult,
     UploadedFile,
@@ -164,8 +167,9 @@ export class ServerRequest
             this.#security = opts.security ?? securityFromArg;
             this.#globalFiles = opts.globalFiles;
             this.#routeFiles = opts.routeFiles ?? opts.files ?? files;
-            this.#files = files ?? opts.files ?? (
-                ( this.#globalFiles || this.#routeFiles )
+            const directFiles = files ?? ( typeof opts.files === 'object' ? opts.files : undefined );
+            this.#files = directFiles ?? (
+                ( this.#globalFiles !== undefined || this.#routeFiles !== undefined )
                     ? mergeFileConfigs([ this.#globalFiles, this.#routeFiles ])
                     : undefined
             );
@@ -215,7 +219,14 @@ export class ServerRequest
         {
             if( securityOrInit !== undefined && existing.#security === undefined )
             {
-                existing.#security = securityOrInit;
+                const resolvedSec = 'security' in securityOrInit
+                    ? securityOrInit.security
+                    : ( hasDirectSecurityOption( securityOrInit ) ? ( securityOrInit as SecurityOptions ) : undefined );
+
+                if( resolvedSec !== undefined )
+                {
+                    existing.#security = resolvedSec;
+                }
             }
 
             if( files !== undefined && existing.#files === undefined )
@@ -399,6 +410,11 @@ export class ServerRequest
     get context(): RequestContext | undefined
     {
         return Context.get();
+    }
+
+    get securityOptions(): SecurityOptions | undefined
+    {
+        return this.#security;
     }
 
     set securityOptions( val: SecurityOptions | undefined )
@@ -830,28 +846,6 @@ export class ServerRequest
 
         this.#bodyMode = mode;
     }
-}
-
-function resolveMultipartTotalLimit( security?: SecurityOptions, files?: FileOptions ): number | undefined
-{
-    if( files?.maxTotalSize !== undefined )
-    {
-        return parseSize( files.maxTotalSize );
-    }
-
-    const configured = security?.maxBodySize;
-
-    if( configured === undefined )
-    {
-        return DEFAULT_MAX_BODY_BYTES;
-    }
-
-    if( configured === 0 || configured === Infinity )
-    {
-        return undefined;
-    }
-
-    return parseSize( configured );
 }
 
 /** Resolve Server → Module → route file options. */

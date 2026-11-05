@@ -54,7 +54,7 @@ const allowedHostsCache = new WeakMap<SecurityOptions, CompiledAllowedHosts>();
 
 export function getAllowedContentTypesSet( cfg: SecurityOptions ): Set<string> | undefined
 {
-    if( !cfg.allowedContentTypes ) { return undefined }
+    if( !cfg.allowedContentTypes || cfg.allowedContentTypes.length === 0 ) { return undefined }
 
     let set = allowedContentTypesCache.get( cfg );
 
@@ -263,6 +263,43 @@ export function mergeSecurityConfigs( configs: ( SecurityOptions | boolean | und
     return computeMergedSecurityConfigs( configs );
 }
 
+function isPlainOptionObject( val: unknown ): val is Record<string, any>
+{
+    return typeof val === 'object'
+        && val !== null
+        && !Array.isArray( val )
+        && !( '__raw_code__' in val );
+}
+
+export function mergeOptionObjects<T extends Record<string, any>>( base: T | undefined, override: T ): T
+{
+    if( !base ){ return { ...override } }
+
+    const result: Record<string, any> = { ...base };
+
+    for( const key of Object.keys( override ))
+    {
+        const val = override[key];
+
+        if( val === undefined )
+        {
+            result[key] = undefined;
+        }
+        else if( isPlainOptionObject( val ) && isPlainOptionObject( result[key]))
+        {
+            result[key] = Object.keys( val ).length === 0
+                ? {}
+                : mergeOptionObjects( result[key], val );
+        }
+        else
+        {
+            result[key] = val;
+        }
+    }
+
+    return result as T;
+}
+
 function computeMergedSecurityConfigs( configs: ( SecurityOptions | boolean | undefined )[]): SecurityOptions | undefined
 {
     let merged: SecurityOptions | undefined = undefined;
@@ -273,7 +310,7 @@ function computeMergedSecurityConfigs( configs: ( SecurityOptions | boolean | un
 
         if( config === true ) 
         {
-            if( !merged ) { merged = {} }
+            merged = {};
         }
         else if( config === false ) 
         {
@@ -294,10 +331,16 @@ function computeMergedSecurityConfigs( configs: ( SecurityOptions | boolean | un
                 corp                         : false
             };
         }
-        else if( typeof config === 'object' ) 
+        else if( typeof config === 'object' && config !== null ) 
         {
-            if( !merged ) { merged = {} }
-            merged = { ...merged, ...config };
+            if( Object.keys( config ).length === 0 )
+            {
+                merged = {};
+            }
+            else
+            {
+                merged = mergeOptionObjects( merged, config );
+            }
         }
     }
 
@@ -463,6 +506,11 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
 
             for( const [directive, sources] of Object.entries( val )) 
             {
+                if( sources === undefined || ( sources as any ) === false )
+                {
+                    continue;
+                }
+
                 if( Array.isArray( sources )) 
                 {
                     parts.push( `${directive} ${sources.join( ' ' )}` );
@@ -472,7 +520,11 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
                     parts.push( `${directive} ${sources}` );
                 }
             }
-            headers['Content-Security-Policy'] = parts.join( '; ' );
+
+            if( parts.length > 0 )
+            {
+                headers['Content-Security-Policy'] = parts.join( '; ' );
+            }
         }
     }
 
@@ -514,6 +566,11 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
 
             for( const [ feature, allowlist ] of Object.entries( val )) 
             {
+                if( allowlist === undefined || ( allowlist as any ) === false )
+                {
+                    continue;
+                }
+
                 const origins = Array.isArray( allowlist ) ? allowlist : [allowlist];
                 parts.push( `${feature}=(${origins.join( ' ' )})` );
             }

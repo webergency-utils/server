@@ -683,11 +683,7 @@ export class RequestProcessor
     ): Promise<Response> 
     {
         const sreq = ServerRequest.from( req, { security : securityConfig });
-
-        if( securityConfig !== undefined )
-        {
-            sreq.securityOptions = securityConfig;
-        }
+        sreq.securityOptions = securityConfig;
 
         const registry = registryArg ?? getRegistry();
         const requestCtx: RequestContext = {

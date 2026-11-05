@@ -1,4 +1,5 @@
 import { CorsOptions } from '../decorators.js';
+import { mergeOptionObjects } from './security.js';
 
 const wildcardRegexCache = new Map<string, RegExp>();
 
@@ -77,6 +78,44 @@ export function isPreflight( request: Request ): boolean
 const DEFAULT_METHODS = [ 'GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE' ];
 const DEFAULT_METHODS_STR = 'GET, HEAD, PUT, PATCH, POST, DELETE';
 
+export type CorsConfigInput = CorsOptions | boolean | string | null | undefined;
+
+export function mergeCorsConfigs( configs: CorsConfigInput[]): CorsOptions | undefined
+{
+    let merged: CorsOptions | undefined = undefined;
+
+    for( const config of configs )
+    {
+        if( config === undefined ) { continue }
+
+        if( config === false || config === null )
+        {
+            merged = undefined;
+        }
+        else if( config === true )
+        {
+            merged = {};
+        }
+        else if( typeof config === 'string' )
+        {
+            merged = { ...( merged || {}), origin : config };
+        }
+        else if( typeof config === 'object' )
+        {
+            if( Object.keys( config ).length === 0 )
+            {
+                merged = {};
+            }
+            else
+            {
+                merged = merged ? mergeOptionObjects( merged, config ) : { ...config };
+            }
+        }
+    }
+
+    return merged;
+}
+
 interface CompiledCors {
     originRule         : any
     methods            : any
@@ -97,7 +136,7 @@ function getCompiledCors( config: CorsOptions ): CompiledCors
     if( compiled ) { return compiled }
 
     const originRule = config.origin === undefined ? '*' : config.origin;
-    const methods = config.methods || DEFAULT_METHODS;
+    const methods = config.methods === undefined ? DEFAULT_METHODS : config.methods;
     let methodsStr: string | undefined;
 
     if( Array.isArray( methods ))
@@ -118,7 +157,9 @@ function getCompiledCors( config: CorsOptions ): CompiledCors
         ? ( Array.isArray( config.exposedHeaders ) ? config.exposedHeaders.join( ', ' ) : config.exposedHeaders )
         : undefined;
 
-    const maxAgeStr = config.maxAge !== undefined ? String( config.maxAge ) : undefined;
+    const maxAgeStr = ( config.maxAge !== undefined && config.maxAge !== false )
+        ? String( config.maxAge )
+        : undefined;
 
     let staticNonPreflight: CorsHeaders | undefined;
 

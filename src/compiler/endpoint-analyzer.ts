@@ -20,6 +20,7 @@ import {
     parseExpression
 } from './decorator-config.js';
 import { mergeFileConfigs } from '../helpers/file-upload.js';
+import { mergeOptionObjects } from '../helpers/security.js';
 import { unwrapSsePayloadType } from './sse-types.js';
 import { findConstructorDeps, resolvePropertyDeps } from './di-resolution.js';
 import { MetadataCollector, applyDirectives, byName, guardName } from './metadata-collector.js';
@@ -438,16 +439,32 @@ function isAsyncMethod( method: ts.MethodDeclaration ): boolean
     return !!method.modifiers?.some( m => m.kind === ts.SyntaxKind.AsyncKeyword );
 }
 
-/** Merge a hierarchy of `@Cors` / `@Security` configs; a non-object entry replaces the merge. */
+/** Merge a hierarchy of `@Cors` / `@Security` configs; a non-object or empty `{}` entry resets the merge. */
 function mergeConfigs( configs: any[]): any
 {
-    if( configs.length === 0 ) { return undefined }
-
-    let merged: any = {};
+    let merged: any = undefined;
 
     for( const config of configs )
     {
-        merged = typeof config === 'object' ? { ...merged, ...config } : config;
+        if( config === undefined ) { continue }
+
+        if( typeof config === 'object' && config !== null )
+        {
+            if( Object.keys( config ).length === 0 )
+            {
+                merged = {};
+            }
+            else
+            {
+                merged = ( typeof merged === 'object' && merged !== null )
+                    ? mergeOptionObjects( merged, config )
+                    : { ...config };
+            }
+        }
+        else
+        {
+            merged = config;
+        }
     }
 
     return merged;
@@ -830,10 +847,10 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     }
 
                                     const methodCors = extractCorsConfig( mDecs, sourceFile );
-                                    const activeCors = methodCors !== undefined ? methodCors : classCors;
+                                    const activeCors = mergeConfigs([ classCors, methodCors ]);
 
                                     const methodSecurity = extractSecurityConfig( mDecs, sourceFile );
-                                    const activeSecurity = methodSecurity !== undefined ? methodSecurity : classSecurity;
+                                    const activeSecurity = mergeConfigs([ classSecurity, methodSecurity ]);
 
                                     const methodFiles = extractFileConfig( mDecs, sourceFile );
                                     const activeFiles = mergeFileConfigs([ classFiles, methodFiles ]);

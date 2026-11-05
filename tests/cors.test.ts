@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Server } from '../src/server.js';
 import { seedInstanceController } from './helpers/testing.js';
-import { isAllowed, handleCors } from '../src/helpers/cors.js';
+import { isAllowed, handleCors, mergeCorsConfigs } from '../src/helpers/cors.js';
 
 describe( 'CORS helpers', () =>
 {
@@ -89,6 +89,42 @@ describe( 'CORS helpers', () =>
 
         // Assert
         expect(( res as Response ).headers.get( 'Access-Control-Allow-Headers' )).toBe( 'x-custom' );
+    });
+
+    it( 'should merge CORS configs hierarchically and support false, null, true, and empty object resets', () =>
+    {
+        // Arrange / Act / Assert
+        expect( mergeCorsConfigs([ undefined, undefined ])).toBeUndefined();
+        expect( mergeCorsConfigs([ { origin : 'https://a.com' }, false ])).toBeUndefined();
+        expect( mergeCorsConfigs([ { origin : 'https://a.com' }, null ])).toBeUndefined();
+        expect( mergeCorsConfigs([ { origin : 'https://a.com', credentials : true }, true ])).toEqual({});
+        expect( mergeCorsConfigs([ { origin : 'https://a.com', credentials : true }, {} ])).toEqual({});
+        expect( mergeCorsConfigs([ { credentials : true }, 'https://b.com' ])).toEqual({
+            credentials : true,
+            origin      : 'https://b.com'
+        });
+        expect( mergeCorsConfigs([
+            { origin : 'https://a.com', credentials : true },
+            { origin : 'https://b.com' }
+        ])).toEqual({
+            origin      : 'https://b.com',
+            credentials : true
+        });
+    });
+
+    it( 'should omit Access-Control-Allow-Methods and Access-Control-Max-Age when set to false', () =>
+    {
+        // Arrange / Act
+        const res = handleCors( preflight( 'https://good.example' ), {
+            origin  : '*',
+            methods : false,
+            maxAge  : false
+        }) as Response;
+
+        // Assert
+        expect( res.status ).toBe( 204 );
+        expect( res.headers.get( 'Access-Control-Allow-Methods' )).toBeNull();
+        expect( res.headers.get( 'Access-Control-Max-Age' )).toBeNull();
     });
 });
 
@@ -327,5 +363,49 @@ describe( 'CORS Integration & Runtime Tests', () =>
         const resMethodsFn = await server.fetch( preflightMethodsFn );
         expect( resMethodsFn.status ).toBe( 204 );
         expect( resMethodsFn.headers.get( 'Access-Control-Allow-Methods' )).toBe( 'POST' );
+    });
+
+    it( 'should merge server-level cors with route-level cors and allow cors: false to disable CORS on a route', async () =>
+    {
+        // Arrange
+        const server = new Server({
+            port : 0,
+            cors : {
+                origin      : 'https://global.example',
+                credentials : true
+            }
+        });
+        class MergeCorsController
+        {
+            merged() { return 'ok' }
+            disabled() { return 'ok' }
+        }
+        seedInstanceController( server.registry, 'MergeCorsController', new MergeCorsController(), [
+            {
+                methodName : 'merged',
+                httpMethod : 'GET',
+                path       : '/merged',
+                cors       : { origin : 'https://route.example' }
+            },
+            {
+                methodName : 'disabled',
+                httpMethod : 'GET',
+                path       : '/disabled',
+                cors       : false
+            }
+        ]);
+
+        // Act
+        const resMerged = await server.fetch( new Request( 'http://localhost/merged', {
+            headers : { Origin : 'https://route.example' }
+        }));
+        const resDisabled = await server.fetch( new Request( 'http://localhost/disabled', {
+            headers : { Origin : 'https://global.example' }
+        }));
+
+        // Assert — route inherits credentials: true from server while overriding origin
+        expect( resMerged.headers.get( 'Access-Control-Allow-Origin' )).toBe( 'https://route.example' );
+        expect( resMerged.headers.get( 'Access-Control-Allow-Credentials' )).toBe( 'true' );
+        expect( resDisabled.headers.get( 'Access-Control-Allow-Origin' )).toBeNull();
     });
 });

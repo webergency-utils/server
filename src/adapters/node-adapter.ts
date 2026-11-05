@@ -13,7 +13,7 @@ import { upgradeQuery } from './ws-upgrade.js';
 const EMPTY_BUFFER = Buffer.alloc( 0 );
 
 /** Applied whenever the caller omits a timeout so the listener is never left unprotected. */
-export const DEFAULT_NODE_HTTP: Required<NodeHttpOptions> = {
+export const DEFAULT_NODE_HTTP: Required<Pick<NodeHttpOptions, 'headersTimeout' | 'requestTimeout' | 'keepAliveTimeout'>> = {
     headersTimeout   : 60_000,
     requestTimeout   : 300_000,
     keepAliveTimeout : 5_000

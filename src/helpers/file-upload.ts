@@ -27,20 +27,20 @@ export interface FileFieldOptions
     keepExtensions? : boolean
     /** `disk` when `dest` is set; `memory` keeps bytes in `file.buffer`; `manual` requires `onFile`. */
     storage?        : 'disk' | 'memory' | 'manual'
-    maxFileSize?    : string | number
+    maxFileSize?    : string | number | false
     filter?         : ( file: UploadedFile ) => boolean | Promise<boolean>
     onFile?         : FileHandler
 }
 
 export interface FileOptions extends FileFieldOptions
 {
-    maxFiles?     : number
-    maxFields?    : number
-    maxFieldSize? : string | number
+    maxFiles?     : number | false
+    maxFields?    : number | false
+    maxFieldSize? : string | number | false
     /** Total multipart body cap (bytes). Falls back to security `maxBodySize` when unset. */
-    maxTotalSize? : string | number
+    maxTotalSize? : string | number | false
     /** Per-field overrides keyed by form field name. */
-    fields?       : Record<string, FileFieldOptions>
+    fields?       : Record<string, FileFieldOptions | undefined>
 }
 
 /** Applied when the corresponding option is omitted (DoS guardrails). */
@@ -49,14 +49,119 @@ export const DEFAULT_MAX_FIELDS = 128;
 export const DEFAULT_MAX_FILE_SIZE = '10mb';
 export const DEFAULT_MAX_FIELD_SIZE = '1mb';
 
-const DEFAULT_MAX_FILE_BYTES = /* @__PURE__ */ parseSize( DEFAULT_MAX_FILE_SIZE );
-const DEFAULT_MAX_FIELD_BYTES = /* @__PURE__ */ parseSize( DEFAULT_MAX_FIELD_SIZE );
+export const DEFAULT_MAX_FILE_BYTES = /* @__PURE__ */ parseSize( DEFAULT_MAX_FILE_SIZE );
+export const DEFAULT_MAX_FIELD_BYTES = /* @__PURE__ */ parseSize( DEFAULT_MAX_FIELD_SIZE );
 
-function resolveSize( value: string | number | undefined ): number | undefined
+function resolveSize( value: string | number | false | undefined ): number | undefined
 {
     if( value === undefined ){ return undefined }
 
+    if( value === false || value === 0 || value === Infinity ){ return Infinity }
+
     return parseSize( value );
+}
+
+/**
+ * Returns the largest explicitly configured `maxFileSize` across top-level `files.maxFileSize`
+ * and per-field `files.fields[name].maxFileSize` (`Infinity` if any is `false` / `0` / `Infinity`,
+ * or `undefined` when none is configured).
+ */
+export function resolveConfiguredFileMax( options?: FileOptions ): number | undefined
+{
+    if( !options ){ return undefined }
+
+    let max = resolveSize( options.maxFileSize );
+
+    if( max === Infinity ){ return Infinity }
+
+    if( options.fields )
+    {
+        for( const field of Object.values( options.fields ))
+        {
+            if( !field ){ continue }
+
+            const fieldMax = resolveSize( field.maxFileSize );
+
+            if( fieldMax === Infinity ){ return Infinity }
+
+            if( fieldMax !== undefined && ( max === undefined || fieldMax > max ))
+            {
+                max = fieldMax;
+            }
+        }
+    }
+
+    return max;
+}
+
+export function resolveMultipartTotalLimit( security?: { maxBodySize? : number | string | false }, files?: FileOptions ): number | undefined
+{
+    if( files?.maxTotalSize !== undefined )
+    {
+        if( files.maxTotalSize === false || files.maxTotalSize === 0 || files.maxTotalSize === Infinity )
+        {
+            return undefined;
+        }
+
+        return parseSize( files.maxTotalSize );
+    }
+
+    const configuredFileMax = resolveConfiguredFileMax( files );
+    const fieldHeadroom = files?.maxFieldSize !== undefined
+        ? ( files.maxFieldSize === false || files.maxFieldSize === 0 || files.maxFieldSize === Infinity ? 0 : parseSize( files.maxFieldSize ))
+        : DEFAULT_MAX_FIELD_BYTES;
+    const configuredBodyMax = security?.maxBodySize;
+
+    if( configuredBodyMax !== undefined )
+    {
+        if( configuredBodyMax === false || configuredBodyMax === 0 || configuredBodyMax === Infinity )
+        {
+            return undefined;
+        }
+
+        const bodyBytes = parseSize( configuredBodyMax );
+
+        if( configuredFileMax !== undefined )
+        {
+            if( configuredFileMax === Infinity )
+            {
+                return undefined;
+            }
+
+            return Math.max( bodyBytes, configuredFileMax + fieldHeadroom );
+        }
+
+        return bodyBytes;
+    }
+
+    if( configuredFileMax === Infinity )
+    {
+        return undefined;
+    }
+
+    const effectiveFileMax = configuredFileMax !== undefined
+        ? Math.max( DEFAULT_MAX_FILE_BYTES, configuredFileMax )
+        : DEFAULT_MAX_FILE_BYTES;
+
+    return effectiveFileMax + fieldHeadroom;
+}
+
+function resolveTotalSize( value: string | number | false | undefined ): number | null | undefined
+{
+    if( value === undefined ){ return undefined }
+
+    if( value === false || value === 0 || value === Infinity ){ return null }
+
+    return parseSize( value );
+}
+
+function resolveCount( value: number | false | undefined, defaultCount: number ): number
+{
+    if( value === undefined ){ return defaultCount }
+
+    if( value === false || value === 0 || value === Infinity ){ return Infinity }
+
+    return value;
 }
 
 const singleFileCloneCache = new WeakMap<FileOptions, FileOptions>();
@@ -68,7 +173,9 @@ function cloneSingleFileConfig( config: FileOptions ): FileOptions
 
     if( !cloned )
     {
-        cloned = { ...config, fields : config.fields ? { ...config.fields } : undefined };
+        cloned = 'fields' in config
+            ? { ...config, fields : config.fields ? { ...config.fields } : undefined }
+            : { ...config };
         singleFileCloneCache.set( config, cloned );
     }
 
@@ -92,34 +199,50 @@ function mergeTwoFileConfigs( base: FileOptions, override: FileOptions ): FileOp
         return merged;
     }
 
-    let fields: Record<string, FileFieldOptions> | undefined;
-
-    if( base.fields || override.fields )
+    if( Object.keys( override ).length === 0 )
     {
-        fields = {
-            ...( base.fields || {}),
-            ...( override.fields || {})
+        merged = {};
+        byOverride.set( override, merged );
+
+        return merged;
+    }
+
+    let fields: Record<string, FileFieldOptions | undefined> | undefined;
+    const hasFieldsInOverride = 'fields' in override;
+
+    if( hasFieldsInOverride && override.fields === undefined )
+    {
+        fields = undefined;
+    }
+    else if( base.fields || override.fields )
+    {
+        const mergedFields: Record<string, FileFieldOptions | undefined> = {
+            ...( base.fields || {})
         };
 
         if( override.fields )
         {
             for( const key of Object.keys( override.fields ))
             {
-                fields[key] = { ...( base.fields?.[key] || {}), ...( override.fields[key]) };
+                const ovField = override.fields[key];
+
+                if( ovField === undefined )
+                {
+                    mergedFields[key] = undefined;
+                }
+                else
+                {
+                    mergedFields[key] = { ...( base.fields?.[key] || {}), ...ovField };
+                }
             }
         }
 
-        if( Object.keys( fields ).length === 0 )
-        {
-            fields = undefined;
-        }
+        fields = Object.keys( mergedFields ).length > 0 ? mergedFields : undefined;
     }
 
-    merged = {
-        ...base,
-        ...override,
-        fields
-    };
+    merged = ( fields !== undefined || hasFieldsInOverride )
+        ? { ...base, ...override, fields }
+        : { ...base, ...override };
 
     byOverride.set( override, merged );
 
@@ -135,6 +258,12 @@ export function mergeFileConfigs( configs: ( FileOptions | undefined )[]): FileO
         const config = configs[i];
 
         if( config === undefined ){ continue }
+
+        if( Object.keys( config ).length === 0 )
+        {
+            merged = {};
+            continue;
+        }
 
         if( !merged )
         {
@@ -272,7 +401,7 @@ interface CompiledFileUploadPlan
     maxFiles       : number
     maxFields      : number
     maxFieldSize   : number
-    maxTotalSize   : number | undefined
+    maxTotalSize   : number | null | undefined
 }
 
 const DEFAULT_UPLOAD_PLAN: CompiledFileUploadPlan = {
@@ -301,6 +430,8 @@ function getCompiledUploadPlan( options?: FileOptions ): CompiledFileUploadPlan
         {
             for( const field of Object.values( options.fields ))
             {
+                if( !field ){ continue }
+
                 const fieldMax = resolveSize( field.maxFileSize );
 
                 if( fieldMax !== undefined && fieldMax > loosestFileMax )
@@ -313,10 +444,10 @@ function getCompiledUploadPlan( options?: FileOptions ): CompiledFileUploadPlan
         plan = {
             baseMax,
             loosestFileMax,
-            maxFiles     : options.maxFiles ?? DEFAULT_MAX_FILES,
-            maxFields    : options.maxFields ?? DEFAULT_MAX_FIELDS,
+            maxFiles     : resolveCount( options.maxFiles, DEFAULT_MAX_FILES ),
+            maxFields    : resolveCount( options.maxFields, DEFAULT_MAX_FIELDS ),
             maxFieldSize : resolveSize( options.maxFieldSize ) ?? DEFAULT_MAX_FIELD_BYTES,
-            maxTotalSize : resolveSize( options.maxTotalSize )
+            maxTotalSize : resolveTotalSize( options.maxTotalSize )
         };
 
         compiledUploadPlanCache.set( options, plan );
@@ -338,6 +469,9 @@ export async function processMultipartUpload(
 ): Promise<MultipartParseResult>
 {
     const plan = getCompiledUploadPlan( options );
+    const maxTotalSize = plan.maxTotalSize === null
+        ? undefined
+        : ( plan.maxTotalSize ?? maxTotalFallback );
 
     const multipartOptions: MultipartParseOptions =
     {
@@ -345,7 +479,7 @@ export async function processMultipartUpload(
         maxFiles     : plan.maxFiles,
         maxFields    : plan.maxFields,
         maxFieldSize : plan.maxFieldSize,
-        maxTotalSize : plan.maxTotalSize ?? maxTotalFallback,
+        maxTotalSize,
         signal,
         onFile       : async ( file ) =>
         {

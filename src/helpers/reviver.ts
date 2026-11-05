@@ -16,7 +16,7 @@ export function resolveReviver( ...layers: Array<Reviver | null | undefined> ): 
     {
         if( layer !== undefined )
         {
-            return layer ?? undefined;
+            return layer === null ? undefined : layer;
         }
     }
 

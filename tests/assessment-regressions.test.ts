@@ -1777,103 +1777,109 @@ describe( 'Runtime, Pipeline & Compiler Regressions', () =>
             await expect( conflictServer.ensureReady()).rejects.toThrow( /conflicts with an Internal route/ );
 
             // NodeAdapter: endUpgradeSocket fallbacks, Set-Cookie + stream error, upgrade URL/handler error, WS protocol_error
-            await runWithRegistry( server.registry, async () =>
+            const isBun = typeof ( globalThis as any ).Bun !== 'undefined';
+
+            if( !isBun )
             {
-                const adapter = new NodeAdapter();
-                await adapter.listen( 0, async ( req ) =>
+                await runWithRegistry( server.registry, async () =>
                 {
-                    if( req.url.endsWith( '/throw' ))
+                    const adapter = new NodeAdapter();
+                    await adapter.listen( 0, async ( req ) =>
                     {
-                        throw new Error( 'upgrade-handler-fail' );
-                    }
-
-                    const headers = new Headers();
-                    headers.append( 'Set-Cookie', 'a=1' );
-                    const errStream = new ReadableStream({
-                        start( controller )
+                        if( req.url.endsWith( '/throw' ))
                         {
-                            controller.error( new Error( 'stream-boom' ));
+                            throw new Error( 'upgrade-handler-fail' );
                         }
+
+                        const headers = new Headers();
+                        headers.append( 'Set-Cookie', 'a=1' );
+                        const errStream = new ReadableStream({
+                            start( controller )
+                            {
+                                controller.error( new Error( 'stream-boom' ));
+                            }
+                        });
+
+                        return new Response( errStream, { status : 200, headers });
                     });
 
-                    return new Response( errStream, { status : 200, headers });
-                });
-
-                try
-                {
-                    const ns = ( adapter as any ).nodeServer;
-                    const reqListener = ns.listeners( 'request' )[0];
-                    const upgradeListener = ns.listeners( 'upgrade' )[0];
-
-                    // 1) HTTP request with Set-Cookie and failing stream body
-                    const fakeRes = new net.Socket();
-                    const setHeaders: Record<string, any> = {};
-                    ( fakeRes as any ).setHeader = ( k: string, v: any ) => { setHeaders[k] = v };
-                    let destroyedErr: Error | undefined;
-                    fakeRes.destroy = (( err?: Error ) =>
+                    try
                     {
-                        destroyedErr = err;
-                        ( fakeRes as any ).destroyed = true;
+                        const ns = ( adapter as any ).nodeServer;
+                        const reqListener = ns.listeners( 'request' )[0];
+                        const upgradeListener = ns.listeners( 'upgrade' )[0];
 
-                        return fakeRes;
-                    }) as any;
-                    await reqListener({
-                        method  : 'GET',
-                        url     : '/cookie-err',
-                        headers : { host : 'localhost' }
-                    }, fakeRes );
-                    await new Promise( r => setTimeout( r, 15 ));
-                    expect( setHeaders['set-cookie']).toEqual([ 'a=1' ]);
-                    expect( destroyedErr?.message ).toBe( 'stream-boom' );
-
-                    // 2) upgradeListener with invalid URL + socket whose end() throws
-                    let destroyedOnEndThrow = false;
-                    await upgradeListener(
-                        { url : 'http://[::1', headers : { host : 'localhost' } },
+                        // 1) HTTP request with Set-Cookie and failing stream body
+                        const fakeRes = new net.Socket();
+                        const setHeaders: Record<string, any> = {};
+                        ( fakeRes as any ).setHeader = ( k: string, v: any ) => { setHeaders[k] = v };
+                        let destroyedErr: Error | undefined;
+                        fakeRes.destroy = (( err?: Error ) =>
                         {
-                            destroyed : false,
-                            end       : () => { throw new Error( 'end-boom' ) },
-                            destroy   : () => { destroyedOnEndThrow = true }
-                        },
-                        Buffer.alloc( 0 )
-                    );
-                    expect( destroyedOnEndThrow ).toBe( true );
+                            destroyedErr = err;
+                            ( fakeRes as any ).destroyed = true;
 
-                    // 3) upgradeListener where handler throws + socket without end()
-                    const writtenRaw: string[] = [];
-                    let destroyedNoEnd = false;
-                    await upgradeListener(
-                        { url : '/throw', headers : { host : 'localhost' } },
-                        {
-                            destroyed : false,
-                            write     : ( s: string ) => writtenRaw.push( s ),
-                            destroy   : () => { destroyedNoEnd = true }
-                        },
-                        Buffer.alloc( 0 )
-                    );
-                    expect( writtenRaw[0]).toContain( '500 Internal Server Error' );
-                    expect( destroyedNoEnd ).toBe( true );
+                            return fakeRes;
+                        }) as any;
+                        await reqListener({
+                            method  : 'GET',
+                            url     : '/cookie-err',
+                            headers : { host : 'localhost' }
+                        }, fakeRes );
+                        await new Promise( r => setTimeout( r, 15 ));
+                        expect( setHeaders['set-cookie']).toEqual([ 'a=1' ]);
+                        expect( destroyedErr?.message ).toBe( 'stream-boom' );
 
-                    // 4) adapter.upgrade + invalid WS frame triggering protocol_error -> close(code, reason)
-                    const fakeWsSock = new net.Socket();
-                    fakeWsSock.setTimeout = (() => fakeWsSock ) as any;
-                    fakeWsSock.setNoDelay = (() => fakeWsSock ) as any;
-                    fakeWsSock.write = (() => true ) as any;
-                    fakeWsSock.end = (() => fakeWsSock ) as any;
-                    const upgReq = new Request( 'http://localhost/ws-mid', {
-                        headers : { 'sec-websocket-key' : 'dGhlIHNhbXBsZSBub25jZQ==' }
-                    });
-                    ( upgReq as any ).nodeSocket = fakeWsSock;
-                    ( upgReq as any ).nodeHead = Buffer.alloc( 0 );
-                    await adapter.upgrade( upgReq, wsEp, {});
-                    // Emit frame with RSV1 set (0xc1 = FIN + RSV1 + text) -> protocol_error
-                    fakeWsSock.emit( 'data', Buffer.from([ 0xc1, 0x80, 0, 0, 0, 0 ]));
-                }
-                finally
-                {
-                    await adapter.close();
-                }
-            });
+                        // 2) upgradeListener with invalid URL + socket whose end() throws
+                        let destroyedOnEndThrow = false;
+                        await upgradeListener(
+                            { url : 'http://[::1', headers : { host : 'localhost' } },
+                            {
+                                destroyed : false,
+                                end       : () => { throw new Error( 'end-boom' ) },
+                                destroy   : () => { destroyedOnEndThrow = true }
+                            },
+                            Buffer.alloc( 0 )
+                        );
+                        expect( destroyedOnEndThrow ).toBe( true );
+
+                        // 3) upgradeListener where handler throws + socket without end()
+                        const writtenRaw: string[] = [];
+                        let destroyedNoEnd = false;
+                        await upgradeListener(
+                            { url : '/throw', headers : { host : 'localhost' } },
+                            {
+                                destroyed : false,
+                                end       : undefined as any,
+                                write     : ( s: string ) => writtenRaw.push( s ),
+                                destroy   : () => { destroyedNoEnd = true }
+                            },
+                            Buffer.alloc( 0 )
+                        );
+                        expect( writtenRaw[0]).toContain( '500 Internal Server Error' );
+                        expect( destroyedNoEnd ).toBe( true );
+
+                        // 4) adapter.upgrade + invalid WS frame triggering protocol_error -> close(code, reason)
+                        const fakeWsSock = new net.Socket();
+                        fakeWsSock.setTimeout = (() => fakeWsSock ) as any;
+                        fakeWsSock.setNoDelay = (() => fakeWsSock ) as any;
+                        fakeWsSock.write = (() => true ) as any;
+                        fakeWsSock.end = (() => fakeWsSock ) as any;
+                        const upgReq = new Request( 'http://localhost/ws-mid', {
+                            headers : { 'sec-websocket-key' : 'dGhlIHNhbXBsZSBub25jZQ==' }
+                        });
+                        ( upgReq as any ).nodeSocket = fakeWsSock;
+                        ( upgReq as any ).nodeHead = Buffer.alloc( 0 );
+                        await adapter.upgrade( upgReq, wsEp, {});
+                        // Emit frame with RSV1 set (0xc1 = FIN + RSV1 + text) -> protocol_error
+                        fakeWsSock.emit( 'data', Buffer.from([ 0xc1, 0x80, 0, 0, 0, 0 ]));
+                    }
+                    finally
+                    {
+                        await adapter.close();
+                    }
+                });
+            }
         });
 
         it( 'should cover remaining compiler modules (decorator-config, di-resolution, diagnostics, discovery, emit-transformers, endpoint-analyzer, manifest, metadata-collector, plugin, sse-types, swagger)', () =>

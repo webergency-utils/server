@@ -194,13 +194,16 @@ export function objectToExpression( obj: any ): ts.Expression
 
         for( const [key, value] of Object.entries( obj )) 
         {
+            const propName = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test( key )
+                ? ts.factory.createIdentifier( key )
+                : ts.factory.createStringLiteral( key );
             const prefix = HASH_IDENT_KEYS[key];
 
             if( prefix && typeof value === 'string' && value !== '' ) 
             {
                 properties.push(
                     ts.factory.createPropertyAssignment(
-                        ts.factory.createIdentifier( key ),
+                        propName,
                         ts.factory.createIdentifier( `${prefix}${value}` )
                     )
                 );
@@ -209,7 +212,7 @@ export function objectToExpression( obj: any ): ts.Expression
             {
                 properties.push(
                     ts.factory.createPropertyAssignment(
-                        ts.factory.createIdentifier( key ),
+                        propName,
                         objectToExpression( value )
                     )
                 );

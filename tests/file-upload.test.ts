@@ -7,10 +7,12 @@ import
     mergeFileConfigs,
     resolveFieldOptions,
     openFileStorage,
-    processMultipartUpload
+    processMultipartUpload,
+    DEFAULT_MAX_FILE_BYTES
 }
     from '../src/helpers/file-upload.js';
 import { UploadedFile } from '../src/helpers/multipart.js';
+import { ServerRequest } from '../src/core/server-request.js';
 
 function multipartBody( boundary: string, parts: string[]): Buffer
 {
@@ -62,6 +64,23 @@ describe( 'mergeFileConfigs', () =>
         expect( merged?.dest ).toBe( '/a' );
         expect( merged?.maxFiles ).toBe( 2 );
         expect( merged?.fields?.x ).toEqual({ maxFileSize : '1mb' });
+    });
+
+    it( 'should reset accumulated file options to empty object when false or true is passed', () =>
+    {
+        // Arrange / Act
+        const resetFalse = mergeFileConfigs([
+            { dest : '/a', maxFiles : 3, fields : { avatar : { maxFileSize : '2mb' } } },
+            false
+        ]);
+        const resetTrue = mergeFileConfigs([
+            { dest : '/a', maxFiles : 3 },
+            true
+        ]);
+
+        // Assert
+        expect( resetFalse ).toEqual({});
+        expect( resetTrue ).toEqual({});
     });
 });
 
@@ -330,5 +349,100 @@ describe( 'processMultipartUpload', () =>
         {
             await rm( dir, { recursive : true, force : true });
         }
+    });
+
+    it( 'should default multipart total limit to 10mb (DEFAULT_MAX_FILE_BYTES) instead of 1mb and honor false/maxBodySize overrides', async () =>
+    {
+        // Arrange — 2 MB multipart payload (> 1 MB default maxBodySize, < 10 MB default maxFileSize)
+        const boundary = 'limit10mb';
+        const twoMbPayload = 'a'.repeat( 2 * 1024 * 1024 );
+        const body = multipartBody( boundary, [
+            `Content-Disposition: form-data; name="doc"; filename="doc.txt"\r\nContent-Type: text/plain\r\n\r\n${twoMbPayload}`
+        ]);
+
+        // Act — ServerRequest with no explicit maxTotalSize or maxBodySize
+        const sreq = new ServerRequest(
+            new Request( 'http://localhost/upload', {
+                method  : 'POST',
+                body    : new Uint8Array( body ),
+                headers : { 'Content-Type' : `multipart/form-data; boundary=${boundary}` }
+            })
+        );
+        const uploaded = await sreq.upload( 'doc' );
+
+        // Assert — 2 MB succeeds by default because multipart total defaults to 10 MB
+        expect( DEFAULT_MAX_FILE_BYTES ).toBe( 10 * 1024 * 1024 );
+        expect( uploaded?.size ).toBe( 2 * 1024 * 1024 );
+
+        // Arrange — maxFileSize: false, maxTotalSize: false, maxFiles: false, maxFields: false
+        const smallBody = multipartBody( boundary, [
+            'Content-Disposition: form-data; name="f"; filename="f.txt"\r\nContent-Type: text/plain\r\n\r\nhello',
+            'Content-Disposition: form-data; name="text"\r\n\r\nval'
+        ]);
+        const unlimitedResult = await processMultipartUpload(
+            streamFrom( smallBody ),
+            `multipart/form-data; boundary=${boundary}`,
+            {
+                maxFileSize  : false,
+                maxTotalSize : false,
+                maxFiles     : false,
+                maxFields    : false
+            }
+        );
+
+        // Assert
+        expect( unlimitedResult.files[0].size ).toBe( 5 );
+        expect( unlimitedResult.fields.text ).toBe( 'val' );
+
+        // Arrange — Route with field-level maxFileSize: 100b + text field, even under global maxBodySize: 10b
+        const exactFileBody = multipartBody( boundary, [
+            `Content-Disposition: form-data; name="video"; filename="v.bin"\r\nContent-Type: application/octet-stream\r\n\r\n${'x'.repeat( 100 )}`,
+            'Content-Disposition: form-data; name="title"\r\n\r\nmy-video'
+        ]);
+        const sreqWithFieldMax = new ServerRequest(
+            new Request( 'http://localhost/upload', {
+                method  : 'POST',
+                body    : new Uint8Array( exactFileBody ),
+                headers : { 'Content-Type' : `multipart/form-data; boundary=${boundary}` }
+            }),
+            { maxBodySize : 10 },
+            {
+                storage : 'memory',
+                fields  : { video : { maxFileSize : 100 } }
+            }
+        );
+
+        // Act
+        const videoFile = await sreqWithFieldMax.upload( 'video' );
+
+        // Assert — exact 100-byte file + form field + multipart framing succeeds
+        expect( videoFile?.size ).toBe( 100 );
+
+        // Arrange — Unsetting nested object paths via undefined in mergeFileConfigs
+        const mergedFiles = mergeFileConfigs([
+            {
+                dest        : '/global-uploads',
+                maxFileSize : '10mb',
+                fields      : {
+                    avatar : { dest : '/avatars', maxFileSize : '2mb', filename : 'av.png' },
+                    banner : { dest : '/banners' }
+                }
+            },
+            {
+                dest   : undefined,
+                fields : {
+                    avatar : { dest : undefined },
+                    banner : undefined
+                }
+            }
+        ]);
+
+        // Assert — Explicit undefined rewrites previous values at every object path
+        expect( mergedFiles?.dest ).toBeUndefined();
+        expect( mergedFiles?.maxFileSize ).toBe( '10mb' );
+        expect( mergedFiles?.fields?.avatar?.dest ).toBeUndefined();
+        expect( mergedFiles?.fields?.avatar?.maxFileSize ).toBe( '2mb' );
+        expect( mergedFiles?.fields?.avatar?.filename ).toBe( 'av.png' );
+        expect( mergedFiles?.fields?.banner ).toBeUndefined();
     });
 });
