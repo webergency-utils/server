@@ -1,5 +1,11 @@
 const intRE = /^[0-9]+$/;
 
+/** Maximum bracket nesting depth when unflattening form/multipart keys (`a[b][c]...`). */
+export const MAX_FORM_DEPTH = 32;
+
+/** Maximum numeric bracket index that may allocate a JS Array (`a[0]`..`a[1000]`). Larger indices stay object keys. */
+export const MAX_ARRAY_INDEX = 1000;
+
 /** Keys that must never be used as object property paths (prototype pollution). */
 function isUnsafeKey( key: string | number ): boolean
 {
@@ -11,6 +17,41 @@ function createPlainObject(): Record<string | number, any>
     // Ordinary objects: denylist already blocks pollution vectors.
     // Null-prototype objects break instanceof Object / hasOwnProperty for consumers.
     return {};
+}
+
+function maxNumericKey( obj: Record<string, unknown> ): number
+{
+    let max = -1;
+    const keys = Object.keys( obj );
+
+    for( let i = 0; i < keys.length; i++ )
+    {
+        const nk = keys[i];
+
+        if( intRE.test( nk ))
+        {
+            const parsed = parseInt( nk, 10 );
+
+            if( parsed > max && Number.isSafeInteger( parsed ))
+            {
+                max = parsed;
+            }
+        }
+    }
+
+    return max;
+}
+
+function isBoundedArrayIndexKey( key: string ): boolean
+{
+    if( !key || !intRE.test( key ))
+    {
+        return false;
+    }
+
+    const parsed = parseInt( key, 10 );
+
+    return parsed >= 0 && parsed <= MAX_ARRAY_INDEX;
 }
 
 /**
@@ -25,7 +66,7 @@ export type FormBag =
 
 function assignLeafValue( obj: any, k: string | number, value: any ): void
 {
-    if( obj[k] !== undefined )
+    if( Object.hasOwn( obj, k ) && obj[k] !== undefined )
     {
         if( Array.isArray( obj[k]))
         {
@@ -41,7 +82,7 @@ function assignLeafValue( obj: any, k: string | number, value: any ): void
             // (e.g. items[name]=first&items=second → { name, 0: second }).
             // Class instances (UploadedFile, …) array-coerce like scalars.
             const nested = obj[k];
-            obj[k][Math.max( -1, ...Object.keys( nested ).map( nk => intRE.test( nk ) ? parseInt( nk ) : -1 )) + 1] = value;
+            obj[k][maxNumericKey( nested ) + 1] = value;
         }
         else
         {
@@ -67,7 +108,10 @@ function assignFormValue( query: any, key: string | number, value: any ): void
         return;
     }
 
-    const keys = keyStr.replace( /\]\[/g, '[' ).replace( /]$/, '' ).split( '[' );
+    const rawKeys = keyStr.replace( /\]\[/g, '[' ).replace( /]$/, '' ).split( '[' );
+    const keys = rawKeys.length > MAX_FORM_DEPTH
+        ? [ ...rawKeys.slice( 0, MAX_FORM_DEPTH - 1 ), rawKeys.slice( MAX_FORM_DEPTH - 1 ).join( '.' ) ]
+        : rawKeys;
     let obj = query, parent, parent_key;
 
     for( let i = 0; i < keys.length; ++i )
@@ -76,12 +120,15 @@ function assignFormValue( query: any, key: string | number, value: any ): void
 
         if( isUnsafeKey( k )){ return }
 
-        if( k && intRE.test( k.toString())){ k = parseInt( k ) }
+        if( typeof k === 'string' && isBoundedArrayIndexKey( k ))
+        {
+            k = parseInt( k, 10 );
+        }
         else if( k === '' )
         {
-            k = Array.isArray( obj ) ? obj.length - 1 : Math.max( -1, ...Object.keys( obj ).map( k => intRE.test( k ) ? parseInt( k ) : -1 ));
+            k = Array.isArray( obj ) ? obj.length - 1 : maxNumericKey( obj );
 
-            if( k === -1 || i === keys.length - 1 || Object.prototype.hasOwnProperty.call( obj[k] || createPlainObject(), keys[i + 1]))
+            if( k === -1 || i === keys.length - 1 || Object.hasOwn( obj[k] || createPlainObject(), keys[i + 1]))
             {
                 k += 1;
             }
@@ -89,17 +136,19 @@ function assignFormValue( query: any, key: string | number, value: any ): void
 
         if( typeof k === 'string' && Array.isArray( obj ))
         {
-            parent[parent_key!] = obj = obj.reduce(( o: any, v: any, i: number ) => ( o[i] = v, o ), createPlainObject());
+            parent[parent_key!] = obj = obj.reduce(( o: any, v: any, idx: number ) => ( o[idx] = v, o ), createPlainObject());
         }
 
         if( i < keys.length - 1 )
         {
-            if( !obj[k])
-            {
-                obj[k] = ( keys[i + 1] === '' || intRE.test( keys[i + 1])) ? [] : createPlainObject();
-            }
+            const nextKey = keys[i + 1];
 
-            if( isUnsafeKey( keys[i + 1])){ return }
+            if( isUnsafeKey( nextKey )){ return }
+
+            if( !Object.hasOwn( obj, k ) || !obj[k])
+            {
+                obj[k] = ( nextKey === '' || isBoundedArrayIndexKey( nextKey )) ? [] : createPlainObject();
+            }
 
             parent = obj;
             parent_key = k;

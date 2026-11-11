@@ -100,7 +100,7 @@ Entry points:
 | Export | Purpose |
 | --- | --- |
 | `@webergency-utils/server` | Runtime API |
-| `@webergency-utils/server/transformer` | AOT compiler plugin |
+| `@webergency-utils/server/transformer` | AOT compiler plugin & `SwaggerSpecGenerator` |
 | `@webergency-utils/server/register` | Optional load-time AOT host |
 
 ## Architecture & Internals
@@ -144,6 +144,7 @@ Orchestrates routing, adapters, security, and lifecycle.
 | Option | Type | Description |
 | --- | --- | --- |
 | `port` | `number` | Listen port |
+| `host?` | `string \| string[]` | Listen host(s) |
 | `controllers?` | `any[]` | Controller classes to register (must have AOT Symbol meta) |
 | `providers?` | `any[]` | Flat providers when not using `module` |
 | `guards?` / `interceptors?` | `any[]` | Flat guards / interceptors when not using `module` |
@@ -157,8 +158,9 @@ Orchestrates routing, adapters, security, and lifecycle.
 | `requestTimeout?` | `number` | Node only: time for the entire request (default `300000`) |
 | `keepAliveTimeout?` | `number` | Node only: idle keep-alive socket timeout (default `5000`) |
 | `health?` | `boolean \| { path?, readyPath? }` | Optional `GET /health` (live) and `GET /ready` (ready) probes |
-| `trustProxy?` | `string[]` | Peer CIDR allowlist for XFF; omit/`[]` = never trust. Use `TRUST_PROXY_LOOPBACK` for local loopback peers. |
+| `trustProxy?` | `boolean \| TrustProxy` | Peer CIDR allowlist (or `true` to trust all hops) for XFF; omit/`false`/`[]` = never trust. Use `TRUST_PROXY_LOOPBACK` for local loopback peers. |
 | `reviver?` | `Reviver \| null` | JSON.parse-style reviver for typed JSON / query `parse` and untyped JSON / urlencoded bodies. Overridden by Module.reviver and `@Reviver`. `null` opts out. |
+| `exposeErrors?` | `boolean` | Include raw 5xx error messages in client JSON responses (default `false` — masks with `'Internal Server Error'`) |
 | `logger?` / `logs?` | `Logger` / `boolean` | Logging |
 | `shutdownTimeout?` | `number` | Graceful shutdown wait |
 | `signals?` | `boolean` | Register `SIGTERM` / `SIGINT` listeners for graceful shutdown (default `true`) |
@@ -176,7 +178,7 @@ await server.shutdown();
 
 * `allowedHeaders` is **deny-by-default**. When unset, a preflight only allows `Accept`, `Accept-Language`, `Content-Language`, `Content-Type`, and `Authorization`; anything else in `Access-Control-Request-Headers` is dropped instead of echoed back. Set `allowedHeaders` to replace that list.
 * A preflight whose `Origin` is not allowed gets **403**, not a 204 that looks successful.
-* Reflected (non-`*`) origins add `Vary: Origin`.
+* Reflected (non-`*`) origins add `Vary: Origin`. Combining `origin: '*'` with `credentials: true` refuses arbitrary `Origin` reflection per the Fetch/CORS specification.
 
 #### Security header defaults (`SecurityOptions`)
 
@@ -184,7 +186,7 @@ await server.shutdown();
 
 * `permissionsPolicy` — `true` sends `camera=(), microphone=(), geolocation=()`; a string is used verbatim; an object maps features to allowlists, e.g. `{ camera: [], geolocation: ["'self'"] }` → `camera=(), geolocation=('self')`.
 * `referrerPolicy` and `permittedCrossDomainPolicies` accept only their RFC-defined tokens. An unrecognized value is dropped rather than emitted as a malformed header.
-* `rateLimit` — `{ max, window?, strategy? }`. `window` accepts `'30s'` / `'5m'` / `'1h'` or milliseconds (default `1m`). `strategy: 'fixed'` (default) allows up to 2x `max` across a window boundary; `'sliding'` weights the previous window to smooth that. A rejection returns 429 with `Retry-After`. The limiter is in-memory and per-process — not distributed — and tracks at most 10 000 `path:ip` keys, evicting least-recently-used ones beyond that.
+* `rateLimit` — `{ max, window?, strategy? }`. `window` accepts `'30s'` / `'5m'` / `'1h'` or milliseconds (default `1m`). `strategy: 'fixed'` (default) allows up to 2x `max` across a window boundary; `'sliding'` weights the previous window to smooth that. A rejection returns 429 with `Retry-After`. The limiter is in-memory and per-process — not distributed — and tracks at most 10 000 `method:path:ip` keys, evicting least-recently-used ones beyond that.
 
 ### Microservices
 
@@ -228,8 +230,8 @@ await client.emit('logs.notify', 'booted');
 await ms.shutdown();
 ```
 
-**Constructor:** `new Microservice(adapter, options?)` — `options` mirrors flat/`module` bootstrap fields on `ServerOptions`.  
-**Property:** `registry`. **Methods:** `ensureReady()`, `start()`, `shutdown()` (drains in-flight RPC requests before closing the adapter and destroying providers).  
+**Constructor:** `new Microservice(adapter, options?)` — `options` mirrors flat/`module` bootstrap fields on `ServerOptions` (including `exposeErrors`, `responseMode`, `reviver`, `shutdownTimeout`, `signals`). `new TcpMessageAdapter(port, host?, options?)` binds to loopback (`['127.0.0.1', '::1']`) by default and applies per-socket concurrency backpressure (`maxConcurrentPerSocket`, default `64`).  
+**Property:** `registry`. **Methods:** `ensureReady()`, `start()`, `shutdown()` (stops accepting new sockets, drains in-flight RPC requests + pending replies, closes the adapter, and destroys providers).  
 **Client:** `new TcpClient({ port, host?, timeoutMs? })` — `connect()`, `send(pattern, payload?, timeoutMs?)`, `emit(pattern, payload?)`, `close()`. Both adapter and client enforce a `1 MiB` NDJSON frame cap (`TCP_MAX_LINE_BYTES`).  
 `MicroserviceNoReply` — sentinel returned for `@EventPattern` so adapters never write a reply envelope.
 
@@ -270,14 +272,15 @@ await ms.shutdown();
 **With arguments:**
 
 * `@Body(mode?)` — Parsed body. Modes: `strict` | `strip` | `relaxed`. JSON → `parser` (`from: 'json'`); `text/plain` → string; urlencoded → `parserQuery` (`from: 'query'`); **`multipart/form-data` → bag + AOT validator (`from: 'query'`)** so DTOs like `{ title: string; documents: UploadedFile[] }` coerce strings and keep file instances. Missing CT sniffs JSON then form; unsupported CT → **415**; bad JSON → **400**.
-* `@BodyHash(hasher, options?)` — Injects calculated cryptographic hash or HMAC of the raw request body. `hasher` is an algorithm name (e.g. `'sha256'`) or a hasher class/factory/instance implementing `{ update, digest }`. Options: `{ encoding?: BinaryToTextEncoding | 'buffer', key?: string | Buffer, length?: number }`. Defaults to `'base64url'` encoding. Providing `key` computes an HMAC (`createHmac`). Providing `length` sets `outputLength` for variable-length/XOF algorithms (`shake256`, `blake2b`).
+* `@Payload(fieldOrMode?, mode?)` — RPC payload (whole payload, or a single named property when `field` is passed, with `strict` | `strip` | `relaxed` mode). Also usable without parentheses (`@Payload`).
+* `@BodyHash(hasher, options?)` — Injects calculated cryptographic hash or HMAC of the raw request body. `hasher` is an algorithm name (e.g. `'sha256'`) or a hasher class/factory/instance implementing `{ update, digest }`. Options: `{ encoding?: BinaryToTextEncoding | 'buffer', key?: string | Buffer, length?: number }`. Defaults to `'base64url'` encoding. Providing `key` computes an HMAC (`createHmac`; an empty or `undefined` `key` is rejected). Providing `length` sets `outputLength` for variable-length/XOF algorithms (`shake256`, `blake2b`).
 * `@File` / `@Files` — Streaming multipart uploads. Class/method `@File({ dest, maxFileSize, maxFiles, maxFieldSize, maxFields, maxTotalSize, onFile, fields })` configures handling (merged `ServerOptions.files` → `Module.files` → controller → endpoint; default caps: `32` files, `128` fields, `10mb` per file, `1mb` per field). Parameter `@File('field')` injects `UploadedFile`; `@Files()` injects all files. Prefer `dest` for temp/disk paths, or `onFile` for custom sinks (e.g. S3). For the full form bag use `@Body()` with multipart Content-Type.
 * `@Query(name?, mode?)` — No name + typed: raw URL search text → `parse` `from: 'query'`. No name + untyped: `req.query` bag. Named scalar → `from: 'string'`. Named array/object → assert `from: 'query'`.
 * `@Param(name)` / `@Header(name)` / `@Cookie(name)` — Path / header / cookie scalar (`from: 'string'`).
 * `@Headers` / `@Cookies` — Whole string maps, AOT-**asserted** against the parameter type (`from: 'query'`). `parse` is not used (not wire text).
 * `@ConnectedSocket()` — WebSocket instance for `@Ws`.
 
-`@Request` injects **`ServerRequest`** (sealed; not Fetch). Convenience fields mirror `@Ip` / `@Peer` / …; buffered body helpers honor `maxBodySize`. Streaming uploads: `req.multipart()` / `req.upload(name)` / `req.uploads()` / `req.payload()`.
+`@Request` injects **`ServerRequest`** (sealed; not Fetch). Convenience fields mirror `@Ip` / `@Peer` / …; `req.signal` exposes an `AbortSignal` triggered on client disconnect or `security.timeout`. Buffered body helpers honor `maxBodySize`, and `req.stream(maxBytes?)` returns the raw `ReadableStream<Uint8Array>` with passive byte-limit cutoff (`413`), defaulting to the route’s resolved `maxBodySize` (or `@File` `maxTotalSize`; pass `0` or `false` to opt out). Streaming uploads: `req.multipart()` / `req.upload(name)` / `req.uploads()` / `req.payload()`.
 
 `@Response` injects **`ServerResponse`** (same as middleware). Chainable: `status(code, statusText?)`, `header(name, value)`, `headers({ ... })`, `cookie(name, value?, options?)`, `stream(body)`, `redirect(code, url)`, `forward({ method, path, query?, body? })`. Empty/`null`/`undefined` cookie values clear the cookie. Returning a plain value still supplies the body (JSON / binary). **Returning a Node `Readable` / `fs.ReadStream` or Web `ReadableStream`** pipes bytes to the client with backpressure (not loaded fully into memory). **Returning the `ServerResponse` itself** means the handler owns the response — the framework finalizes with that facade’s status, headers, and optional `stream()` body and does not JSON-serialize the return value. **`forward`** stashes an internal rewrite (no `Location`); after the handler returns, the framework re-dispatches to that `method`+`path` on public/`@Internal` routes. Nested forwards are allowed (max 16 hops); cycles are rejected.
 
@@ -300,7 +303,7 @@ owned(@Response() res: ServerResponse) {
 #### Body hashing & HMAC verification
 
 ```ts
-import { Controller, Post, Body, BodyHash, Header, UnauthorizedError } from '@webergency-utils/server';
+import { Controller, Post, Body, BodyHash, Header, UnauthorizedError, verifyBodyHash } from '@webergency-utils/server';
 
 @Controller('/webhooks')
 export class WebhookController {
@@ -310,14 +313,14 @@ export class WebhookController {
     return { received: true, hash };
   }
 
-  // HMAC verification with secret key & hex encoding
+  // Constant-time HMAC verification with secret key & hex encoding
   @Post('/stripe')
   stripe(
     @Body() data: any,
     @Header('stripe-signature') signature: string,
     @BodyHash('sha256', { key: process.env.STRIPE_SECRET, encoding: 'hex' }) expectedHmac: string
   ) {
-    if (signature !== expectedHmac) {
+    if (!verifyBodyHash(expectedHmac, signature, 'hex')) {
       throw new UnauthorizedError('Invalid webhook signature');
     }
     return { success: true };
@@ -381,7 +384,7 @@ Coercion via `from`:
 * `ServerWebSocket`, `PeerCert`, `PeerCertSubject`, `TlsOptions`
 * `CorsOptions`, `SecurityOptions`, `Guard`, `Interceptor`, `Logger`, `LogContext`
 * `Scope` (`SINGLETON` | `TRANSIENT` | `REQUEST`)
-* `BodyHashOptions`, `HasherInput`, `HasherInstance`, `HasherConstructor`, `HasherFactory`, `BodyHashEncoding`
+* `BodyHashOptions`, `HasherInput`, `HasherInstance`, `HasherConstructor`, `HasherFactory`, `BodyHashEncoding`, `computeBodyHash`, `verifyBodyHash`
 * `ConsoleLogger` / `NoOpLogger`
 * `ApplicationRegistry`, `getRegistry`, `tryGetRegistry`, `runWithRegistry`
 * `Router`, `Reflector`, `RequestContext` / `RequestContextStore`
@@ -390,11 +393,11 @@ Coercion via `from`:
 * Path helpers: `pathCompiler`, `pathMatcher`, `pathToRE`, …
 * IP helpers: `resolveClientIp`, `normalizeIp`, `ipInCidr`, `compileTrustProxy`, `TRUST_PROXY_LOOPBACK`, `TrustProxy`
 * Peer helpers: `normalizePeerCert`, `needsNodeTlsCompat`, `tlsMaterialToString`
-* Error & redaction helpers: `clientErrorBody`, `errorLogFields`, `redactSecrets`, `REDACTED`, `SECRET_KEYS` (5xx client bodies return generic `'Internal Server Error'` while structured logs redact secret keys)
+* Error & redaction helpers: `clientErrorBody`, `errorLogFields`, `redactSecrets`, `REDACTED`, `SECRET_KEYS` (5xx client bodies return generic `'Internal Server Error'` unless `exposeErrors: true`, while structured logs redact secret keys)
 
 ### Errors
 
-`ServerError` (with `.status`), `HTTPServerError`, `BadRequestError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `NotFoundError` (404), `ConflictError` (409), `PreconditionFailedError` (412), `RateLimitError` (429), `InternalServerError` (500), `ServiceUnavailableError` (503).  
+`ServerError` (with `.status`), `HTTPServerError`, `BadRequestError` (400), `ParseError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `NotFoundError` (404), `ConflictError` (409), `PreconditionFailedError` (412), `RateLimitError` (429), `InternalServerError` (500), `ServiceUnavailableError` (503).  
 `httpStatusFromError(err)` maps thrown values to an HTTP status for the fetch pipeline.
 
 ### Multi-runtime & mTLS

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Server } from '../src/server.js';
 import { seedInstanceController, runWithRegistry } from './helpers/testing.js';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import { Controller, Post, Body, Get, Query } from '../src/decorators.js';
 
 class TypeSafetyController

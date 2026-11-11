@@ -7,11 +7,17 @@ import { TlsOptions, NodeHttpOptions } from './adapter.js';
  */
 export class NodeTlsCompat
 {
-    private adapter? : any;
+    private adapter?        : any;
+    private closingAdapter? : any;
 
     public get active(): boolean
     {
         return this.adapter !== undefined;
+    }
+
+    public get hasClosingConnections(): boolean
+    {
+        return this.adapter !== undefined || this.closingAdapter !== undefined;
     }
 
     /** The underlying `node:https` server, for callers that inspect it. */
@@ -29,6 +35,7 @@ export class NodeTlsCompat
     ): Promise<void>
     {
         const { NodeAdapter } = await import( './node-adapter.js' );
+        this.closingAdapter = undefined;
         this.adapter = new NodeAdapter();
 
         if( host !== undefined )
@@ -48,12 +55,16 @@ export class NodeTlsCompat
 
     public async close(): Promise<void>
     {
-        await this.adapter?.close();
+        const current = this.adapter;
+        this.closingAdapter = current;
         this.adapter = undefined;
+        await current?.close();
     }
 
     public closeAllConnections(): void
     {
-        this.adapter?.closeAllConnections?.();
+        const target = this.adapter ?? this.closingAdapter;
+        this.closingAdapter = undefined;
+        target?.closeAllConnections?.();
     }
 }

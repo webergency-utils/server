@@ -48,6 +48,14 @@ function isStale( cached: CachedProgram, fileName: string, configPath?: string )
         return true;
     }
 
+    for( const [ trackedFile, recorded ] of cached.sourceMtimes )
+    {
+        if( mtimeOf( trackedFile ) !== recorded )
+        {
+            return true;
+        }
+    }
+
     const currentMtime = mtimeOf( fileName );
     const recordedMtime = cached.sourceMtimes.get( fileName );
 
@@ -106,12 +114,21 @@ function compileContextFor( fileName: string ): CachedProgram
         rootNames = parsed.fileNames.length
             ? ( parsed.fileNames.includes( fileName ) ? parsed.fileNames : [ ...parsed.fileNames, fileName ])
             : [fileName];
-        plugins = readTsPatchPlugins( configFile.config?.compilerOptions );
+        const fromParsed = readTsPatchPlugins( parsed.options );
+        plugins = fromParsed.length > 0 ? fromParsed : readTsPatchPlugins( configFile.config?.compilerOptions );
     }
 
     const program = ts.createProgram({ rootNames, options });
     const sourceMtimes = new Map<string, number>();
     sourceMtimes.set( fileName, mtimeOf( fileName ));
+
+    for( const sf of program.getSourceFiles())
+    {
+        if( !sf.isDeclarationFile && !sf.fileName.includes( 'node_modules' ))
+        {
+            sourceMtimes.set( sf.fileName, mtimeOf( sf.fileName ));
+        }
+    }
 
     const entry: CachedProgram =
     {
@@ -139,13 +156,16 @@ export function transformSource( fileName: string, sourceText: string ): string
     }
 
     const { program, plugins, configDir } = compileContextFor( fileName );
-    const sourceFile = ts.createSourceFile(
-        fileName,
-        sourceText,
-        ts.ScriptTarget.ES2022,
-        true,
-        fileName.endsWith( 'x' ) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-    );
+    const boundSourceFile = program.getSourceFile( fileName );
+    const sourceFile = ( boundSourceFile && boundSourceFile.text === sourceText )
+        ? boundSourceFile
+        : ts.createSourceFile(
+            fileName,
+            sourceText,
+            ts.ScriptTarget.ES2022,
+            true,
+            fileName.endsWith( 'x' ) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+        );
 
     const result = ts.transform(
         sourceFile,
@@ -181,7 +201,9 @@ function fileURLToPathCompat( url: string ): string
 
 export async function load( url: string, context: any, nextLoad: any )
 {
-    if( url.startsWith( 'file:' ) && /\.[cm]?tsx?$/.test( url ))
+    const cleanUrl = url.split( /[?#]/ )[0];
+
+    if( url.startsWith( 'file:' ) && /\.[cm]?tsx?$/.test( cleanUrl ))
     {
         const filePath = fileURLToPathCompat( url );
 
@@ -205,19 +227,39 @@ export async function load( url: string, context: any, nextLoad: any )
 
 export async function resolve( specifier: string, context: any, nextResolve: any )
 {
-    // Allow extensionless and .ts imports relative to parent
+    // Allow extensionless, .js -> .ts ESM specifiers, and .ts imports relative to parent
     if( specifier.startsWith( '.' ) || specifier.startsWith( '/' ))
     {
+        const suffixIdx = specifier.search( /[?#]/ );
+        const cleanSpecifier = suffixIdx === -1 ? specifier : specifier.slice( 0, suffixIdx );
+        const suffix = suffixIdx === -1 ? '' : specifier.slice( suffixIdx );
         const parent = context.parentURL ? fileURLToPathCompat( context.parentURL ) : process.cwd();
-        const base = path.resolve( path.dirname( parent ), specifier );
-        const candidates = [
-            base,
-            base + '.ts',
-            base + '.tsx',
-            base + '.mts',
-            base + '.cts',
-            path.join( base, 'index.ts' )
-        ];
+        const base = path.resolve( path.dirname( parent ), cleanSpecifier );
+        const candidates: string[] = [ base ];
+
+        if( cleanSpecifier.endsWith( '.js' ))
+        {
+            const stem = base.slice( 0, -3 );
+            candidates.push( stem + '.ts', stem + '.tsx' );
+        }
+        else if( cleanSpecifier.endsWith( '.mjs' ))
+        {
+            candidates.push( base.slice( 0, -4 ) + '.mts' );
+        }
+        else if( cleanSpecifier.endsWith( '.cjs' ))
+        {
+            candidates.push( base.slice( 0, -4 ) + '.cts' );
+        }
+        else
+        {
+            candidates.push(
+                base + '.ts',
+                base + '.tsx',
+                base + '.mts',
+                base + '.cts',
+                path.join( base, 'index.ts' )
+            );
+        }
 
         for( const candidate of candidates )
         {
@@ -225,7 +267,7 @@ export async function resolve( specifier: string, context: any, nextResolve: any
             {
                 return {
                     shortCircuit : true,
-                    url          : pathToFileURL( candidate ).href
+                    url          : pathToFileURL( candidate ).href + suffix
                 };
             }
         }

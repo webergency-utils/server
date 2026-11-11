@@ -280,7 +280,9 @@ export function mergeFileConfigs( configs: ( FileOptions | undefined )[]): FileO
 
 function sanitizeFilename( name: string ): string
 {
-    return basename( name ).replace( /[^\w.\-()+ ]+/g, '_' ).slice( 0, 200 ) || 'file';
+    const cleaned = basename( name ).replace( /[^\w.\-()+ ]+/g, '_' ).slice( 0, 200 );
+
+    return cleaned || 'file';
 }
 
 function assertPathInsideRoot( root: string, candidate: string )
@@ -288,7 +290,7 @@ function assertPathInsideRoot( root: string, candidate: string )
     const rootPath = resolve( root );
     const full = resolve( candidate );
 
-    if( full !== rootPath && !full.startsWith( rootPath + sep ))
+    if( full === rootPath || !full.startsWith( rootPath + sep ))
     {
         throw Object.assign( new Error( 'Upload path escapes destination directory' ), { status : 400 });
     }
@@ -329,11 +331,35 @@ async function resolveDiskPath( options: FileFieldOptions, file: UploadedFile ):
 }
 
 const EMPTY_FIELD_OPTIONS: FileFieldOptions = {};
+const baseFieldOptionsCache = new WeakMap<FileOptions, FileFieldOptions>();
 const resolvedFieldOptionsCache = new WeakMap<FileOptions, Map<string, FileFieldOptions>>();
+
+function getBaseFieldOptions( options: FileOptions ): FileFieldOptions
+{
+    let base = baseFieldOptionsCache.get( options );
+
+    if( !base )
+    {
+        const { fields : _fields, ...rest } = options;
+        base = rest;
+        baseFieldOptionsCache.set( options, base );
+    }
+
+    return base;
+}
 
 export function resolveFieldOptions( options: FileOptions | undefined, field: string ): FileFieldOptions
 {
     if( !options ){ return EMPTY_FIELD_OPTIONS }
+
+    const fields = options.fields;
+
+    // Only cache per-field overrides for developer-declared field names so random client
+    // multipart field names never grow an unbounded Map over process lifetime.
+    if( !fields || !Object.hasOwn( fields, field ) || fields[field] === undefined )
+    {
+        return getBaseFieldOptions( options );
+    }
 
     let byField = resolvedFieldOptionsCache.get( options );
 
@@ -347,8 +373,7 @@ export function resolveFieldOptions( options: FileOptions | undefined, field: st
 
     if( !resolved )
     {
-        const { fields, ...base } = options;
-        resolved = { ...base, ...( fields?.[field] || {}) };
+        resolved = { ...getBaseFieldOptions( options ), ...fields[field] };
         byField.set( field, resolved );
     }
 

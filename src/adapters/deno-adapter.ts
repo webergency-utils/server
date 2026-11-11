@@ -3,12 +3,13 @@ import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, tlsMaterialToString, attachClientCert } from '../helpers/peer-cert.js';
 import { NodeTlsCompat } from './node-tls-compat.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
-import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
+import { upgradeQuery, isWsPayloadTooLarge, DEFAULT_MAX_WS_PAYLOAD, truncateWsReason } from './ws-upgrade.js';
 
 export class DenoAdapter implements ServerAdapter
 {
     private servers          : any[] = [];
     private abortController? : AbortController;
+    private wsConnections    = new Set<DenoServerWebSocket>();
     private readonly nodeTls = new NodeTlsCompat();
 
     async listen(
@@ -112,6 +113,11 @@ export class DenoAdapter implements ServerAdapter
         const query = upgradeQuery( request );
         const { socket, response } = ( globalThis as any ).Deno.upgradeWebSocket( request );
         const connection = new DenoServerWebSocket( socket, request.headers, params, query, metadata.meta?.wsOptions );
+        this.wsConnections.add( connection );
+        connection.on( 'close', () =>
+        {
+            this.wsConnections.delete( connection );
+        });
 
         const start = () =>
         {
@@ -171,18 +177,24 @@ export class DenoAdapter implements ServerAdapter
                 {
                     await srv.shutdown();
                 }
-
-                await srv?.finished;
             })
         );
     }
 
     closeAllConnections(): void
     {
-        if( this.nodeTls.active )
+        if( this.nodeTls.hasClosingConnections )
         {
             this.nodeTls.closeAllConnections();
+
+            return;
         }
+
+        for( const ws of [ ...this.wsConnections ])
+        {
+            ws.close( 1001, 'Going Away' );
+        }
+        this.wsConnections.clear();
     }
 }
 
@@ -202,6 +214,19 @@ class DenoServerWebSocket
     )
     {
         this.emitter = new EventEmitter();
+
+        try
+        {
+            if( 'binaryType' in this.socket )
+            {
+                this.socket.binaryType = 'arraybuffer';
+            }
+        }
+        catch
+        {
+            // ignore mock sockets with read-only binaryType
+        }
+
         this.heartbeat = new WsHeartbeat({
             // Deno's WebSocket has no ping(); reporting that keeps the socket alive.
             ping  : () => typeof this.socket.ping === 'function' ? void this.socket.ping() : false,
@@ -225,7 +250,9 @@ class DenoServerWebSocket
 
         this.socket.addEventListener( 'message', ( e: any ) =>
         {
-            if( isWsPayloadTooLarge( e.data, this.wsOptions?.maxPayload ))
+            const maxPayload = this.wsOptions?.maxPayload ?? DEFAULT_MAX_WS_PAYLOAD;
+
+            if( isWsPayloadTooLarge( e.data, maxPayload ))
             {
                 this.close( 1009, 'Message Too Big' );
 
@@ -235,13 +262,20 @@ class DenoServerWebSocket
         });
         this.socket.addEventListener( 'close', ( e: any ) =>
         {
+            this.isOpen = false;
+            this.pending = [];
             this.heartbeat.stop();
             this.emitter.emit( 'close', e.code, e.reason );
         });
         this.socket.addEventListener( 'error', ( e: any ) =>
         {
+            this.isOpen = false;
             this.heartbeat.stop();
-            this.emitter.emit( 'error', e.error );
+
+            if( this.emitter.listenerCount( 'error' ) > 0 )
+            {
+                this.emitter.emit( 'error', e.error );
+            }
         });
 
         this.socket.addEventListener( 'pong', () => this.heartbeat.pong());
@@ -270,9 +304,10 @@ class DenoServerWebSocket
 
     close( code?: number, reason?: string )
     {
+        this.isOpen = false;
         this.heartbeat.stop();
         this.pending = [];
-        this.socket.close( code, reason );
+        this.socket.close( code, reason !== undefined ? truncateWsReason( reason ) : undefined );
     }
 
     on( event: string, cb: Function )

@@ -1,15 +1,35 @@
 import { httpStatusFromError } from '../errors.js';
 
 export const REDACTED = '********';
-export const SECRET_KEYS = [ 'password', 'confirmPassword' ];
-const SECRET_KEYS_SET = new Set<string>( SECRET_KEYS );
+export const SECRET_KEYS =
+[
+    'password',
+    'confirmPassword',
+    'secret',
+    'clientSecret',
+    'privateKey',
+    'token',
+    'accessToken',
+    'refreshToken',
+    'apiKey',
+    'api_key',
+    'authorization',
+    'cookie',
+    'set-cookie'
+];
+function normalizeSecretKey( key: string ): string
+{
+    return key.toLowerCase().replace( /[_-]/g, '' );
+}
+
+const SECRET_KEYS_NORMALIZED = new Set<string>( SECRET_KEYS.map( normalizeSecretKey ));
 
 export function redactSecrets<T>( value: T ): T
 {
     return redact( value, new WeakSet()) as T;
 }
 
-export function clientErrorBody( err: unknown, status = httpStatusFromError( err )): Record<string, any>
+export function clientErrorBody( err: unknown, status = httpStatusFromError( err ), exposeErrors = false ): Record<string, any>
 {
     const e = asErrorRecord( err );
     const data = e.data && typeof e.data === 'object' && !Array.isArray( e.data )
@@ -28,6 +48,14 @@ export function clientErrorBody( err: unknown, status = httpStatusFromError( err
         }
 
         return redactSecrets( body );
+    }
+
+    if( status >= 500 && !exposeErrors )
+    {
+        return {
+            success : false,
+            error   : 'Internal server error'
+        };
     }
 
     return {
@@ -68,41 +96,68 @@ function asErrorRecord( err: unknown ): { name? : string, message? : string, dat
     return { message : err === undefined || err === null ? '' : String( err ) };
 }
 
-function redact( value: unknown, seen: WeakSet<object> ): unknown
+function redact( value: unknown, activeAncestors: WeakSet<object> ): unknown
 {
     if( value === null || typeof value !== 'object' )
     {
         return value;
     }
 
-    if( seen.has( value ))
+    if( value instanceof Date )
+    {
+        return new Date( value.getTime());
+    }
+
+    if( value instanceof RegExp )
+    {
+        return new RegExp( value.source, value.flags );
+    }
+
+    if( value instanceof URL )
+    {
+        return new URL( value.href );
+    }
+
+    if( Buffer.isBuffer( value ) || ArrayBuffer.isView( value ) || value instanceof ArrayBuffer )
     {
         return value;
     }
 
-    seen.add( value );
-
-    if( Array.isArray( value ))
+    if( activeAncestors.has( value ))
     {
-        return value.map(( item ) => redact( item, seen ));
+        return '[Circular]';
     }
 
-    const out: Record<string, unknown> = {};
-    const keys = Object.keys( value );
+    activeAncestors.add( value );
 
-    for( let i = 0; i < keys.length; i++ )
+    try
     {
-        const key = keys[i];
-
-        if( SECRET_KEYS_SET.has( key ))
+        if( Array.isArray( value ))
         {
-            out[key] = REDACTED;
-
-            continue;
+            return value.map(( item ) => redact( item, activeAncestors ));
         }
 
-        out[key] = redact(( value as Record<string, unknown> )[key], seen );
-    }
+        const out: Record<string, unknown> = {};
+        const keys = Object.keys( value );
 
-    return out;
+        for( let i = 0; i < keys.length; i++ )
+        {
+            const key = keys[i];
+
+            if( SECRET_KEYS_NORMALIZED.has( normalizeSecretKey( key )))
+            {
+                out[key] = REDACTED;
+
+                continue;
+            }
+
+            out[key] = redact(( value as Record<string, unknown> )[key], activeAncestors );
+        }
+
+        return out;
+    }
+    finally
+    {
+        activeAncestors.delete( value );
+    }
 }

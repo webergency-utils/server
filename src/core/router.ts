@@ -1,11 +1,13 @@
 import { Method, EndpointMetadata } from './types.js';
 import { pathMatcher, parse, MatchFunction, Token } from '../helpers/match.js';
+import { BadRequestError } from '../errors.js';
 
 export interface Route {
-    method   : Method
-    path     : string
-    metadata : EndpointMetadata
-    matchFn  : MatchFunction<any>
+    method       : Method
+    path         : string
+    metadata     : EndpointMetadata
+    matchFn      : MatchFunction<any>
+    fastMatchFn? : ( path: string ) => RouteMatch | null
 }
 
 export interface RouteMatch {
@@ -136,7 +138,7 @@ function extractStaticSegments( tokens: Token[]): string[]
     return first.value.slice( 1, lastSlash ).split( '/' );
 }
 
-function describe( path: string ): Shape
+function describe( path: string ): { shape : Shape, tokens : Token[] }
 {
     const shape: Shape = {
         key            : '',
@@ -152,7 +154,197 @@ function describe( path: string ): Shape
     shape.key = describeTokens( parsedTokens, shape );
     shape.staticSegments = extractStaticSegments( parsedTokens );
 
-    return shape;
+    return { shape, tokens : parsedTokens };
+}
+
+function decodeFastSegment( raw: string, name: string ): string
+{
+    try
+    {
+        return decodeURIComponent( raw );
+    }
+    catch
+    {
+        throw new BadRequestError( `Malformed percent-encoding in path parameter "${name}"` );
+    }
+}
+
+const UNSAFE_PARAM_NAMES = new Set([ '__proto__', 'constructor', 'prototype' ]);
+
+/**
+ * Build a zero-RegExp segment matcher for standard `/lit/:param/...` patterns (no custom regex,
+ * wildcards, or optional groups). Falls back to `undefined` for complex patterns so `matchFn` runs.
+ */
+function buildFastSegmentMatcher(
+    metadata: EndpointMetadata,
+    tokens: Token[]
+): (( input: string ) => RouteMatch | null ) | undefined
+{
+    if( tokens.length < 2 || tokens[0].type !== 'text' || !tokens[0].value.endsWith( '/' ))
+    {
+        return undefined;
+    }
+
+    const literals: string[] = [tokens[0].value];
+    const paramNames: string[] = [];
+    const seenParams = new Set<string>();
+    let expectParam = true;
+
+    for( let i = 1; i < tokens.length; i++ )
+    {
+        const tok = tokens[i];
+
+        if( expectParam )
+        {
+            if( tok.type !== 'param' || tok.pattern || UNSAFE_PARAM_NAMES.has( tok.name ) || seenParams.has( tok.name ))
+            {
+                return undefined;
+            }
+
+            seenParams.add( tok.name );
+            paramNames.push( tok.name );
+            expectParam = false;
+        }
+        else
+        {
+            const isLast = i === tokens.length - 1;
+
+            if( tok.type !== 'text' || !tok.value.startsWith( '/' ))
+            {
+                return undefined;
+            }
+
+            if( !isLast && !tok.value.endsWith( '/' ))
+            {
+                return undefined;
+            }
+
+            if( isLast && tok.value.endsWith( '/' ))
+            {
+                return undefined;
+            }
+
+            literals.push( tok.value );
+            expectParam = true;
+        }
+    }
+
+    if( paramNames.length === 0 )
+    {
+        return undefined;
+    }
+
+    if( literals.length === paramNames.length )
+    {
+        literals.push( '' );
+    }
+
+    if( paramNames.length === 1 )
+    {
+        const prefix = literals[0];
+        const suffix = literals[1];
+        const pLen = prefix.length;
+        const param0 = paramNames[0];
+
+        if( suffix.length === 0 )
+        {
+            return ( input: string ): RouteMatch | null =>
+            {
+                let end = input.length;
+
+                if( end > pLen && input.charCodeAt( end - 1 ) === 47 ){ end-- }
+
+                if( end <= pLen || !input.startsWith( prefix )){ return null }
+
+                const slash = input.indexOf( '/', pLen );
+
+                if( slash !== -1 && slash < end ){ return null }
+
+                const raw = input.slice( pLen, end );
+                const params: Record<string, string> = Object.create( null );
+                params[param0] = raw.indexOf( '%' ) === -1 ? raw : decodeFastSegment( raw, param0 );
+
+                return { metadata, params };
+            };
+        }
+
+        const sLen = suffix.length;
+
+        return ( input: string ): RouteMatch | null =>
+        {
+            let end = input.length;
+
+            if( end > 1 && input.charCodeAt( end - 1 ) === 47 ){ end-- }
+
+            const paramEnd = end - sLen;
+
+            if( paramEnd <= pLen || !input.startsWith( suffix, paramEnd ) || !input.startsWith( prefix ))
+            {
+                return null;
+            }
+
+            if( input.indexOf( '/', pLen ) !== paramEnd ){ return null }
+
+            const raw = input.slice( pLen, paramEnd );
+            const params: Record<string, string> = Object.create( null );
+            params[param0] = raw.indexOf( '%' ) === -1 ? raw : decodeFastSegment( raw, param0 );
+
+            return { metadata, params };
+        };
+    }
+
+    const pCount = paramNames.length;
+    const prefix0 = literals[0];
+    const p0Len = prefix0.length;
+    const tail = literals[pCount];
+    const tailLen = tail.length;
+
+    return ( input: string ): RouteMatch | null =>
+    {
+        let end = input.length;
+
+        if( end > 1 && input.charCodeAt( end - 1 ) === 47 ){ end-- }
+
+        const bodyEnd = end - tailLen;
+
+        if( bodyEnd <= p0Len || ( tailLen > 0 && !input.startsWith( tail, bodyEnd )) || !input.startsWith( prefix0 ))
+        {
+            return null;
+        }
+
+        const params: Record<string, string> = Object.create( null );
+        let pos = p0Len;
+
+        for( let i = 0; i < pCount; i++ )
+        {
+            const isLastParam = i === pCount - 1;
+            const segEnd = isLastParam ? bodyEnd : input.indexOf( '/', pos );
+
+            if( segEnd <= pos || segEnd > bodyEnd ){ return null }
+
+            if( isLastParam )
+            {
+                const innerSlash = input.indexOf( '/', pos );
+
+                if( innerSlash !== -1 && innerSlash < bodyEnd ){ return null }
+            }
+
+            const raw = input.slice( pos, segEnd );
+            const pName = paramNames[i];
+            params[pName] = raw.indexOf( '%' ) === -1 ? raw : decodeFastSegment( raw, pName );
+
+            if( !isLastParam )
+            {
+                const sep = literals[i + 1];
+
+                if( !input.startsWith( sep, segEnd )){ return null }
+
+                pos = segEnd + sep.length;
+            }
+        }
+
+        return { metadata, params };
+    };
 }
 
 interface Entry {
@@ -277,15 +469,51 @@ function lookupTrieCandidates( root: PrefixTrieNode | undefined, path: string ):
     return node.entries;
 }
 
-const EMPTY_PARAMS: Record<string, any> = Object.freeze( Object.create( null ));
+export const EMPTY_PARAMS: Record<string, any> = Object.freeze( Object.create( null ));
+
+function matchRoute( route: Route, path: string ): RouteMatch | null
+{
+    if( route.fastMatchFn !== undefined )
+    {
+        return route.fastMatchFn( path );
+    }
+
+    const match = route.matchFn( path );
+
+    return match ? { metadata : route.metadata, params : match.params } : null;
+}
+
+class MissRouteLookup implements RouteLookup
+{
+    public readonly match = null;
+    #router : Router;
+    #path   : string;
+    #probe? : { allowed : string[], fallback : RouteMatch | null };
+
+    constructor( router: Router, path: string )
+    {
+        this.#router = router;
+        this.#path = path;
+    }
+
+    get allowed(): string[]
+    {
+        return ( this.#probe ?? ( this.#probe = this.#router.probePathInternal( this.#path ))).allowed;
+    }
+
+    get fallback(): RouteMatch | null
+    {
+        return ( this.#probe ?? ( this.#probe = this.#router.probePathInternal( this.#path ))).fallback;
+    }
+}
 
 export class Router 
 {
     private entries : Entry[] = [];
     private compiled = false;
 
-    /** Exact-path routes, keyed by `method + ' ' + path` — no regex needed. */
-    private staticRoutes = new Map<string, Route>();
+    /** Exact-path pre-allocated lookups, indexed by `method` -> `path` (including optional trailing `/`). */
+    private staticLookupByMethod = new Map<string, Map<string, RouteLookup>>();
     /** Per exact path: the methods serving it and the first route registered, for `Allow`. */
     private staticPaths = new Map<string, { methods : Set<string>, first : Route }>();
     /** Pattern routes indexed per method in a static-prefix trie, specificity-sorted. */
@@ -298,14 +526,16 @@ export class Router
 
     public add( metadata: EndpointMetadata ) 
     {
+        const { shape, tokens } = describe( metadata.path );
         const route: Route = {
-            method  : metadata.httpMethod,
-            path    : metadata.path,
+            method      : metadata.httpMethod,
+            path        : metadata.path,
             metadata,
-            matchFn : pathMatcher( metadata.path, { sensitive : true, end : true })
+            matchFn     : pathMatcher( metadata.path, { sensitive : true, end : true }),
+            fastMatchFn : shape.isStatic ? undefined : buildFastSegmentMatcher( metadata, tokens )
         };
 
-        this.entries.push({ route, shape : describe( metadata.path ), order : this.entries.length });
+        this.entries.push({ route, shape, order : this.entries.length });
         this.compiled = false;
     }
 
@@ -317,7 +547,7 @@ export class Router
     {
         if( this.compiled ){ return }
 
-        this.staticRoutes.clear();
+        this.staticLookupByMethod.clear();
         this.staticPaths.clear();
         this.dynamicRoutes.clear();
         this.dynamicHttpTrie = undefined;
@@ -326,11 +556,15 @@ export class Router
         const seen = new Map<string, Route>();
         const rawDynamic = new Map<string, Entry[]>();
         const dynamicHttpList: Entry[] = [];
+        const trailingAliases: { byPath : Map<string, RouteLookup>, alias : string, lookup : RouteLookup }[] = [];
 
         for( const entry of this.entries )
         {
             const { route, shape } = entry;
             const isHttp = !NON_HTTP_METHODS.has( route.method );
+            const staticLookup: RouteLookup | undefined = shape.isStatic
+                ? { match : { metadata : route.metadata, params : EMPTY_PARAMS }, allowed : NO_METHODS, fallback : null }
+                : undefined;
 
             for( const method of effectiveMethods( route.method ))
             {
@@ -349,9 +583,23 @@ export class Router
 
                 if( shape.isStatic )
                 {
-                    const key = `${method} ${shape.key}`;
+                    let byPath = this.staticLookupByMethod.get( method );
 
-                    if( !this.staticRoutes.has( key )){ this.staticRoutes.set( key, route ) }
+                    if( !byPath ){ this.staticLookupByMethod.set( method, byPath = new Map()) }
+
+                    if( !byPath.has( shape.key ))
+                    {
+                        byPath.set( shape.key, staticLookup! );
+
+                        if( !shape.key.endsWith( '/' ))
+                        {
+                            trailingAliases.push({ byPath, alias : `${shape.key}/`, lookup : staticLookup! });
+                        }
+                        else if( shape.key === '/' )
+                        {
+                            trailingAliases.push({ byPath, alias : '//', lookup : staticLookup! });
+                        }
+                    }
                 }
                 else
                 {
@@ -374,6 +622,14 @@ export class Router
             else { dynamicHttpList.push( entry ) }
         }
 
+        for( const { byPath, alias, lookup } of trailingAliases )
+        {
+            if( !byPath.has( alias ))
+            {
+                byPath.set( alias, lookup );
+            }
+        }
+
         for( const [ method, list ] of rawDynamic.entries())
         {
             list.sort( bySpecificity );
@@ -394,29 +650,24 @@ export class Router
      */
     public lookup( method: string, path: string ): RouteLookup
     {
-        const match = this.match( method, path );
+        if( !this.compiled ){ this.compile() }
 
-        if( match ){ return { match, allowed : NO_METHODS, fallback : null } }
+        const staticHit = this.staticLookupByMethod.get( method )?.get( path )
+            ?? ( method === 'HEAD' ? this.staticLookupByMethod.get( 'GET' )?.get( path ) : undefined );
 
-        let probe: { allowed : string[], fallback : RouteMatch | null } | undefined;
-        const getProbe = () => probe ?? ( probe = this.probePath( path ));
+        if( staticHit !== undefined ){ return staticHit }
 
-        return {
-            match : null,
-            get allowed(): string[]
-            {
-                return getProbe().allowed;
-            },
-            get fallback(): RouteMatch | null
-            {
-                return getProbe().fallback;
-            }
-        };
+        const dynMatch = this.matchDynamic( method, path )
+            ?? ( method === 'HEAD' ? this.matchDynamic( 'GET', path ) : null );
+
+        if( dynMatch ){ return { match : dynMatch, allowed : NO_METHODS, fallback : null } }
+
+        return new MissRouteLookup( this, path );
     }
 
     public find( method: string, path: string ): RouteMatch | null
     {
-        this.compile();
+        if( !this.compiled ){ this.compile() }
 
         return this.matchMethod( method, path );
     }
@@ -427,7 +678,7 @@ export class Router
      */
     public match( method: string, path: string ): RouteMatch | null
     {
-        this.compile();
+        if( !this.compiled ){ this.compile() }
 
         return this.matchMethod( method, path )
             || ( method === 'HEAD' ? this.matchMethod( 'GET', path ) : null );
@@ -439,7 +690,7 @@ export class Router
      */
     public matchAll( method: string, path: string ): RouteMatch[]
     {
-        this.compile();
+        if( !this.compiled ){ this.compile() }
 
         const matches = this.collectMatches( method, path );
 
@@ -457,13 +708,13 @@ export class Router
      */
     public allowedMethods( path: string ): string[]
     {
-        this.compile();
+        if( !this.compiled ){ this.compile() }
 
-        return this.probePath( path ).allowed;
+        return this.probePathInternal( path ).allowed;
     }
 
-    /** One scan over the path, whatever the method: the `Allow` list and a config fallback. */
-    private probePath( path: string ): { allowed : string[], fallback : RouteMatch | null }
+    /** @internal One scan over the path, whatever the method: the `Allow` list and a config fallback. */
+    public probePathInternal( path: string ): { allowed : string[], fallback : RouteMatch | null }
     {
         const matched: string[] = [];
         let fallback: RouteMatch | null = null;
@@ -480,13 +731,13 @@ export class Router
 
         for( const entry of dynamicCandidates )
         {
-            const match = entry.route.matchFn( path );
+            const hit = matchRoute( entry.route, path );
 
-            if( !match ){ continue }
+            if( !hit ){ continue }
 
             matched.push( entry.route.method );
 
-            if( !fallback ){ fallback = { metadata : entry.route.metadata, params : match.params } }
+            if( !fallback ){ fallback = hit }
         }
 
         return { allowed : toAllowList( matched ), fallback };
@@ -497,59 +748,50 @@ export class Router
         return lookupTrieCandidates( this.dynamicRoutes.get( method ), path );
     }
 
-    private matchMethod( method: string, path: string ): RouteMatch | null
+    private matchDynamic( method: string, path: string ): RouteMatch | null
     {
-        // `pathMatcher` accepts an optional trailing slash, so the map lookup must too.
-        const exact = this.staticRoutes.get( `${method} ${path}` )
-            ?? ( path.endsWith( '/' ) ? this.staticRoutes.get( `${method} ${path.slice( 0, -1 )}` ) : undefined );
-
-        if( exact )
-        {
-            return { metadata : exact.metadata, params : EMPTY_PARAMS };
-        }
-
         const candidates = this.getDynamicCandidates( method, path );
+        const len = candidates.length;
 
-        if( !candidates || candidates.length === 0 ){ return null }
+        if( len === 0 ){ return null }
 
-        for( const { route } of candidates )
+        for( let i = 0; i < len; i++ )
         {
-            const match = route.matchFn( path );
+            const hit = matchRoute( candidates[i].route, path );
 
-            if( match )
-            {
-                return { metadata : route.metadata, params : match.params };
-            }
+            if( hit ){ return hit }
         }
 
         return null;
     }
 
+    private matchMethod( method: string, path: string ): RouteMatch | null
+    {
+        const staticHit = this.staticLookupByMethod.get( method )?.get( path );
+
+        if( staticHit !== undefined ){ return staticHit.match }
+
+        return this.matchDynamic( method, path );
+    }
+
     private collectMatches( method: string, path: string ): RouteMatch[]
     {
         const out: RouteMatch[] = [];
+        const staticHit = this.staticLookupByMethod.get( method )?.get( path );
 
-        // `pathMatcher` accepts an optional trailing slash, so the map lookup must too.
-        const exact = this.staticRoutes.get( `${method} ${path}` )
-            ?? ( path.endsWith( '/' ) ? this.staticRoutes.get( `${method} ${path.slice( 0, -1 )}` ) : undefined );
-
-        if( exact )
+        if( staticHit?.match )
         {
-            out.push({ metadata : exact.metadata, params : EMPTY_PARAMS });
+            out.push( staticHit.match );
         }
 
         const candidates = this.getDynamicCandidates( method, path );
+        const len = candidates.length;
 
-        if( !candidates || candidates.length === 0 ){ return out }
-
-        for( const { route } of candidates )
+        for( let i = 0; i < len; i++ )
         {
-            const match = route.matchFn( path );
+            const hit = matchRoute( candidates[i].route, path );
 
-            if( match )
-            {
-                out.push({ metadata : route.metadata, params : match.params });
-            }
+            if( hit ){ out.push( hit ) }
         }
 
         return out;

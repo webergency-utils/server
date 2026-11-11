@@ -40,6 +40,39 @@ const REFERRER_POLICIES = new Set([
 ]);
 
 const CROSS_DOMAIN_POLICIES = new Set([ 'none', 'master-only', 'by-content-type', 'by-ftp-filename', 'all' ]);
+const COEP_POLICIES = new Set([ 'require-corp', 'credentialless', 'unsafe-none' ]);
+const COOP_POLICIES = new Set([ 'same-origin', 'same-origin-allow-popups', 'unsafe-none' ]);
+const CORP_POLICIES = new Set([ 'same-origin', 'same-site', 'cross-origin' ]);
+const EMPTY_SECURITY_HEADERS: Record<string, string> = Object.freeze({});
+
+function hasHeaderCtl( value: string ): boolean
+{
+    return /[\r\n\0]/.test( value );
+}
+
+function hasUnsafeHostChars( value: string ): boolean
+{
+    for( let i = 0; i < value.length; i++ )
+    {
+        const c = value.charCodeAt( i );
+
+        if(
+            c <= 0x20
+            || c >= 0x7f
+            || c === 0x2f /* / */
+            || c === 0x5c /* \ */
+            || c === 0x3f /* ? */
+            || c === 0x23 /* # */
+            || c === 0x40 /* @ */
+            || c === 0x2c /* , */
+        )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 const mergedSecurityPairCache = new WeakMap<object, Map<unknown, SecurityOptions | undefined>>();
 const allowedContentTypesCache = new WeakMap<SecurityOptions, Set<string>>();
@@ -139,7 +172,7 @@ export function extractHostname( hostHeader: string ): string | null
 {
     const trimmed = hostHeader.trim();
 
-    if( !trimmed || trimmed.includes( ',' ) || /\s/.test( trimmed ))
+    if( !trimmed || hasUnsafeHostChars( trimmed ))
     {
         return null;
     }
@@ -149,6 +182,13 @@ export function extractHostname( hostHeader: string ): string | null
         const closeIdx = trimmed.indexOf( ']' );
 
         if( closeIdx <= 1 ){ return null }
+
+        const ipv6Interior = trimmed.slice( 1, closeIdx );
+
+        if( !/^[0-9a-fA-F:.]+$/.test( ipv6Interior ))
+        {
+            return null;
+        }
 
         if( closeIdx + 1 < trimmed.length )
         {
@@ -328,7 +368,8 @@ function computeMergedSecurityConfigs( configs: ( SecurityOptions | boolean | un
                 csp                          : false,
                 coep                         : false,
                 coop                         : false,
-                corp                         : false
+                corp                         : false,
+                permissionsPolicy            : false
             };
         }
         else if( typeof config === 'object' && config !== null ) 
@@ -353,7 +394,7 @@ let cachedFalseSecurityHeaders: Record<string, string> | undefined;
 
 export function generateSecurityHeaders( config: SecurityOptions | boolean | undefined ): Record<string, string> 
 {
-    if( config === undefined ) { return {} }
+    if( config === undefined ) { return EMPTY_SECURITY_HEADERS }
 
     if( config === true && cachedTrueSecurityHeaders )
     {
@@ -388,7 +429,8 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
         csp                          : false,
         coep                         : false,
         coop                         : false,
-        corp                         : false
+        corp                         : false,
+        permissionsPolicy            : false
     } : config );
 
     const isEnabled = ( prop: keyof SecurityOptions ): boolean => 
@@ -498,26 +540,39 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
         }
         else if( typeof val === 'string' ) 
         {
-            headers['Content-Security-Policy'] = val;
+            if( !hasHeaderCtl( val ))
+            {
+                headers['Content-Security-Policy'] = val;
+            }
         }
         else if( typeof val === 'object' ) 
         {
             const parts: string[] = [];
 
-            for( const [directive, sources] of Object.entries( val )) 
+            for( const [ directive, sources ] of Object.entries( val )) 
             {
-                if( sources === undefined || ( sources as any ) === false )
+                if( sources === undefined || ( sources as any ) === false || hasHeaderCtl( directive ) || directive.includes( ';' ))
                 {
                     continue;
                 }
 
                 if( Array.isArray( sources )) 
                 {
-                    parts.push( `${directive} ${sources.join( ' ' )}` );
+                    const safeSources = sources.filter( s => typeof s === 'string' && !hasHeaderCtl( s ) && !s.includes( ';' ));
+
+                    if( safeSources.length > 0 || sources.length === 0 )
+                    {
+                        parts.push( `${directive} ${safeSources.join( ' ' )}`.trim());
+                    }
                 }
-                else 
+                else if( typeof ( sources as unknown ) === 'string' )
                 {
-                    parts.push( `${directive} ${sources}` );
+                    const rawSources = sources as unknown as string;
+
+                    if( !hasHeaderCtl( rawSources ) && !rawSources.includes( ';' ))
+                    {
+                        parts.push( `${directive} ${rawSources}` );
+                    }
                 }
             }
 
@@ -531,19 +586,40 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
     // 9. Cross-Origin-Embedder-Policy (coep - Disabled by default)
     if( options.coep ) 
     {
-        headers['Cross-Origin-Embedder-Policy'] = options.coep === true ? 'require-corp' : options.coep;
+        if( options.coep === true )
+        {
+            headers['Cross-Origin-Embedder-Policy'] = 'require-corp';
+        }
+        else if( typeof options.coep === 'string' && COEP_POLICIES.has( options.coep ))
+        {
+            headers['Cross-Origin-Embedder-Policy'] = options.coep;
+        }
     }
 
     // 10. Cross-Origin-Opener-Policy (coop - Disabled by default)
     if( options.coop ) 
     {
-        headers['Cross-Origin-Opener-Policy'] = options.coop === true ? 'same-origin' : options.coop;
+        if( options.coop === true )
+        {
+            headers['Cross-Origin-Opener-Policy'] = 'same-origin';
+        }
+        else if( typeof options.coop === 'string' && COOP_POLICIES.has( options.coop ))
+        {
+            headers['Cross-Origin-Opener-Policy'] = options.coop;
+        }
     }
 
     // 11. Cross-Origin-Resource-Policy (corp - Disabled by default)
     if( options.corp ) 
     {
-        headers['Cross-Origin-Resource-Policy'] = options.corp === true ? 'same-origin' : options.corp;
+        if( options.corp === true )
+        {
+            headers['Cross-Origin-Resource-Policy'] = 'same-origin';
+        }
+        else if( typeof options.corp === 'string' && CORP_POLICIES.has( options.corp ))
+        {
+            headers['Cross-Origin-Resource-Policy'] = options.corp;
+        }
     }
 
     // 12. Permissions-Policy (permissionsPolicy - Disabled by default)
@@ -558,7 +634,10 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
         }
         else if( typeof val === 'string' ) 
         {
-            headers['Permissions-Policy'] = val;
+            if( !hasHeaderCtl( val ))
+            {
+                headers['Permissions-Policy'] = val;
+            }
         }
         else if( typeof val === 'object' ) 
         {
@@ -566,18 +645,30 @@ export function generateSecurityHeaders( config: SecurityOptions | boolean | und
 
             for( const [ feature, allowlist ] of Object.entries( val )) 
             {
-                if( allowlist === undefined || ( allowlist as any ) === false )
+                if(
+                    allowlist === undefined
+                    || ( allowlist as any ) === false
+                    || hasHeaderCtl( feature )
+                    || /[=,()]/.test( feature )
+                )
                 {
                     continue;
                 }
 
                 const origins = Array.isArray( allowlist ) ? allowlist : [allowlist];
-                parts.push( `${feature}=(${origins.join( ' ' )})` );
+                const safeOrigins = origins.filter( o => typeof o === 'string' && !hasHeaderCtl( o ) && !/[,()]/.test( o ));
+
+                if( safeOrigins.length === origins.length )
+                {
+                    parts.push( `${feature}=(${safeOrigins.join( ' ' )})` );
+                }
             }
 
             if( parts.length > 0 ) { headers['Permissions-Policy'] = parts.join( ', ' ) }
         }
     }
+
+    Object.freeze( headers );
 
     if( config === true )
     {

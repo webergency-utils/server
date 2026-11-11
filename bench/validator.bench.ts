@@ -1,4 +1,4 @@
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import type { IValidationError, ValidationMode } from '@webergency-utils/typechecker';
 import { createBench, report } from './support.js';
 

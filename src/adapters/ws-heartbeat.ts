@@ -37,6 +37,7 @@ export class WsHeartbeat
         if( !interval || this.intervalTimer ) { return }
 
         this.intervalTimer = setInterval(() => this.tick(), interval );
+        this.intervalTimer.unref?.();
     }
 
     public pong(): void
@@ -81,6 +82,7 @@ export class WsHeartbeat
 
         if( pingTimeout )
         {
+            this.clearTimeout();
             this.timeoutTimer = setTimeout(() =>
             {
                 if( !this.pongReceived )
@@ -88,6 +90,7 @@ export class WsHeartbeat
                     this.transport.close( 1002, 'Ping Timeout' );
                 }
             }, pingTimeout );
+            this.timeoutTimer.unref?.();
         }
     }
 

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { createServer as createNodeServer } from 'node:http';
 import { Server } from '../src/server.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import { UploadedFile } from '../src/helpers/multipart.js';
 import type { EndpointMetadata } from '../src/core/types.js';
 

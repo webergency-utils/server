@@ -1,9 +1,21 @@
 import { EventEmitter } from 'node:events';
-import { Router, RouteMatch } from './core/router.js';
+import { Router, RouteMatch, type RouteLookup } from './core/router.js';
 import { joinQueryStrings, pathnameFromUrl, queryStringFromBag } from './helpers/query-string.js';
 import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/registry.js';
 import { bootstrapRegistry } from './core/bootstrap.js';
-import { EndpointMetadata, Logger, LogContext, SeoFallthrough, ForwardIntent, SeoForward } from './core/types.js';
+import
+{
+    DIRECT_RESPONSE_BODY,
+    EndpointMetadata,
+    ForwardIntent,
+    LogContext,
+    Logger,
+    SeoFallthrough,
+    SeoForward,
+    tagDirectResponse
+}
+    from './core/types.js';
+import { getModuleMeta } from './core/symbols.js';
 import { ServerRequest } from './core/server-request.js';
 import { Context, type RequestContext } from './core/context.js';
 import { CorsOptions, SecurityOptions, type FileOptions, type Reviver } from './decorators.js';
@@ -11,7 +23,7 @@ import { handleCors, isPreflight, mergeCorsConfigs } from './helpers/cors.js';
 import { mergeSecurityConfigs, generateSecurityHeaders, getAllowedContentTypesSet, isHostAllowed } from './helpers/security.js';
 import { mergeFileConfigs, resolveMultipartTotalLimit } from './helpers/file-upload.js';
 
-import { RequestProcessor } from './core/request-processor.js';
+import { FINALIZED_RESPONSE, RequestProcessor, type ExecuteOptions } from './core/request-processor.js';
 import { invokeGuards } from './core/guard-runner.js';
 import { RateLimiter } from './helpers/rate-limiter.js';
 import { ServerAdapter, normalizeHostList } from './adapters/adapter.js';
@@ -21,13 +33,14 @@ import { NodeAdapter } from './adapters/node-adapter.js';
 import { BunAdapter } from './adapters/bun-adapter.js';
 import { DenoAdapter } from './adapters/deno-adapter.js';
 import { getContentType, requestLikelyHasBody, resolveBodyLimit } from './helpers/request-reader.js';
-import { compileTrustProxy, type CompiledTrustProxy } from './helpers/client-ip.js';
+import { compileTrustProxy, type CompiledTrustProxy, type TrustProxy } from './helpers/client-ip.js';
 import { httpStatusFromError } from './errors.js';
 import { clientErrorBody, errorLogFields } from './helpers/error-response.js';
 import { resolveRequestId, REQUEST_ID_HEADER } from './helpers/request-id.js';
 
 /** Max internal rewrite hops per request (cycle detection is separate). */
 const MAX_FORWARD_DEPTH = 16;
+const DEFAULT_RP_EXECUTE = RequestProcessor.execute;
 
 
 export class ConsoleLogger implements Logger 
@@ -104,9 +117,14 @@ export interface ServerOptions {
      * - true: trust only loopback peers
      * - string[]: CIDR allowlist of immediate peers (e.g. `['10.0.0.0/8', '172.16.0.0/12']`)
      */
-    trustProxy?       : string[]
+    trustProxy?       : boolean | TrustProxy
     /** Passed to typechecker `parse` for JSON and query, and to untyped JSON / urlencoded bodies. Hierarchical with Module / `@Reviver`. `null` opts out. */
     reviver?          : Reviver | null
+    /**
+     * Whether to expose raw `err.message` strings on 5xx responses when `err.data` is absent.
+     * Defaults to `false` (returns `"Internal server error"` to prevent internal detail leaks).
+     */
+    exposeErrors?     : boolean
     /**
      * Whether to register process signal listeners (`SIGTERM`, `SIGINT`) for graceful shutdown.
      * Defaults to `true`. Set to `false` in tests or custom process environments.
@@ -146,7 +164,13 @@ function setCorsHeader( headers: Headers, key: string, value: string ): void
     headers.set( key, value );
 }
 
+const EMPTY_SEO_MATCHES: RouteMatch[] = [];
+const NO_SEC_JSON_HEADERS_TEMPLATE = new Headers({ 'Content-Type' : 'application/json' });
+const NO_SEC_BASE_HEADERS_TEMPLATE = new Headers();
 const compiledSecurityHeadersCache = new WeakMap<SecurityOptions, [ string, string ][]>();
+const compiledJsonHeadersCache = new WeakMap<SecurityOptions, Headers>();
+const compiledBaseHeadersCache = new WeakMap<SecurityOptions, Headers>();
+const securityHasGatesCache = new WeakMap<SecurityOptions, boolean>();
 
 function getCompiledSecurityHeaders( securityConfig: SecurityOptions ): [ string, string ][]
 {
@@ -156,6 +180,69 @@ function getCompiledSecurityHeaders( securityConfig: SecurityOptions ): [ string
     {
         cached = Object.entries( generateSecurityHeaders( securityConfig ));
         compiledSecurityHeadersCache.set( securityConfig, cached );
+    }
+
+    return cached;
+}
+
+function getCompiledJsonHeadersTemplate( securityConfig?: SecurityOptions ): Headers
+{
+    if( securityConfig === undefined ){ return NO_SEC_JSON_HEADERS_TEMPLATE }
+
+    let cached = compiledJsonHeadersCache.get( securityConfig );
+
+    if( !cached )
+    {
+        cached = new Headers({ 'Content-Type' : 'application/json' });
+        const secHeaders = getCompiledSecurityHeaders( securityConfig );
+
+        for( let i = 0; i < secHeaders.length; i++ )
+        {
+            cached.set( secHeaders[i][0], secHeaders[i][1]);
+        }
+
+        compiledJsonHeadersCache.set( securityConfig, cached );
+    }
+
+    return cached;
+}
+
+function getCompiledBaseHeadersTemplate( securityConfig?: SecurityOptions ): Headers
+{
+    if( securityConfig === undefined ){ return NO_SEC_BASE_HEADERS_TEMPLATE }
+
+    let cached = compiledBaseHeadersCache.get( securityConfig );
+
+    if( !cached )
+    {
+        cached = new Headers();
+        const secHeaders = getCompiledSecurityHeaders( securityConfig );
+
+        for( let i = 0; i < secHeaders.length; i++ )
+        {
+            cached.set( secHeaders[i][0], secHeaders[i][1]);
+        }
+
+        compiledBaseHeadersCache.set( securityConfig, cached );
+    }
+
+    return cached;
+}
+
+function hasSecurityGates( cfg?: SecurityOptions ): boolean
+{
+    if( !cfg ){ return false }
+
+    let cached = securityHasGatesCache.get( cfg );
+
+    if( cached === undefined )
+    {
+        cached = Boolean(
+            ( cfg.allowedHosts && cfg.allowedHosts !== true )
+            || ( cfg.allowedContentTypes && cfg.allowedContentTypes.length > 0 )
+            || cfg.rateLimit
+        );
+        securityHasGatesCache.set( cfg, cached );
     }
 
     return cached;
@@ -193,6 +280,37 @@ function applyFinalHeaders(
     headers.set( REQUEST_ID_HEADER, requestId );
 }
 
+interface SignalHandlePair
+{
+    sigterm : () => void
+    sigint  : () => void
+}
+
+const serverSignalFinalizer = typeof FinalizationRegistry === 'function'
+    ? new FinalizationRegistry<SignalHandlePair>(( pair ) =>
+    {
+        if( typeof process !== 'undefined' && typeof process.off === 'function' )
+        {
+            process.off( 'SIGTERM', pair.sigterm );
+            process.off( 'SIGINT', pair.sigint );
+        }
+    })
+    : undefined;
+
+function cancelResponseBody( res: Response ): void
+{
+    if( DIRECT_RESPONSE_BODY in res || !res.body ){ return }
+
+    try
+    {
+        void res.body.cancel()?.catch(() => undefined );
+    }
+    catch
+    {
+        // ignore cancel failures on locked/already-closed streams
+    }
+}
+
 export class Server extends EventEmitter 
 {
     /** High-priority SEO route group (`@Seo`). */
@@ -202,23 +320,33 @@ export class Server extends EventEmitter
     /** Forward-only routes (`@Internal`). */
     private internalRouter = new Router();
     private activeRequests = 0;
-    private serverAdapter?     : ServerAdapter;
+    private serverAdapter?           : ServerAdapter;
     private _isShuttingDown = false;
     private listening = false;
     private rateLimiter = new RateLimiter();
-    private events             : { [K in keyof ServerEvents]?: Set<any> } = {};
     private bootstrapped = false;
+    private bootstrapPromise?        : Promise<void>;
     /** Per-Server metadata / DI registry (no process-global store). */
     public readonly registry = new ApplicationRegistry();
-    private sigtermListener?   : () => void;
-    private sigintListener?    : () => void;
-    private compiledTrustProxy : CompiledTrustProxy | null;
+    private sigtermListener?         : () => void;
+    private sigintListener?          : () => void;
+    private compiledTrustProxy       : CompiledTrustProxy | null;
     private hasSeoRoutes = false;
-    private baseSecurityConfig : SecurityOptions | undefined;
+    private baseSecurityConfig       : SecurityOptions | undefined;
+    private baseHasSecurityGates     : boolean;
+    private baseJsonHeadersTemplate  : Headers;
+    private baseBaseHeadersTemplate  : Headers;
     private routeSecurityCache = new WeakMap<EndpointMetadata, SecurityOptions | undefined>();
-    private baseCorsConfig     : CorsOptions | undefined;
+    private baseCorsConfig           : CorsOptions | undefined;
     private routeCorsCache = new WeakMap<EndpointMetadata, CorsOptions | undefined>();
-    public logger              : Logger;
+    private hasHealthProbe           : boolean;
+    private healthLivePath           : string;
+    private healthReadyPath          : string;
+    private readonly onEndpointError : ( err: unknown, status: number, requestId?: string ) => void;
+    private defaultExecOptions       : ExecuteOptions;
+    private baseFastExecOptions      : ExecuteOptions;
+    private fastExecOptionsCache = new WeakMap<SecurityOptions, ExecuteOptions>();
+    public logger                    : Logger;
 
     public get isShuttingDown(): boolean 
     {
@@ -251,7 +379,28 @@ export class Server extends EventEmitter
             : new NoOpLogger();
         this.compiledTrustProxy = compileTrustProxy( options.trustProxy );
         this.baseSecurityConfig = mergeSecurityConfigs([ options.security ]);
+        this.baseHasSecurityGates = hasSecurityGates( this.baseSecurityConfig );
+        this.baseJsonHeadersTemplate = getCompiledJsonHeadersTemplate( this.baseSecurityConfig );
+        this.baseBaseHeadersTemplate = getCompiledBaseHeadersTemplate( this.baseSecurityConfig );
         this.baseCorsConfig = mergeCorsConfigs([ options.cors ]);
+        this.hasHealthProbe = Boolean( options.health );
+        this.healthLivePath = typeof options.health === 'object' ? ( options.health.path ?? '/health' ) : '/health';
+        this.healthReadyPath = typeof options.health === 'object' ? ( options.health.readyPath ?? '/ready' ) : '/ready';
+        this.onEndpointError = ( err: unknown, status: number, requestId?: string ) =>
+        {
+            this.reportEndpointError( err, status, requestId );
+        };
+        const exposeErrors = Boolean( options.exposeErrors );
+        this.defaultExecOptions = {
+            exposeErrors,
+            onError : this.onEndpointError
+        };
+        this.baseFastExecOptions = {
+            exposeErrors,
+            onError             : this.onEndpointError,
+            jsonHeadersTemplate : this.baseJsonHeadersTemplate,
+            baseHeadersTemplate : this.baseBaseHeadersTemplate
+        };
 
         if( options.signals !== false )
         {
@@ -267,97 +416,118 @@ export class Server extends EventEmitter
     {
         if( this.bootstrapped ){ return }
 
-        await runWithRegistry( this.registry, async () =>
+        if( this.bootstrapPromise )
         {
-            bootstrapRegistry( this.registry, {
-                module       : this.options.module,
-                controllers  : this.options.controllers,
-                providers    : this.options.providers,
-                guards       : this.options.guards,
-                interceptors : this.options.interceptors,
-                responseMode : this.options.responseMode
+            await this.bootstrapPromise;
+
+            return;
+        }
+
+        const work = ( async () =>
+        {
+            await runWithRegistry( this.registry, async () =>
+            {
+                bootstrapRegistry( this.registry, {
+                    module       : this.options.module,
+                    controllers  : this.options.controllers,
+                    providers    : this.options.providers,
+                    guards       : this.options.guards,
+                    interceptors : this.options.interceptors,
+                    responseMode : this.options.responseMode
+                });
+
+                await this.registry.resolveAll();
+
+                const publicKeys = new Set<string>();
+                const internalKeys = new Set<string>();
+
+                for( const endpoint of this.registry.getEndpoints())
+                {
+                    if( endpoint.seo && endpoint.internal )
+                    {
+                        throw new Error(
+                            `Endpoint ${endpoint.controller}.${endpoint.methodName} cannot be both @Seo and @Internal`
+                        );
+                    }
+
+                    const key = `${endpoint.httpMethod} ${endpoint.path}`;
+
+                    if( endpoint.seo )
+                    {
+                        this.hasSeoRoutes = true;
+                        this.seoRouter.add( endpoint );
+                    }
+                    else if( endpoint.internal )
+                    {
+                        if( publicKeys.has( key ))
+                        {
+                            throw new Error( `Internal route ${key} conflicts with a public route` );
+                        }
+
+                        internalKeys.add( key );
+                        this.internalRouter.add( endpoint );
+                    }
+                    else
+                    {
+                        if( internalKeys.has( key ))
+                        {
+                            throw new Error( `Public route ${key} conflicts with an Internal route` );
+                        }
+
+                        publicKeys.add( key );
+                        this.router.add( endpoint );
+                    }
+
+                    if( this.options.logs )
+                    {
+                        const group = endpoint.seo ? 'seo' : endpoint.internal ? 'internal' : 'public';
+
+                        this.logger.info(
+                            `Registered route (${group}): ${endpoint.httpMethod.padEnd( 6 )} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
+                            {
+                                type       : 'registration',
+                                method     : endpoint.httpMethod,
+                                path       : endpoint.path,
+                                controller : endpoint.controller,
+                                action     : endpoint.methodName
+                            }
+                        );
+                    }
+                }
+
+                // Compiling here means overlapping patterns are reported at bootstrap rather
+                // than silently shadowing each other on the first request.
+                this.seoRouter.compile();
+                this.router.compile();
+                this.internalRouter.compile();
+
+                for( const warning of [ ...this.seoRouter.warnings, ...this.router.warnings, ...this.internalRouter.warnings ])
+                {
+                    this.logger.warn( warning, { type : 'registration' });
+                }
+
+                for( const cycle of this.registry.dependencyCycles )
+                {
+                    this.logger.warn(
+                        `Circular dependency: ${cycle}. It resolves through a lazy proxy, but a request scope inside the cycle cannot be detected.`,
+                        { type : 'registration' }
+                    );
+                }
             });
 
-            await this.registry.resolveAll();
+            this.bootstrapped = true;
+        })();
 
-            const publicKeys = new Set<string>();
-            const internalKeys = new Set<string>();
+        this.bootstrapPromise = work;
 
-            for( const endpoint of this.registry.getEndpoints())
-            {
-                if( endpoint.seo && endpoint.internal )
-                {
-                    throw new Error(
-                        `Endpoint ${endpoint.controller}.${endpoint.methodName} cannot be both @Seo and @Internal`
-                    );
-                }
-
-                const key = `${endpoint.httpMethod} ${endpoint.path}`;
-
-                if( endpoint.seo )
-                {
-                    this.hasSeoRoutes = true;
-                    this.seoRouter.add( endpoint );
-                }
-                else if( endpoint.internal )
-                {
-                    if( publicKeys.has( key ))
-                    {
-                        throw new Error( `Internal route ${key} conflicts with a public route` );
-                    }
-
-                    internalKeys.add( key );
-                    this.internalRouter.add( endpoint );
-                }
-                else
-                {
-                    if( internalKeys.has( key ))
-                    {
-                        throw new Error( `Public route ${key} conflicts with an Internal route` );
-                    }
-
-                    publicKeys.add( key );
-                    this.router.add( endpoint );
-                }
-
-                if( this.options.logs )
-                {
-                    const group = endpoint.seo ? 'seo' : endpoint.internal ? 'internal' : 'public';
-
-                    this.logger.info(
-                        `Registered route (${group}): ${endpoint.httpMethod.padEnd( 6 )} ${endpoint.path} -> ${endpoint.controller}.${endpoint.methodName}`,
-                        {
-                            type       : 'registration',
-                            method     : endpoint.httpMethod,
-                            path       : endpoint.path,
-                            controller : endpoint.controller,
-                            action     : endpoint.methodName
-                        }
-                    );
-                }
-            }
-
-            // Compiling here means overlapping patterns are reported at bootstrap rather
-            // than silently shadowing each other on the first request.
-            this.seoRouter.compile();
-            this.router.compile();
-            this.internalRouter.compile();
-
-            for( const warning of [ ...this.seoRouter.warnings, ...this.router.warnings, ...this.internalRouter.warnings ])
-            {
-                this.logger.warn( warning, { type : 'registration' });
-            }
-
-            for( const cycle of this.registry.dependencyCycles )
-            {
-                this.logger.warn(
-                    `Circular dependency: ${cycle}. It resolves through a lazy proxy, but a request scope inside the cycle cannot be detected.`,
-                    { type : 'registration' }
-                );
-            }
-        });
-
-        this.bootstrapped = true;
+        try
+        {
+            await work;
+        }
+        finally
+        {
+            this.bootstrapPromise = undefined;
+        }
     }
 
     /** @deprecated Use ensureReady() — kept for tests that called init(). */
@@ -366,40 +536,58 @@ export class Server extends EventEmitter
         await this.ensureReady();
     }
 
-    public on<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]) 
+    public override on<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]): this;
+    public override on( event: string | symbol, handler: ( ...args: any[]) => void ): this;
+    public override on( event: string | symbol, handler: ( ...args: any[]) => void ): this
     {
-        if( !this.events[event]) { this.events[event] = new Set() }
-        this.events[event]!.add( handler );
-
-        return this;
+        return super.on( event, handler );
     }
 
-    public off<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]) 
+    public override off<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]): this;
+    public override off( event: string | symbol, handler: ( ...args: any[]) => void ): this;
+    public override off( event: string | symbol, handler: ( ...args: any[]) => void ): this
     {
-        this.events[event]?.delete( handler );
-
-        return this;
+        return super.off( event, handler );
     }
 
-    private internalEmit<K extends keyof ServerEvents>( event: K, ...args: Parameters<ServerEvents[K]> ) 
+    public override once<K extends keyof ServerEvents>( event: K, handler: ServerEvents[K]): this;
+    public override once( event: string | symbol, handler: ( ...args: any[]) => void ): this;
+    public override once( event: string | symbol, handler: ( ...args: any[]) => void ): this
     {
-        this.events[event]?.forEach( h => h( ...args ));
+        return super.once( event, handler );
+    }
+
+    private internalEmit<K extends keyof ServerEvents>( event: K, ...args: Parameters<ServerEvents[K]> ): void
+    {
+        if( event === 'error' && this.listenerCount( 'error' ) === 0 )
+        {
+            return;
+        }
+
+        this.emit( event, ...args );
     }
 
     private setupSignals(): void
     {
+        if( this.sigtermListener || this.sigintListener ){ return }
+
+        const selfRef = new WeakRef( this );
         const handleSignal = ( signal: string ) => 
         {
-            this.removeSignals();
+            const srv = selfRef.deref();
 
-            if( this.options.logs ) 
+            if( !srv ){ return }
+
+            srv.removeSignals();
+
+            if( srv.options.logs ) 
             {
-                this.logger.warn( `\nReceived ${signal}. Starting graceful shutdown...`, {
+                srv.logger.warn( `\nReceived ${signal}. Starting graceful shutdown...`, {
                     type   : 'server_shutdown',
                     reason : signal
                 });
             }
-            this.shutdown( signal );
+            void srv.shutdown( signal );
         };
 
         this.sigtermListener = () => handleSignal( 'SIGTERM' );
@@ -409,11 +597,17 @@ export class Server extends EventEmitter
         {
             process.on( 'SIGTERM', this.sigtermListener );
             process.on( 'SIGINT', this.sigintListener );
+            serverSignalFinalizer?.register( this, {
+                sigterm : this.sigtermListener,
+                sigint  : this.sigintListener
+            }, this );
         }
     }
 
     private removeSignals(): void
     {
+        serverSignalFinalizer?.unregister( this );
+
         if( typeof process !== 'undefined' && typeof process.off === 'function' ) 
         {
             if( this.sigtermListener ){ process.off( 'SIGTERM', this.sigtermListener ) }
@@ -600,6 +794,39 @@ export class Server extends EventEmitter
         sreq.routeFiles = match.metadata.files;
     }
 
+    private getFastExecOptions( securityConfig?: SecurityOptions ): ExecuteOptions
+    {
+        if( securityConfig === this.baseSecurityConfig )
+        {
+            return this.baseFastExecOptions;
+        }
+
+        if( securityConfig === undefined )
+        {
+            return {
+                exposeErrors        : Boolean( this.options.exposeErrors ),
+                onError             : this.onEndpointError,
+                jsonHeadersTemplate : NO_SEC_JSON_HEADERS_TEMPLATE,
+                baseHeadersTemplate : NO_SEC_BASE_HEADERS_TEMPLATE
+            };
+        }
+
+        let cached = this.fastExecOptionsCache.get( securityConfig );
+
+        if( !cached )
+        {
+            cached = {
+                exposeErrors        : Boolean( this.options.exposeErrors ),
+                onError             : this.onEndpointError,
+                jsonHeadersTemplate : getCompiledJsonHeadersTemplate( securityConfig ),
+                baseHeadersTemplate : getCompiledBaseHeadersTemplate( securityConfig )
+            };
+            this.fastExecOptionsCache.set( securityConfig, cached );
+        }
+
+        return cached;
+    }
+
     private async runEndpoint(
         metadata: EndpointMetadata,
         sreq: ServerRequest,
@@ -622,42 +849,82 @@ export class Server extends EventEmitter
         }
     }
 
-    private async runEndpointTimed(
+    private reportEndpointError( err: unknown, status: number, requestId?: string ): void
+    {
+        if( status < 500 ){ return }
+
+        if( this.listenerCount( 'error' ) > 0 )
+        {
+            this.internalEmit( 'error', err instanceof Error ? err : new Error( String( err )));
+        }
+
+        if( this.options.logs )
+        {
+            const msg = err && typeof err === 'object' && typeof ( err as { message? : unknown }).message === 'string'
+                ? ( err as { message : string }).message
+                : String( err );
+            this.logger.error( `Server Error: ${msg}`, {
+                type  : 'error',
+                error : errorLogFields( err ) as any,
+                requestId
+            });
+        }
+    }
+
+    private runEndpointTimed(
         metadata: EndpointMetadata,
         sreq: ServerRequest,
         securityConfig?: SecurityOptions
     ): Promise<Response>
     {
-        if( securityConfig?.timeout )
+        if( !securityConfig?.timeout )
         {
-            const timeoutMs = securityConfig.timeout;
-            const controller = new AbortController();
-            sreq.signal = controller.signal;
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const work = RequestProcessor.execute( metadata, sreq, securityConfig, this.registry );
-
-            try
-            {
-                return await Promise.race([
-                    work,
-                    new Promise<never>(( _, reject ) =>
-                    {
-                        timer = setTimeout(() =>
-                        {
-                            controller.abort();
-                            reject( Object.assign( new Error( `Request Timeout (${timeoutMs}ms)` ), { status : 408 }));
-                        }, timeoutMs );
-                    })
-                ]);
-            }
-            finally
-            {
-                if( timer !== undefined ) { clearTimeout( timer ) }
-                void work.catch(() => undefined );
-            }
+            return RequestProcessor.execute( metadata, sreq, securityConfig, this.registry, this.defaultExecOptions );
         }
 
-        return RequestProcessor.execute( metadata, sreq, securityConfig, this.registry );
+        return this.runEndpointWithTimeout( metadata, sreq, securityConfig, securityConfig.timeout );
+    }
+
+    private async runEndpointWithTimeout(
+        metadata: EndpointMetadata,
+        sreq: ServerRequest,
+        securityConfig: SecurityOptions,
+        timeoutMs: number
+    ): Promise<Response>
+    {
+        const prevSignal = sreq.signal;
+        const controller = new AbortController();
+
+        if( prevSignal )
+        {
+            if( prevSignal.aborted ){ controller.abort() }
+            else { prevSignal.addEventListener( 'abort', () => controller.abort(), { once : true }) }
+        }
+
+        sreq.signal = controller.signal;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const work = RequestProcessor.execute( metadata, sreq, securityConfig, this.registry, this.defaultExecOptions );
+
+        try
+        {
+            return await Promise.race([
+                work,
+                new Promise<never>(( _, reject ) =>
+                {
+                    timer = setTimeout(() =>
+                    {
+                        controller.abort();
+                        reject( Object.assign( new Error( `Request Timeout (${timeoutMs}ms)` ), { status : 408 }));
+                    }, timeoutMs );
+                    timer.unref?.();
+                })
+            ]);
+        }
+        finally
+        {
+            if( timer !== undefined ) { clearTimeout( timer ) }
+            void work.catch(() => undefined );
+        }
     }
 
     /**
@@ -696,7 +963,7 @@ export class Server extends EventEmitter
         }
 
         sreq.routeFiles = match.metadata.files;
-        sreq.forwardBody = target.body ? target.body : undefined;
+        sreq.forwardBody = target.body !== undefined ? target.body : undefined;
 
         const securityConfig = this.resolveEndpointSecurity( match.metadata );
         this.enforceSecurityGates( securityConfig, request, sreq, method, match.metadata.path );
@@ -706,48 +973,43 @@ export class Server extends EventEmitter
     }
 
     /** @internal */
-    public fetch = async ( request: Request ): Promise<Response> => 
+    public fetch = ( request: Request ): Promise<Response> => 
     {
-        const probe = await this.answerHealthProbe( request );
+        if( this.hasHealthProbe && request.method === 'GET' )
+        {
+            const pathname = pathnameFromUrl( request.url );
 
-        if( probe ) { return probe }
+            if( pathname === this.healthLivePath || pathname === this.healthReadyPath )
+            {
+                return this.answerHealthProbeForPath( request, pathname );
+            }
+        }
 
-        await this.ensureReady();
+        if( this.bootstrapped )
+        {
+            return this.handleFetch( request );
+        }
 
-        return this.handleFetch( request );
+        return this.ensureReady().then(() => this.handleFetch( request ));
     };
 
     /**
      * Liveness / readiness are answered before bootstrap and routing so a broken module
-     * graph cannot take the probes down. Returns null when health is disabled or the
-     * path is not a probe.
+     * graph cannot take the probes down.
      */
-    private async answerHealthProbe( request: Request ): Promise<Response | null>
+    private async answerHealthProbeForPath( request: Request, pathname: string ): Promise<Response>
     {
-        if( !this.options.health || request.method !== 'GET' ) { return null }
-
-        const pathname = pathnameFromUrl( request.url );
-        const paths = typeof this.options.health === 'object'
-            ? {
-                live  : this.options.health.path ?? '/health',
-                ready : this.options.health.readyPath ?? '/ready'
-            }
-            : { live : '/health', ready : '/ready' };
-
-        if( pathname !== paths.live && pathname !== paths.ready )
-        {
-            return null;
-        }
-
         const requestId = resolveRequestId( request );
         const headers = {
             'Content-Type'      : 'application/json',
             [REQUEST_ID_HEADER] : requestId
         };
 
-        if( pathname === paths.live )
+        if( pathname === this.healthLivePath )
         {
-            return new Response( JSON.stringify({ status : 'ok' }), { status : 200, headers });
+            const body = JSON.stringify({ status : 'ok' });
+
+            return tagDirectResponse( new Response( body, { status : 200, headers }), body );
         }
 
         try
@@ -756,18 +1018,15 @@ export class Server extends EventEmitter
         }
         catch
         {
-            return new Response(
-                JSON.stringify({ status : 'not_ready' }),
-                { status : 503, headers }
-            );
+            const body = JSON.stringify({ status : 'not_ready' });
+
+            return tagDirectResponse( new Response( body, { status : 503, headers }), body );
         }
 
         const ready = this.isReady();
+        const body = JSON.stringify({ status : ready ? 'ready' : 'not_ready' });
 
-        return new Response(
-            JSON.stringify({ status : ready ? 'ready' : 'not_ready' }),
-            { status : ready ? 200 : 503, headers }
-        );
+        return tagDirectResponse( new Response( body, { status : ready ? 200 : 503, headers }), body );
     }
 
     private isReady(): boolean
@@ -858,12 +1117,15 @@ export class Server extends EventEmitter
             }
 
             const controllerModule = this.registry.getTokenModule( ep.controller );
-            const moduleFiles = controllerModule?.files;
+            const moduleCtor = controllerModule?.moduleClass || controllerModule?.constructor;
+            const moduleFiles = ( moduleCtor && getModuleMeta( moduleCtor )?.files )
+                ?? controllerModule?.__moduleMetadata__?.files
+                ?? controllerModule?.files;
             const usesFiles = Boolean(
                 ep.files
                 || moduleFiles
                 || this.options.files
-                || ( Array.isArray( ep.params ) && ep.params.some(( p: any ) => p?.source === 'File' || p?.source === 'Files' ))
+                || ( Array.isArray( ep.params ) && ep.params.some(( p: any ) => p?.source === 'File' || p?.source === 'Files' || p?.source === 'Body' ))
             );
 
             if( usesFiles )
@@ -899,6 +1161,11 @@ export class Server extends EventEmitter
         allowHeader?: string
     ): Response
     {
+        if(( res as any )[FINALIZED_RESPONSE] === true )
+        {
+            return res;
+        }
+
         const corsHeaders = corsConfig ? handleCors( request, corsConfig ) : null;
         const secHeaders = securityConfig !== undefined ? getCompiledSecurityHeaders( securityConfig ) : null;
 
@@ -912,6 +1179,17 @@ export class Server extends EventEmitter
         {
             const merged = new Headers( res.headers );
             applyFinalHeaders( merged, corsHeaders, secHeaders, allowHeader, requestId );
+
+            if( DIRECT_RESPONSE_BODY in res )
+            {
+                const direct = ( res as any )[DIRECT_RESPONSE_BODY] as string | Uint8Array | null;
+
+                return tagDirectResponse( new Response( direct as BodyInit | null, {
+                    status     : res.status,
+                    statusText : res.statusText,
+                    headers    : merged
+                }), direct );
+            }
 
             return new Response( res.body, {
                 status     : res.status,
@@ -929,6 +1207,12 @@ export class Server extends EventEmitter
         routeKey: string
     ): void
     {
+        const hasGates = cfg === this.baseSecurityConfig
+            ? this.baseHasSecurityGates
+            : hasSecurityGates( cfg );
+
+        if( !hasGates ){ return }
+
         // Enforce allowedHosts (HTTP Host header allowlist)
         if( cfg?.allowedHosts && cfg.allowedHosts !== true && !isHostAllowed( request.headers.get( 'host' ), cfg ))
         {
@@ -958,7 +1242,7 @@ export class Server extends EventEmitter
         if( cfg?.rateLimit ) 
         {
             const ip = sreq.ip;
-            const limit = this.rateLimiter.consume( ip, routeKey, cfg.rateLimit );
+            const limit = this.rateLimiter.consume( ip, routeKey, cfg.rateLimit, method );
 
             if( !limit.allowed ) 
             {
@@ -991,35 +1275,185 @@ export class Server extends EventEmitter
         });
     }
 
-    private handleFetch = async ( request: Request ): Promise<Response> => 
+    private resolveExternalAllowed( path: string, publicLookup: RouteLookup ): string[]
     {
-        if( this.events.request?.size )
+        if( !this.hasSeoRoutes && !publicLookup.match )
+        {
+            return publicLookup.allowed;
+        }
+
+        return this.externalAllowedMethods( path );
+    }
+
+    private async handleFetchError(
+        err: any,
+        request: Request,
+        sreq: ServerRequest,
+        method: string,
+        path: string,
+        startTime: number,
+        requestId: string,
+        finalMatch: RouteMatch | null
+    ): Promise<Response>
+    {
+        try
+        {
+            await sreq.cleanupDiskUploads();
+
+            if( this.listenerCount( 'error' ) > 0 )
+            {
+                this.internalEmit( 'error', err );
+            }
+
+            const statusCode = httpStatusFromError( err );
+
+            if( this.options.logs ) 
+            {
+                this.logger.error( `Server Error: ${err.message}`, {
+                    type  : 'error',
+                    error : errorLogFields( err ) as any,
+                    requestId
+                });
+                this.logRequestEnd( startTime, method, path, statusCode, requestId );
+            }
+
+            const corsConfig = this.resolveEndpointCors( finalMatch?.metadata );
+            const errSecurityConfig = this.resolveEndpointSecurity( finalMatch?.metadata );
+            const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };
+
+            // Errors may carry protocol headers of their own, e.g. Retry-After on a 429.
+            if( err && typeof err === 'object' && err.headers && typeof err.headers === 'object' ) 
+            {
+                if( err.headers instanceof Headers )
+                {
+                    err.headers.forEach(( value: string, key: string ) =>
+                    {
+                        errHeaders[key] = value;
+                    });
+                }
+                else
+                {
+                    for( const [ key, value ] of Object.entries( err.headers as Record<string, unknown> )) 
+                    {
+                        if( typeof value === 'string' ) { errHeaders[key] = value }
+                    }
+                }
+            }
+
+            const errBody = JSON.stringify( clientErrorBody( err, statusCode, Boolean( this.options.exposeErrors )));
+            let res = tagDirectResponse( new Response( errBody, {
+                status  : statusCode,
+                headers : errHeaders
+            }), errBody );
+            res = this.finalizeResponse( res, request, requestId, corsConfig, errSecurityConfig );
+
+            if( method === 'HEAD' ) 
+            {
+                res = tagDirectResponse( new Response( null, {
+                    status     : res.status,
+                    statusText : res.statusText,
+                    headers    : res.headers
+                }), null );
+            }
+
+            return res;
+        }
+        finally
+        {
+            this.activeRequests--;
+        }
+    }
+
+    private async finishPublicAsync(
+        pendingPromise: Promise<Response>,
+        request: Request,
+        sreq: ServerRequest,
+        method: string,
+        path: string,
+        startTime: number,
+        requestId: string,
+        finalMatch: RouteMatch,
+        activeCors: CorsOptions | undefined,
+        activeSecurity: SecurityOptions | undefined
+    ): Promise<Response>
+    {
+        try
+        {
+            let response: Response;
+
+            try
+            {
+                response = await pendingPromise;
+            }
+            catch( err: any )
+            {
+                if( err instanceof ForwardIntent )
+                {
+                    response = await this.executeForward( err.target, sreq, request );
+                }
+                else
+                {
+                    throw err;
+                }
+            }
+
+            response = this.finalizeResponse( response, request, requestId, activeCors, activeSecurity );
+            this.logRequestEnd( startTime, method, path, response.status, requestId );
+
+            if( method === 'HEAD' )
+            {
+                cancelResponseBody( response );
+                response = tagDirectResponse( new Response( null, {
+                    status     : response.status,
+                    statusText : response.statusText,
+                    headers    : response.headers
+                }), null );
+            }
+
+            this.activeRequests--;
+
+            return response;
+        }
+        catch( err: any )
+        {
+            return this.handleFetchError( err, request, sreq, method, path, startTime, requestId, finalMatch );
+        }
+    }
+
+    private handleFetch = ( request: Request ): Promise<Response> => 
+    {
+        if( this.listenerCount( 'request' ) > 0 )
         {
             this.internalEmit( 'request', request );
         }
 
         const requestId = resolveRequestId( request );
 
-        if( this.isShuttingDown ) 
+        if( this._isShuttingDown ) 
         {
-            const res = new Response( 'Service Unavailable (Shutting Down)', { status : 503 });
+            const body = 'Service Unavailable (Shutting Down)';
+            const res = tagDirectResponse( new Response( body, { status : 503 }), body );
 
-            return this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
+            return Promise.resolve(
+                this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig )
+            );
         }
 
         this.activeRequests++;
         const startTime = this.options.logs ? Date.now() : 0;
-        const isUpgrade = request.headers.get( 'upgrade' )?.toLowerCase() === 'websocket';
-        const method = isUpgrade ? 'WS' : request.method;
-        const sreq = new ServerRequest( request, {
+        const rawMethod = request.method;
+        const isUpgrade = rawMethod === 'GET' && request.headers.get( 'upgrade' )?.toLowerCase() === 'websocket';
+        const method = isUpgrade ? 'WS' : rawMethod;
+        const sreq = ServerRequest.createInternal(
+            request,
             requestId,
-            trustProxy         : this.options.trustProxy,
-            compiledTrustProxy : this.compiledTrustProxy,
-            globalFiles        : this.options.files,
-            globalReviver      : this.options.reviver
-        });
+            this.options.trustProxy,
+            this.compiledTrustProxy,
+            this.options.files,
+            this.options.reviver
+        );
         const path = sreq.path;
-    
+
         if( this.options.logs ) 
         {
             const rawSearch = sreq.queryString ? `?${sreq.queryString}` : '';
@@ -1032,25 +1466,174 @@ export class Server extends EventEmitter
             });
         }
 
+        if( isUpgrade || this.hasSeoRoutes || method === 'OPTIONS' )
+        {
+            return this.handleFetchComplex( request, sreq, method, path, isUpgrade, startTime, requestId );
+        }
+
         let finalMatch: RouteMatch | null = null;
+
+        try
+        {
+            const publicLookup = this.router.lookup( method, path );
+            const pubMatch = publicLookup.match;
+
+            if( !pubMatch )
+            {
+                const externalAllowed = publicLookup.allowed;
+                const wrongMethod = externalAllowed.length > 0;
+                const status = wrongMethod ? 405 : 404;
+                const body = wrongMethod ? 'Method Not Allowed' : 'Not Found';
+
+                this.logRequestEnd( startTime, method, path, status, requestId, body );
+
+                let res = tagDirectResponse( new Response( body, {
+                    status,
+                    headers : wrongMethod ? { Allow : externalAllowed.join( ', ' ) } : undefined
+                }), body );
+                res = this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
+
+                if( method === 'HEAD' )
+                {
+                    res = tagDirectResponse( new Response( null, {
+                        status     : res.status,
+                        statusText : res.statusText,
+                        headers    : res.headers
+                    }), null );
+                }
+
+                this.activeRequests--;
+
+                return Promise.resolve( res );
+            }
+
+            finalMatch = pubMatch;
+            sreq.params = pubMatch.params;
+            sreq.routeFiles = pubMatch.metadata.files;
+
+            const activeSecurity = pubMatch.metadata.security === undefined
+                ? this.baseSecurityConfig
+                : this.resolveEndpointSecurity( pubMatch.metadata );
+            const activeCors = pubMatch.metadata.cors === undefined
+                ? this.baseCorsConfig
+                : this.resolveEndpointCors( pubMatch.metadata );
+
+            this.enforceSecurityGates( activeSecurity, request, sreq, method, pubMatch.metadata.path );
+
+            if( activeCors || activeSecurity?.timeout || RequestProcessor.execute !== DEFAULT_RP_EXECUTE )
+            {
+                const work = this.runEndpoint( pubMatch.metadata, sreq, activeSecurity, request );
+
+                return this.finishPublicAsync(
+                    work,
+                    request,
+                    sreq,
+                    method,
+                    path,
+                    startTime,
+                    requestId,
+                    pubMatch,
+                    activeCors,
+                    activeSecurity
+                );
+            }
+
+            const fastExecOpts = this.getFastExecOptions( activeSecurity );
+            const outOrPromise = RequestProcessor.executeInternal(
+                pubMatch.metadata,
+                sreq,
+                activeSecurity,
+                this.registry,
+                fastExecOpts
+            );
+
+            if( outOrPromise instanceof Promise )
+            {
+                return this.finishPublicAsync(
+                    outOrPromise,
+                    request,
+                    sreq,
+                    method,
+                    path,
+                    startTime,
+                    requestId,
+                    pubMatch,
+                    activeCors,
+                    activeSecurity
+                );
+            }
+
+            let response = this.finalizeResponse( outOrPromise, request, requestId, undefined, activeSecurity );
+            this.logRequestEnd( startTime, method, path, response.status, requestId );
+
+            if( method === 'HEAD' )
+            {
+                cancelResponseBody( response );
+                response = tagDirectResponse( new Response( null, {
+                    status     : response.status,
+                    statusText : response.statusText,
+                    headers    : response.headers
+                }), null );
+            }
+
+            this.activeRequests--;
+
+            return Promise.resolve( response );
+        }
+        catch( err: any )
+        {
+            if( err instanceof ForwardIntent )
+            {
+                const activeSecurity = finalMatch ? this.resolveEndpointSecurity( finalMatch.metadata ) : this.baseSecurityConfig;
+                const activeCors = finalMatch ? this.resolveEndpointCors( finalMatch.metadata ) : this.baseCorsConfig;
+
+                return this.finishPublicAsync(
+                    this.executeForward( err.target, sreq, request ),
+                    request,
+                    sreq,
+                    method,
+                    path,
+                    startTime,
+                    requestId,
+                    finalMatch!,
+                    activeCors,
+                    activeSecurity
+                );
+            }
+
+            return this.handleFetchError( err, request, sreq, method, path, startTime, requestId, finalMatch );
+        }
+    };
+
+    private async handleFetchComplex(
+        request: Request,
+        sreq: ServerRequest,
+        method: string,
+        path: string,
+        isUpgrade: boolean,
+        startTime: number,
+        requestId: string
+    ): Promise<Response>
+    {
+        let finalMatch: RouteMatch | null = null;
+
         try 
         {
             // SEO group first (matchAll for void fallthrough), then public. Internal never
             // participates in external lookup.
-            const seoMatches = ( isUpgrade || !this.hasSeoRoutes ) ? [] : this.seoRouter.matchAll( method, path );
+            const seoMatches = ( isUpgrade || !this.hasSeoRoutes ) ? EMPTY_SEO_MATCHES : this.seoRouter.matchAll( method, path );
             const publicLookup = this.router.lookup( method, path );
-            const getExternalAllowed = (): string[] =>
-            {
-                if( !this.hasSeoRoutes && !publicLookup.match )
-                {
-                    return publicLookup.allowed;
-                }
 
-                return this.externalAllowedMethods( path );
-            };
+            const preflightReq = !isUpgrade && method === 'OPTIONS' && isPreflight( request );
+            const acrm = preflightReq
+                ? request.headers.get( 'access-control-request-method' )?.trim().toUpperCase()
+                : undefined;
+            const preflightTargetMatch = acrm
+                ? (( this.hasSeoRoutes ? this.seoRouter.match( acrm, path ) : null ) || this.router.match( acrm, path ))
+                : null;
 
             const match = seoMatches[0] || publicLookup.match;
-            finalMatch = match || ( method === 'OPTIONS'
+            finalMatch = match || preflightTargetMatch || ( method === 'OPTIONS'
                 ? (( this.hasSeoRoutes ? this.seoRouter.lookup( method, path ).fallback : null ) || publicLookup.fallback )
                 : null );
 
@@ -1060,13 +1643,34 @@ export class Server extends EventEmitter
             // A genuine CORS preflight is answered here, before guards run. Browsers omit
             // credentials on preflight, so dispatching it into a @Protect'ed route would
             // reject it and break CORS for every protected endpoint.
-            if( isPreflight( request )) 
+            if( preflightReq ) 
             {
+                // Enforce allowedHosts even on preflights so Host-header allowlists cannot be bypassed.
+                if( securityConfig?.allowedHosts && securityConfig.allowedHosts !== true && !isHostAllowed( request.headers.get( 'host' ), securityConfig ))
+                {
+                    this.logRequestEnd( startTime, method, path, 403, requestId, 'Disallowed Host' );
+                    this.activeRequests--;
+
+                    const body = JSON.stringify({ success : false, error : 'Forbidden: Disallowed Host' });
+
+                    return this.finalizeResponse(
+                        tagDirectResponse( new Response( body, {
+                            status  : 403,
+                            headers : { 'Content-Type' : 'application/json' }
+                        }), body ),
+                        request,
+                        requestId,
+                        undefined,
+                        securityConfig
+                    );
+                }
+
                 const corsRes = corsConfig ? handleCors( request, corsConfig ) : null;
 
                 if( corsRes instanceof Response ) 
                 {
-                    this.logRequestEnd( startTime, method, path, 204, requestId, 'CORS Preflight' );
+                    this.logRequestEnd( startTime, method, path, corsRes.status, requestId, 'CORS Preflight' );
+                    this.activeRequests--;
 
                     return this.finalizeResponse( corsRes, request, requestId, undefined, securityConfig );
                 }
@@ -1074,13 +1678,27 @@ export class Server extends EventEmitter
                 if( !finalMatch ) 
                 {
                     this.logRequestEnd( startTime, method, path, 404, requestId, 'Not Found' );
+                    this.activeRequests--;
 
-                    return this.finalizeResponse( new Response( 'Not Found', { status : 404 }), request, requestId, undefined, securityConfig );
+                    return this.finalizeResponse(
+                        tagDirectResponse( new Response( 'Not Found', { status : 404 }), 'Not Found' ),
+                        request,
+                        requestId,
+                        undefined,
+                        securityConfig
+                    );
                 }
 
                 this.logRequestEnd( startTime, method, path, 204, requestId );
+                this.activeRequests--;
 
-                return this.finalizeResponse( this.optionsResponse( path, getExternalAllowed()), request, requestId, undefined, securityConfig );
+                return this.finalizeResponse(
+                    this.optionsResponse( path, this.resolveExternalAllowed( path, publicLookup )),
+                    request,
+                    requestId,
+                    undefined,
+                    securityConfig
+                );
             }
 
             // Non-preflight OPTIONS falls through to an @Options / @All handler when one
@@ -1090,29 +1708,45 @@ export class Server extends EventEmitter
                 if( !finalMatch ) 
                 {
                     this.logRequestEnd( startTime, method, path, 404, requestId, 'Not Found' );
+                    this.activeRequests--;
 
-                    return this.finalizeResponse( new Response( 'Not Found', { status : 404 }), request, requestId, undefined, securityConfig );
+                    return this.finalizeResponse(
+                        tagDirectResponse( new Response( 'Not Found', { status : 404 }), 'Not Found' ),
+                        request,
+                        requestId,
+                        undefined,
+                        securityConfig
+                    );
                 }
 
                 this.logRequestEnd( startTime, method, path, 204, requestId );
+                this.activeRequests--;
 
-                return this.finalizeResponse( this.optionsResponse( path, getExternalAllowed()), request, requestId, corsConfig, securityConfig );
+                return this.finalizeResponse(
+                    this.optionsResponse( path, this.resolveExternalAllowed( path, publicLookup )),
+                    request,
+                    requestId,
+                    corsConfig,
+                    securityConfig
+                );
             }
 
             if( !finalMatch && seoMatches.length === 0 ) 
             {
                 // The path exists under other verbs, so this is 405 + Allow, not 404. An
                 // upgrade request is exempt: WS is a transport, not an advertised method.
-                const externalAllowed = isUpgrade ? [] : getExternalAllowed();
+                const externalAllowed = isUpgrade ? EMPTY_SEO_MATCHES as unknown as string[] : this.resolveExternalAllowed( path, publicLookup );
                 const wrongMethod = !isUpgrade && externalAllowed.length > 0;
                 const status = wrongMethod ? 405 : 404;
+                const body = wrongMethod ? 'Method Not Allowed' : 'Not Found';
 
-                this.logRequestEnd( startTime, method, path, status, requestId, wrongMethod ? 'Method Not Allowed' : 'Not Found' );
+                this.logRequestEnd( startTime, method, path, status, requestId, body );
+                this.activeRequests--;
 
-                const res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
+                const res = tagDirectResponse( new Response( body, {
                     status,
                     headers : wrongMethod ? { Allow : externalAllowed.join( ', ' ) } : undefined
-                });
+                }), body );
 
                 return this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
             }
@@ -1124,7 +1758,36 @@ export class Server extends EventEmitter
                 finalMatch = wsMatch;
 
                 const wsSecurity = this.resolveEndpointSecurity( wsMatch.metadata );
+                const wsCors = this.resolveEndpointCors( wsMatch.metadata );
                 this.enforceSecurityGates( wsSecurity, request, sreq, 'WS', wsMatch.metadata.path );
+
+                // Enforce Origin policy on WebSocket upgrades whenever @Cors / server cors is configured
+                // and the client presents an Origin header (browsers always send Origin on WS handshakes;
+                // browsers do NOT send CORS preflights for WebSocket, preventing CSWSH).
+                const wsOrigin = request.headers.get( 'origin' );
+
+                if( wsCors && wsOrigin !== null )
+                {
+                    const wsCorsHeaders = handleCors( request, wsCors );
+
+                    if(
+                        wsCorsHeaders instanceof Response
+                        || !wsCorsHeaders
+                        || !wsCorsHeaders['Access-Control-Allow-Origin']
+                    )
+                    {
+                        this.logRequestEnd( startTime, method, path, 403, requestId, 'WS Origin Forbidden' );
+                        this.activeRequests--;
+
+                        return this.finalizeResponse(
+                            tagDirectResponse( new Response( 'Forbidden: Origin not allowed', { status : 403 }), 'Forbidden: Origin not allowed' ),
+                            request,
+                            requestId,
+                            wsCors,
+                            wsSecurity
+                        );
+                    }
+                }
 
                 // Enforce guards + upgrade within request context
                 const registry = this.registry;
@@ -1139,7 +1802,7 @@ export class Server extends EventEmitter
                     registry
                 };
 
-                return await Context.run( requestCtx, async () =>
+                const wsOut = await Context.run( requestCtx, async () =>
                 {
                     let handedOffToWs = false;
                     try
@@ -1161,19 +1824,22 @@ export class Server extends EventEmitter
 
                         if( !ctx.success ) 
                         {
-                            return this.finalizeResponse( new Response( JSON.stringify({
+                            const badBody = JSON.stringify({
                                 success : false,
                                 message : 'request validation failed',
                                 errors  : ctx.errors
-                            }), {
+                            });
+
+                            return this.finalizeResponse( tagDirectResponse( new Response( badBody, {
                                 status  : 400,
                                 headers : { 'Content-Type' : 'application/json' }
-                            }), request, requestId );
+                            }), badBody ), request, requestId, wsCors, wsSecurity );
                         }
 
                         if( this.serverAdapter && typeof this.serverAdapter.upgrade === 'function' ) 
                         {
                             ( request as any ).__wsRequestContext = requestCtx;
+                            ( request as any ).__wsMaskErrors = !this.options.exposeErrors;
                             const res = await this.serverAdapter.upgrade( request, finalMatch!.metadata, finalMatch!.params );
 
                             if( res.status < 400 && !requestCtx.wsCleanedUp )
@@ -1185,10 +1851,16 @@ export class Server extends EventEmitter
                                 delete ( request as any ).__wsRequestContext;
                             }
 
-                            return this.finalizeResponse( res, request, requestId );
+                            return this.finalizeResponse( res, request, requestId, wsCors, wsSecurity );
                         }
 
-                        return this.finalizeResponse( new Response( 'WebSockets not supported by adapter', { status : 501 }), request, requestId );
+                        return this.finalizeResponse(
+                            tagDirectResponse( new Response( 'WebSockets not supported by adapter', { status : 501 }), 'WebSockets not supported by adapter' ),
+                            request,
+                            requestId,
+                            wsCors,
+                            wsSecurity
+                        );
                     }
                     finally
                     {
@@ -1198,6 +1870,10 @@ export class Server extends EventEmitter
                         }
                     }
                 });
+
+                this.activeRequests--;
+
+                return wsOut;
             }
 
             let response: Response | undefined;
@@ -1207,6 +1883,7 @@ export class Server extends EventEmitter
             // Try SEO matches in specificity order; void → next; forward → internal hop.
             for( const seoMatch of seoMatches )
             {
+                finalMatch = seoMatch;
                 this.applyMatchBags( sreq, seoMatch );
                 activeSecurity = this.resolveEndpointSecurity( seoMatch.metadata );
                 activeCors = this.resolveEndpointCors( seoMatch.metadata );
@@ -1240,16 +1917,19 @@ export class Server extends EventEmitter
                     const allowedAfterSeo = publicLookup.allowed;
                     const wrongMethod = allowedAfterSeo.length > 0;
                     const status = wrongMethod ? 405 : 404;
-                    const res = new Response( wrongMethod ? 'Method Not Allowed' : 'Not Found', {
+                    const body = wrongMethod ? 'Method Not Allowed' : 'Not Found';
+                    const res = tagDirectResponse( new Response( body, {
                         status,
                         headers : wrongMethod ? { Allow : allowedAfterSeo.join( ', ' ) } : undefined
-                    });
+                    }), body );
 
-                    this.logRequestEnd( startTime, method, path, status, requestId, wrongMethod ? 'Method Not Allowed' : 'Not Found' );
+                    this.logRequestEnd( startTime, method, path, status, requestId, body );
+                    this.activeRequests--;
 
                     return this.finalizeResponse( res, request, requestId, this.baseCorsConfig, this.baseSecurityConfig );
                 }
 
+                finalMatch = pubMatch;
                 this.applyMatchBags( sreq, pubMatch );
                 activeSecurity = this.resolveEndpointSecurity( pubMatch.metadata );
                 activeCors = this.resolveEndpointCors( pubMatch.metadata );
@@ -1262,7 +1942,7 @@ export class Server extends EventEmitter
 
             if( method === 'OPTIONS' && !response.headers.has( 'Allow' )) 
             {
-                const allowed = getExternalAllowed();
+                const allowed = this.resolveExternalAllowed( path, publicLookup );
 
                 if( allowed.length > 0 ) 
                 {
@@ -1276,68 +1956,21 @@ export class Server extends EventEmitter
 
             if( method === 'HEAD' ) 
             {
-                response = new Response( null, {
+                cancelResponseBody( response );
+                response = tagDirectResponse( new Response( null, {
                     status     : response.status,
                     statusText : response.statusText,
                     headers    : response.headers
-                });
+                }), null );
             }
+
+            this.activeRequests--;
 
             return response;
         }
         catch ( err: any ) 
         {
-            if( this.events.error?.size )
-            {
-                this.internalEmit( 'error', err );
-            }
-
-            const statusCode = httpStatusFromError( err );
-
-            if( this.options.logs ) 
-            {
-                this.logger.error( `Server Error: ${err.message}`, {
-                    type  : 'error',
-                    error : errorLogFields( err ),
-                    requestId
-                });
-                this.logRequestEnd( startTime, method, path, statusCode, requestId );
-            }
-      
-            const corsConfig = this.resolveEndpointCors( finalMatch?.metadata );
-            const errSecurityConfig = this.resolveEndpointSecurity( finalMatch?.metadata );
-      
-            const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };
-
-            // Errors may carry protocol headers of their own, e.g. Retry-After on a 429.
-            if( err.headers && typeof err.headers === 'object' ) 
-            {
-                for( const [ key, value ] of Object.entries( err.headers as Record<string, unknown> )) 
-                {
-                    if( typeof value === 'string' ) { errHeaders[key] = value }
-                }
-            }
-
-            let res = new Response( JSON.stringify( clientErrorBody( err, statusCode )), {
-                status  : statusCode,
-                headers : errHeaders
-            });
-            res = this.finalizeResponse( res, request, requestId, corsConfig, errSecurityConfig );
-
-            if( method === 'HEAD' ) 
-            {
-                res = new Response( null, {
-                    status     : res.status,
-                    statusText : res.statusText,
-                    headers    : res.headers
-                });
-            }
-
-            return res;
+            return this.handleFetchError( err, request, sreq, method, path, startTime, requestId, finalMatch );
         }
-        finally 
-        {
-            this.activeRequests--;
-        }
-    };
+    }
 }

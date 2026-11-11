@@ -8,6 +8,7 @@
 import { routerSuite } from './router.bench.js';
 import { diSuite } from './di.bench.js';
 import { validatorSuite } from './validator.bench.js';
+import { httpSuite } from './http.bench.js';
 
 async function main(): Promise<void>
 {
@@ -16,6 +17,7 @@ async function main(): Promise<void>
     await routerSuite();
     await diSuite();
     await validatorSuite();
+    await httpSuite();
 }
 
 main().catch(( error ) =>

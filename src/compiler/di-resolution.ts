@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { hasDecoratorNamed, isStandaloneGuardClass, classImplementsInterface } from './decorator-config.js';
 
 export function getBaseClass( classDecl: ts.ClassDeclaration, checker: ts.TypeChecker ): ts.ClassDeclaration | null 
 {
@@ -87,6 +88,85 @@ export function resolveTokenFromType( typeNode: ts.TypeNode | undefined, type: t
     return null;
 }
 
+/**
+ * Resolves an explicit `@Inject(...)` argument expression to a canonical DI token string.
+ * Imported/aliased class identifiers resolve to the target class declaration's own name so
+ * they match bootstrap registration (`import { DbService as Db } from ...` -> `'DbService'`).
+ */
+export function resolveInjectArgToken( arg: ts.Expression, checker: ts.TypeChecker ): string
+{
+    if( ts.isStringLiteral( arg ) || ts.isNoSubstitutionTemplateLiteral( arg ))
+    {
+        return arg.text;
+    }
+
+    if( ts.isIdentifier( arg ))
+    {
+        let symbol = checker.getSymbolAtLocation( arg );
+
+        if( symbol && ( symbol.flags & ts.SymbolFlags.Alias ))
+        {
+            try
+            {
+                const aliased = checker.getAliasedSymbol( symbol );
+
+                if( aliased ) { symbol = aliased }
+            }
+            catch{}
+        }
+
+        const decl = symbol?.valueDeclaration || symbol?.declarations?.[0];
+
+        if( decl && ts.isClassDeclaration( decl ) && decl.name )
+        {
+            return decl.name.text;
+        }
+
+        return arg.text;
+    }
+
+    return arg.getText();
+}
+
+/**
+ * True when a parameter's type resolves to a class decorated with `@Injectable` / `@Controller`
+ * or implementing `Guard` / `Interceptor` / `Middleware` — independent of file compilation order.
+ */
+export function isInjectableTypeSymbol( typeNode: ts.TypeNode | undefined, type: ts.Type, checker: ts.TypeChecker ): boolean
+{
+    let symbol = type.getSymbol() || type.aliasSymbol;
+
+    if( !symbol && typeNode )
+    {
+        symbol = checker.getSymbolAtLocation( typeNode );
+    }
+
+    if( !symbol ) { return false }
+
+    if( symbol.flags & ts.SymbolFlags.Alias )
+    {
+        try
+        {
+            const aliased = checker.getAliasedSymbol( symbol );
+
+            if( aliased ) { symbol = aliased }
+        }
+        catch{}
+    }
+
+    const decl = symbol.valueDeclaration || symbol.declarations?.[0];
+
+    if( !decl || !ts.isClassDeclaration( decl )) { return false }
+
+    const decs = ts.getDecorators( decl );
+
+    return hasDecoratorNamed( decs, 'Injectable' )
+        || hasDecoratorNamed( decs, 'Controller' )
+        || isStandaloneGuardClass( decl )
+        || classImplementsInterface( decl, 'Interceptor' )
+        || classImplementsInterface( decl, 'Middleware' );
+}
+
 /** `@Inject( 'Token' )` wins; otherwise the parameter type name is the token. */
 function resolveParamInjectionToken( param: ts.ParameterDeclaration, checker: ts.TypeChecker ): string 
 {
@@ -103,13 +183,7 @@ function resolveParamInjectionToken( param: ts.ParameterDeclaration, checker: ts
             {
                 if( ts.isCallExpression( expr ) && expr.arguments.length > 0 ) 
                 {
-                    const arg = expr.arguments[0];
-
-                    if( ts.isStringLiteral( arg )) { return arg.text }
-
-                    if( ts.isIdentifier( arg )) { return arg.text }
-
-                    return arg.getText();
+                    return resolveInjectArgToken( expr.arguments[0], checker );
                 }
             }
         }
@@ -151,6 +225,26 @@ export function findConstructorDeps( classDecl: ts.ClassDeclaration, checker: ts
     return undefined;
 }
 
+function extractPropertyKeyName( name: ts.PropertyName ): string | null
+{
+    if( ts.isIdentifier( name ) || ts.isStringLiteral( name ) || ts.isNumericLiteral( name ))
+    {
+        return name.text;
+    }
+
+    if( ts.isComputedPropertyName( name ))
+    {
+        const expr = name.expression;
+
+        if( ts.isStringLiteral( expr ) || ts.isNoSubstitutionTemplateLiteral( expr ) || ts.isNumericLiteral( expr ))
+        {
+            return expr.text;
+        }
+    }
+
+    return null;
+}
+
 export function resolvePropertyDeps( classDecl: ts.ClassDeclaration, checker: ts.TypeChecker ): Record<string, string> 
 {
     const deps: Record<string, string> = {};
@@ -159,7 +253,10 @@ export function resolvePropertyDeps( classDecl: ts.ClassDeclaration, checker: ts
     {
         if( ts.isPropertyDeclaration( member ) && member.name ) 
         {
-            const propName = member.name.getText();
+            const propName = extractPropertyKeyName( member.name );
+
+            if( !propName ) { continue }
+
             const decorators = ts.getDecorators( member );
 
             if( decorators ) 
@@ -175,11 +272,7 @@ export function resolvePropertyDeps( classDecl: ts.ClassDeclaration, checker: ts
 
                         if( ts.isCallExpression( expr ) && expr.arguments.length > 0 ) 
                         {
-                            const arg = expr.arguments[0];
-
-                            if( ts.isStringLiteral( arg )) { token = arg.text }
-                            else if( ts.isIdentifier( arg )) { token = arg.text }
-                            else { token = arg.getText() }
+                            token = resolveInjectArgToken( expr.arguments[0], checker );
                         }
 
                         if( !token && member.type ) 

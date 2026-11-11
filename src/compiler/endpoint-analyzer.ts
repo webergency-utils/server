@@ -16,6 +16,7 @@ import {
     hasSeoDecorator,
     hasInternalDecorator,
     isStandaloneGuardClass,
+    classImplementsInterface,
     isRelevantSourceClass,
     parseExpression
 } from './decorator-config.js';
@@ -718,6 +719,17 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                 );
                             }
 
+                            const decIdent = ts.isCallExpression( expr ) ? expr.expression : expr;
+
+                            if( ts.isIdentifier( decIdent ) && decIdent.text === 'Inject' && ts.isPropertyDeclaration( node ) && ts.isPrivateIdentifier( node.name ))
+                            {
+                                diagnostics.error(
+                                    node.name,
+                                    DiagnosticCode.DECORATOR_MISUSE,
+                                    `Decorator "@Inject" cannot be applied to ECMAScript private field "${node.name.getText()}". Use a standard or TypeScript "private" property instead.`
+                                );
+                            }
+
                             const reviverIdent = ts.isCallExpression( expr ) ? expr.expression : expr;
 
                             if( ts.isIdentifier( reviverIdent ) && reviverIdent.text === 'Reviver' )
@@ -1086,13 +1098,16 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
 
                     const possibleGuardName = statement.name?.text;
                     const useMethod = statement.members.find( m => ts.isMethodDeclaration( m ) && m.name.getText() === 'use' ) as ts.MethodDeclaration | undefined;
+                    const isMiddlewareImpl = classImplementsInterface( statement, 'Middleware' );
+                    const isInterceptorImpl = classImplementsInterface( statement, 'Interceptor' );
+                    const isGuardImpl = isStandaloneGuardClass( statement );
 
-                    if( possibleGuardName && useMethod )
+                    if( possibleGuardName && useMethod && ( isGuardImpl || ( !isMiddlewareImpl && !isInterceptorImpl )))
                     {
                         const params = collector.resolveParamsMetadata( useMethod.parameters );
                         const prev = registry.guards.get( possibleGuardName );
 
-                        if( prev || params.length > 0 || isStandaloneGuardClass( statement ))
+                        if( prev || params.length > 0 || isGuardImpl )
                         {
                             registry.guards.set( possibleGuardName, {
                                 path    : sourceFile.fileName,
@@ -1100,6 +1115,20 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                 isAsync : isAsyncMethod( useMethod )
                             });
                         }
+                    }
+
+                    if( possibleGuardName && isInterceptorImpl && !registry.interceptors.has( possibleGuardName ))
+                    {
+                        registry.interceptors.set( possibleGuardName, {
+                            path : sourceFile.fileName
+                        });
+                    }
+
+                    if( possibleGuardName && isMiddlewareImpl && !registry.providers.has( possibleGuardName ))
+                    {
+                        registry.providers.set( possibleGuardName, {
+                            path : sourceFile.fileName
+                        });
                     }
                 }
             }
@@ -1160,7 +1189,9 @@ export function transformer( program: ts.Program, registry: ProjectRegistry, rep
                                     ts.factory.createObjectLiteralExpression(
                                         Object.entries( propertyDeps ).map(([propName, depToken]) =>
                                             ts.factory.createPropertyAssignment(
-                                                ts.factory.createIdentifier( propName ),
+                                                /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test( propName )
+                                                    ? ts.factory.createIdentifier( propName )
+                                                    : ts.factory.createStringLiteral( propName ),
                                                 ts.factory.createStringLiteral( depToken )
                                             )
                                         ),

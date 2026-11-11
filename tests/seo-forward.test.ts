@@ -220,7 +220,7 @@ describe( 'SEO routes + internal forward', () =>
                     params : [{ source : 'Response' }]
                 })
             ]);
-        });
+        }, { exposeErrors : true });
 
         const res = await server.fetch( new Request( 'http://localhost/a' ));
         expect( res.status ).toBe( 500 );
@@ -235,7 +235,7 @@ describe( 'SEO routes + internal forward', () =>
             seedInstanceController( registry, 'SeoC', {
                 resolve : () => ({ method : 'GET', path : '/missing' })
             }, [ ep( 'resolve', 'GET', '/go', { seo : true }) ]);
-        });
+        }, { exposeErrors : true });
 
         const res = await server.fetch( new Request( 'http://localhost/go' ));
         expect( res.status ).toBe( 500 );
@@ -250,7 +250,7 @@ describe( 'SEO routes + internal forward', () =>
             seedInstanceController( registry, 'SeoC', {
                 resolve : () => ({ not : 'a forward' })
             }, [ ep( 'resolve', 'GET', '/bad', { seo : true }) ]);
-        });
+        }, { exposeErrors : true });
 
         const res = await server.fetch( new Request( 'http://localhost/bad' ));
         expect( res.status ).toBe( 500 );

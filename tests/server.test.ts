@@ -51,7 +51,7 @@ function legacyModule( meta: Record<string, any> )
     return LegacyModule;
 }
 
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import { Context } from '../src/core/context.js';
 import { createServer } from 'http';
 
@@ -1170,7 +1170,7 @@ describe( 'Server & Metadata', () =>
                     controller   : 'C', methodName   : 'boom', httpMethod   : 'GET', path         : '/boom', params       : [],
                     guards       : [], interceptors : [], meta         : {}
                 });
-            });
+            }, { exposeErrors : true });
             const res = await server.fetch( new Request( 'http://localhost/boom' ));
             expect( res.status ).toBe( 500 );
             const data = await res.json();
@@ -1195,7 +1195,7 @@ describe( 'Server & Metadata', () =>
 
         it( 'should handle router errors', async () => 
         {
-            const server = new Server({ port : 3000, signals : false });
+            const server = new Server({ port : 3000, signals : false, exposeErrors : true });
             vi.spyOn(( server as any ).router, 'lookup' ).mockImplementation(() => { throw new Error( 'Router Fail' ) });
             const res = await server.fetch( new Request( 'http://localhost/any' ));
             expect( res.status ).toBe( 500 );

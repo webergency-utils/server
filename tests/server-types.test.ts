@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Server } from '../src/server.js';
 import { seedInstanceController } from './helpers/testing.js';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 
 describe( 'Server Type Safety (Strict, Relaxed, Strip)', () =>
 {

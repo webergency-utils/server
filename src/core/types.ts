@@ -41,6 +41,7 @@ export interface PeerCert {
     fingerprint256? : string
     serialNumber    : string
     serial          : string // Alias for serialNumber
+    authorized?     : boolean
 }
 
 export interface ParamMetadata {
@@ -183,6 +184,26 @@ export interface CookieOptions
     sameSite? : 'Strict' | 'Lax' | 'None' | 'strict' | 'lax' | 'none'
 }
 
+/** Fetch `Response` throws `TypeError` if given a non-null body with a null-body status (1xx, 204, 205, 304). */
+export function isNullBodyStatus( status: number ): boolean
+{
+    return status === 204 || status === 205 || status === 304 || ( status >= 100 && status < 200 );
+}
+
+/**
+ * Internal symbol storing an already-materialized string / Uint8Array / null payload on
+ * framework-built `Response`s so `NodeAdapter` can write `res.end(directBody)` in one call
+ * without materializing a Web `ReadableStream` + `Readable.fromWeb().pipe()`.
+ */
+export const DIRECT_RESPONSE_BODY = Symbol.for( 'webergency.server.directBody' );
+
+export function tagDirectResponse( response: Response, directBody: string | Uint8Array | null ): Response
+{
+    ( response as any )[DIRECT_RESPONSE_BODY] = directBody;
+
+    return response;
+}
+
 /**
  * Sealed response facade for middleware and `@Response`.
  * Headers and status are merged onto the final Fetch `Response` after the handler returns.
@@ -222,6 +243,11 @@ export class ServerResponse
     public get statusSet(): boolean
     {
         return this.#statusSet;
+    }
+
+    public get headersSet(): boolean
+    {
+        return this.#headersSet;
     }
 
     public get pendingForward(): SeoForward | undefined
@@ -314,7 +340,7 @@ export class ServerResponse
     {
         let body: BodyInit | null = null;
 
-        if( this.#bodySet )
+        if( this.#bodySet && !isNullBodyStatus( this.#status ))
         {
             if( this.#body == null )
             {
@@ -326,11 +352,18 @@ export class ServerResponse
             }
         }
 
-        return new Response( body, {
+        const out = new Response( body, {
             status     : this.#status,
             statusText : this.#statusText ?? '',
             headers    : this.#headers
         });
+
+        if( body === null || typeof body === 'string' || body instanceof Uint8Array )
+        {
+            tagDirectResponse( out, body );
+        }
+
+        return out;
     }
 
     #copyHeadersTo( target: Headers ): void
@@ -377,6 +410,26 @@ export class ServerResponse
                 this.#copyHeadersTo( headers );
             }
 
+            if( isNullBodyStatus( this.#status ))
+            {
+                return tagDirectResponse( new Response( null, {
+                    status     : this.#status,
+                    statusText : this.#statusText ?? response.statusText,
+                    headers
+                }), null );
+            }
+
+            if( DIRECT_RESPONSE_BODY in response )
+            {
+                const direct = ( response as any )[DIRECT_RESPONSE_BODY] as string | Uint8Array | null;
+
+                return tagDirectResponse( new Response( direct as BodyInit | null, {
+                    status     : this.#status,
+                    statusText : this.#statusText ?? response.statusText,
+                    headers
+                }), direct );
+            }
+
             return new Response( response.body, {
                 status     : this.#status,
                 statusText : this.#statusText ?? response.statusText,
@@ -384,9 +437,30 @@ export class ServerResponse
             });
         }
 
-        this.#copyHeadersTo( response.headers );
+        try
+        {
+            this.#copyHeadersTo( response.headers );
 
-        return response;
+            return response;
+        }
+        catch( err )
+        {
+            // Responses built with Response.redirect() / Response.error() carry immutable Headers;
+            // clone into a fresh Response instead of throwing TypeError.
+            if( err instanceof TypeError )
+            {
+                const headers = new Headers( response.headers );
+                this.#copyHeadersTo( headers );
+
+                return new Response( isNullBodyStatus( response.status ) ? null : response.body, {
+                    status     : response.status,
+                    statusText : response.statusText,
+                    headers
+                });
+            }
+
+            throw err;
+        }
     }
 }
 
@@ -396,7 +470,20 @@ export type ResponseBag = ServerResponse;
 
 export type EndpointResponse = ServerResponse;
 
-function serializeCookie( name: string, value: string, options?: CookieOptions ): string
+function assertSafeCookieAttribute( value: string, attrName: string ): void
+{
+    for( let i = 0; i < value.length; i++ )
+    {
+        const c = value.charCodeAt( i );
+
+        if( c <= 0x1f || c === 0x7f || c === 0x3b /* ; */ )
+        {
+            throw new Error( `Invalid cookie ${attrName} attribute value` );
+        }
+    }
+}
+
+export function serializeCookie( name: string, value: string, options?: CookieOptions ): string
 {
     let out = `${encodeURIComponent( name )}=${encodeURIComponent( value )}`;
 
@@ -414,11 +501,13 @@ function serializeCookie( name: string, value: string, options?: CookieOptions )
 
     if( options.path )
     {
+        assertSafeCookieAttribute( options.path, 'Path' );
         out += `; Path=${options.path}`;
     }
 
     if( options.domain )
     {
+        assertSafeCookieAttribute( options.domain, 'Domain' );
         out += `; Domain=${options.domain}`;
     }
 

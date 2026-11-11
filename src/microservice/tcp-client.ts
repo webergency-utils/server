@@ -14,8 +14,9 @@ export interface TcpClientOptions
  */
 export class TcpClient
 {
-    private socket? : net.Socket;
-    private readonly framer  = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
+    private socket?     : net.Socket;
+    private connecting? : Promise<void>;
+    private closed      = false;
     private readonly pending = new Map<string, {
         resolve : ( v: any ) => void
         reject  : ( e: Error ) => void
@@ -34,29 +35,87 @@ export class TcpClient
 
     async connect(): Promise<void>
     {
+        this.closed = false;
+
         if( this.socket ){ return }
 
-        await new Promise<void>(( resolve, reject ) =>
+        if( this.connecting )
         {
+            return this.connecting;
+        }
+
+        const p = new Promise<void>(( resolve, reject ) =>
+        {
+            const framer = new NdjsonLineFramer( TCP_MAX_LINE_BYTES );
+            let settled = false;
+
             const socket = net.connect( this.port, this.host, () =>
             {
+                if( this.closed )
+                {
+                    settled = true;
+                    socket.destroy();
+                    reject( new Error( 'Client closed' ));
+
+                    return;
+                }
+
+                settled = true;
                 this.socket = socket;
                 resolve();
             });
 
-            socket.on( 'data', ( chunk ) => this.onData( Buffer.isBuffer( chunk ) ? chunk : Buffer.from( chunk )));
+            socket.on( 'data', ( chunk ) =>
+            {
+                if( this.socket !== socket ){ return }
+
+                this.onData( framer, Buffer.isBuffer( chunk ) ? chunk : Buffer.from( chunk ));
+            });
+
             socket.on( 'error', ( err ) =>
             {
-                this.failAll( err );
-                reject( err );
+                if( this.socket === socket )
+                {
+                    this.failAll( err );
+                }
+
+                if( !settled )
+                {
+                    settled = true;
+                    reject( err );
+                }
             });
+
             socket.on( 'close', () =>
             {
-                this.framer.reset();
-                this.failAll( new Error( 'Connection closed' ));
-                this.socket = undefined;
+                framer.reset();
+
+                if( this.socket === socket )
+                {
+                    this.socket = undefined;
+                    this.failAll( new Error( 'Connection closed' ));
+                }
+                else if( !settled )
+                {
+                    settled = true;
+                    reject( new Error( 'Connection closed' ));
+                }
             });
         });
+
+        this.connecting = p;
+
+        try
+        {
+            await p;
+        }
+        finally
+        {
+            if( this.connecting === p )
+            {
+                this.connecting = undefined;
+            }
+        }
     }
 
     /** Request/response — Nest `ClientProxy.send`. */
@@ -103,9 +162,9 @@ export class TcpClient
 
     async close(): Promise<void>
     {
+        this.closed = true;
         const socket = this.socket;
         this.socket = undefined;
-        this.framer.reset();
         this.failAll( new Error( 'Client closed' ));
 
         if( !socket ){ return }
@@ -128,13 +187,13 @@ export class TcpClient
         this.socket.write( JSON.stringify( envelope ) + '\n' );
     }
 
-    private onData( chunk: Buffer ): void
+    private onData( framer: NdjsonLineFramer, chunk: Buffer ): void
     {
-        const { lines, oversized } = this.framer.push( chunk );
+        const { lines, oversized } = framer.push( chunk );
 
         if( oversized )
         {
-            this.rejectOversizedLine();
+            this.rejectOversizedLine( framer );
 
             return;
         }
@@ -152,12 +211,19 @@ export class TcpClient
                 continue;
             }
 
-            const waiter = response.id ? this.pending.get( response.id ) : undefined;
+            if( !response || typeof response !== 'object' )
+            {
+                continue;
+            }
+
+            const hasId = response.id !== undefined && response.id !== null;
+            const key = hasId ? String( response.id ) : '';
+            const waiter = hasId ? this.pending.get( key ) : undefined;
 
             if( !waiter ){ continue }
 
             if( waiter.timer !== undefined ){ clearTimeout( waiter.timer ) }
-            this.pending.delete( response.id );
+            this.pending.delete( key );
 
             if( response.status === 'success' )
             {
@@ -165,14 +231,21 @@ export class TcpClient
             }
             else
             {
-                waiter.reject( new Error( response.message || 'RPC Error' ));
+                const err = new Error( response.message || 'RPC Error' );
+
+                if( response.data !== undefined )
+                {
+                    Object.assign( err, { data : response.data });
+                }
+
+                waiter.reject( err );
             }
         }
     }
 
-    private rejectOversizedLine(): void
+    private rejectOversizedLine( framer: NdjsonLineFramer ): void
     {
-        this.framer.reset();
+        framer.reset();
         this.failAll( new Error( `TCP response line exceeds ${TCP_MAX_LINE_BYTES} bytes` ));
         this.socket?.destroy();
     }

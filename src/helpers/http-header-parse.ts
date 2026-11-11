@@ -10,7 +10,46 @@ const CONTINUATION_RE = /[\t ]*\r\n[\t ]+/g;
 
 function unescapeValue( str: string ): string
 {
-    return str[0] === '"' ? JSON.parse( str ) : str;
+    if( str.length === 0 || str.charCodeAt( 0 ) !== 0x22 /* " */ )
+    {
+        return str;
+    }
+
+    const hasClosingQuote = str.length >= 2 && str.charCodeAt( str.length - 1 ) === 0x22;
+    const end = hasClosingQuote ? str.length - 1 : str.length;
+
+    if( str.indexOf( '\\' ) === -1 )
+    {
+        return str.slice( 1, end );
+    }
+
+    let out = '';
+
+    for( let i = 1; i < end; i++ )
+    {
+        const c = str.charCodeAt( i );
+
+        if( c === 0x5c /* \ */ && i + 1 < str.length )
+        {
+            i++;
+
+            if( i < end || !hasClosingQuote )
+            {
+                out += str[i];
+            }
+            else
+            {
+                // Escaped trailing quote `"foo\"` (unterminated quoted-string): keep literal `"`
+                out += '"';
+            }
+        }
+        else
+        {
+            out += str[i];
+        }
+    }
+
+    return out;
 }
 
 function isWs( c: number ): boolean
@@ -226,14 +265,27 @@ export function parseHeaderValueParameter( value: string | undefined, parameter:
     if( !value ){ return undefined }
 
     const parts = parseHeaderValue( value );
+    const targetLower = parameter.toLowerCase();
 
     for( let i = 0; i < parts.length; i++ )
     {
         const part = parts[i];
 
-        if( typeof part === 'object' && parameter in part )
+        if( typeof part !== 'object' ){ continue }
+
+        if( Object.hasOwn( part, parameter ))
         {
             return part[parameter];
+        }
+
+        const keys = Object.keys( part );
+
+        for( let k = 0; k < keys.length; k++ )
+        {
+            if( keys[k].toLowerCase() === targetLower )
+            {
+                return part[keys[k]];
+            }
         }
     }
 
@@ -260,14 +312,32 @@ export function parseContentDisposition( value: string | undefined ): ContentDis
 
         if( typeof part !== 'object' ){ continue }
 
-        if( 'name' in part && out.name === undefined )
+        if( Object.hasOwn( part, 'name' ) && out.name === undefined )
         {
             out.name = part.name;
+            continue;
         }
 
-        if( 'filename' in part && out.filename === undefined )
+        if( Object.hasOwn( part, 'filename' ) && out.filename === undefined )
         {
             out.filename = part.filename;
+            continue;
+        }
+
+        const keys = Object.keys( part );
+
+        for( let k = 0; k < keys.length; k++ )
+        {
+            const lower = keys[k].toLowerCase();
+
+            if( lower === 'name' && out.name === undefined )
+            {
+                out.name = part[keys[k]];
+            }
+            else if( lower === 'filename' && out.filename === undefined )
+            {
+                out.filename = part[keys[k]];
+            }
         }
     }
 
@@ -293,21 +363,40 @@ export function extractMultipartBoundary( contentType: string | null | undefined
 
     if( type !== 'multipart' && type.toLowerCase() !== 'multipart' ){ return undefined }
 
-    // Common unquoted form: boundary=----WebKit...
+    // Common unquoted form: `; boundary=----WebKit...` (verify preceding `;` so `notboundary=` never matches)
     const marker = 'boundary=';
-    let idx = contentType.indexOf( marker, slash );
+    const hayLower = contentType.includes( marker ) ? contentType : contentType.toLowerCase();
+    let searchFrom = slash;
+    let idx = -1;
 
-    if( idx === -1 )
+    while( searchFrom < hayLower.length )
     {
-        idx = contentType.toLowerCase().indexOf( marker, slash );
+        const found = hayLower.indexOf( marker, searchFrom );
+
+        if( found === -1 ){ break }
+
+        let p = found - 1;
+
+        while( p > slash && isWs( contentType.charCodeAt( p )))
+        {
+            p--;
+        }
+
+        if( contentType.charCodeAt( p ) === 0x3b /* ; */ )
+        {
+            idx = found;
+            break;
+        }
+
+        searchFrom = found + 1;
     }
 
-    if( idx === -1 ){ return undefined }
+    if( idx === -1 ){ return parseHeaderValueParameter( contentType, 'boundary' ) }
 
     const start = idx + marker.length;
     let end = contentType.length;
 
-    if( contentType[start] === '"' )
+    if( contentType[start] === '"' || start >= contentType.length || isWs( contentType.charCodeAt( start )))
     {
         return parseHeaderValueParameter( contentType, 'boundary' );
     }

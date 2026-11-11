@@ -40,7 +40,8 @@ describe( 'Security Helper & Integration Tests', () =>
                 csp                          : false,
                 coep                         : false,
                 coop                         : false,
-                corp                         : false
+                corp                         : false,
+                permissionsPolicy            : false
             });
         });
 

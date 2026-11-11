@@ -1,16 +1,21 @@
 import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList, listenNodeServer } from './adapter.js';
 import { MultiBuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
+import { DIRECT_RESPONSE_BODY } from '../core/types.js';
 import { toAllowList } from '../core/router.js';
 import { getRegistry } from '../core/registry.js';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
 import { attachClientCert } from '../helpers/peer-cert.js';
+import { extractHostname } from '../helpers/security.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
-import { upgradeQuery } from './ws-upgrade.js';
+import { upgradeQuery, isValidWsHandshakeKey, truncateWsReason } from './ws-upgrade.js';
 
 const EMPTY_BUFFER = Buffer.alloc( 0 );
+const MAX_BUFFERED_WS_MESSAGES = 32;
+const MAX_HOST_CACHE_SIZE = 64;
+const validatedHostCache = new Map<string, string>();
 
 /** Applied whenever the caller omits a timeout so the listener is never left unprotected. */
 export const DEFAULT_NODE_HTTP: Required<Pick<NodeHttpOptions, 'headersTimeout' | 'requestTimeout' | 'keepAliveTimeout'>> = {
@@ -26,14 +31,180 @@ function applyHttpTimeouts( server: any, http?: NodeHttpOptions ): void
     server.keepAliveTimeout = http?.keepAliveTimeout ?? DEFAULT_NODE_HTTP.keepAliveTimeout;
 }
 
+function validateHostAuthority( rawHost: unknown ): string
+{
+    if( rawHost === undefined || rawHost === null || rawHost === '' )
+    {
+        return 'localhost';
+    }
+
+    if( typeof rawHost !== 'string' )
+    {
+        throw new TypeError( 'Invalid Host header' );
+    }
+
+    const cached = validatedHostCache.get( rawHost );
+
+    if( cached !== undefined )
+    {
+        return cached;
+    }
+
+    const trimmed = rawHost.trim();
+
+    if( !trimmed )
+    {
+        return 'localhost';
+    }
+
+    const hostname = extractHostname( trimmed );
+
+    if( !hostname )
+    {
+        throw new TypeError( 'Invalid Host header' );
+    }
+
+    let portSuffix = '';
+
+    if( trimmed.startsWith( '[' ))
+    {
+        const close = trimmed.indexOf( ']' );
+        portSuffix = trimmed.slice( close + 1 );
+    }
+    else
+    {
+        const colon = trimmed.indexOf( ':' );
+
+        if( colon !== -1 )
+        {
+            portSuffix = trimmed.slice( colon );
+        }
+    }
+
+    if( portSuffix.length > 0 )
+    {
+        if( !/^:\d{1,5}$/.test( portSuffix ))
+        {
+            throw new TypeError( 'Invalid Host header port' );
+        }
+
+        const portNum = Number( portSuffix.slice( 1 ));
+
+        if( portNum < 1 || portNum > 65535 )
+        {
+            throw new TypeError( 'Invalid Host header port' );
+        }
+    }
+
+    if( validatedHostCache.size >= MAX_HOST_CACHE_SIZE )
+    {
+        const oldest = validatedHostCache.keys().next().value;
+
+        if( oldest !== undefined )
+        {
+            validatedHostCache.delete( oldest );
+        }
+    }
+
+    validatedHostCache.set( rawHost, trimmed );
+
+    return trimmed;
+}
+
+function hasInvalidTargetChar( s: string ): boolean
+{
+    for( let i = 0; i < s.length; i++ )
+    {
+        const code = s.charCodeAt( i );
+
+        if( code <= 0x20 || code === 0x7f )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function resolveRequestUrl( req: any ): string
 {
     const protocol = ( req.socket as any )?.encrypted ? 'https' : 'http';
-    const host = req.headers?.host || 'localhost';
+    const authority = validateHostAuthority( req.headers?.host );
+    const rawTarget = req.url;
 
-    return typeof req.url === 'string' && req.url.startsWith( '/' )
-        ? `${protocol}://${host}${req.url}`
-        : new URL( req.url || '/', `${protocol}://${host}` ).href;
+    if( rawTarget === undefined || rawTarget === null || rawTarget === '' )
+    {
+        return `${protocol}://${authority}/`;
+    }
+
+    if( typeof rawTarget !== 'string' || hasInvalidTargetChar( rawTarget ))
+    {
+        throw new TypeError( 'Invalid request target' );
+    }
+
+    if( rawTarget.startsWith( '/' ))
+    {
+        return `${protocol}://${authority}${rawTarget}`;
+    }
+
+    if( /^https?:\/\//i.test( rawTarget ))
+    {
+        const parsed = new URL( rawTarget );
+
+        return `${protocol}://${authority}${parsed.pathname || '/'}${parsed.search}`;
+    }
+
+    throw new TypeError( 'Invalid request target' );
+}
+
+function defaultReasonPhrase( status: number ): string
+{
+    if( status === 401 ){ return 'Unauthorized' }
+
+    if( status === 403 ){ return 'Forbidden' }
+
+    if( status === 404 ){ return 'Not Found' }
+
+    if( status === 426 ){ return 'Upgrade Required' }
+
+    if( status === 429 ){ return 'Too Many Requests' }
+
+    if( status >= 500 ){ return 'Internal Server Error' }
+
+    return 'Bad Request';
+}
+
+function formatUpgradeRejection( response: Response, bodyText: string ): string
+{
+    const status = response.status || 400;
+    const statusText = ( response.statusText || defaultReasonPhrase( status )).replace( /[\r\n]+/g, ' ' );
+    let headerLines = '';
+
+    response.headers.forEach(( value, key ) =>
+    {
+        const lower = key.toLowerCase();
+
+        if( lower === 'connection' || lower === 'content-length' || lower === 'transfer-encoding' )
+        {
+            return;
+        }
+
+        const safeKey = key.replace( /[^\x21-\x7e]/g, '' );
+        const safeVal = value.replace( /[\r\n]+/g, ' ' );
+
+        if( safeKey )
+        {
+            headerLines += `${safeKey}: ${safeVal}\r\n`;
+        }
+    });
+
+    return (
+        `HTTP/1.1 ${status} ${statusText}\r\n` +
+        headerLines +
+        'Connection: close\r\n' +
+        `Content-Length: ${Buffer.byteLength( bodyText )}\r\n\r\n` +
+        bodyText
+    );
 }
 
 function endUpgradeSocket( socket: any, rawHttp: string ): void
@@ -61,6 +232,7 @@ function endUpgradeSocket( socket: any, rawHttp: string ): void
 export class NodeAdapter implements ServerAdapter 
 {
     private nodeServers : any[] = [];
+    private wsConnections = new Set<NodeServerWebSocket>();
 
     public get nodeServer(): any
     {
@@ -97,16 +269,33 @@ export class NodeAdapter implements ServerAdapter
 
         const connectionHandler = async ( req: any, res: any ) => 
         {
+            const method = req.method || 'GET';
+
             // RFC 9110 asterisk-form (`OPTIONS * HTTP/1.1`) asks about server-wide
             // capabilities. It is not a path, so it must never reach URL parsing or routing.
-            if( req.url === '*' ) 
+            if( req.url === '*' && method === 'OPTIONS' ) 
             {
+                try
+                {
+                    validateHostAuthority( req.headers?.host );
+                }
+                catch
+                {
+                    res.statusCode = 400;
+                    res.end( 'Bad Request' );
+
+                    return;
+                }
+
                 const endpoints = registry.getEndpoints();
 
                 if( endpoints.length !== cachedAllowEndpointCount )
                 {
                     cachedAllowEndpointCount = endpoints.length;
-                    const allowed = toAllowList( endpoints.map(( ep: any ) => ep.httpMethod ));
+                    const publicMethods = endpoints
+                        .filter(( ep: any ) => !ep.meta?.internal )
+                        .map(( ep: any ) => ep.httpMethod );
+                    const allowed = toAllowList( publicMethods );
                     cachedAllowHeader = allowed.join( ', ' );
                 }
 
@@ -118,18 +307,23 @@ export class NodeAdapter implements ServerAdapter
                 return;
             }
 
-            const method = req.method || 'GET';
             let fetchReq: Request;
 
             try
             {
-                fetchReq = new Request( resolveRequestUrl( req ), {
-                    method,
-                    headers : req.headers as any,
-                    body    : ( method === 'GET' || method === 'HEAD' ) ? undefined : ( req as any ),
-                    // @ts-expect-error: duplex half required for fetch Request
-                    duplex  : 'half'
-                });
+                const url = resolveRequestUrl( req );
+                fetchReq = ( method === 'GET' || method === 'HEAD' )
+                    ? new Request( url, {
+                        method,
+                        headers : req.headers as any
+                    })
+                    : new Request( url, {
+                        method,
+                        headers : req.headers as any,
+                        body    : req as any,
+                        // @ts-expect-error: duplex half required for fetch Request
+                        duplex  : 'half'
+                    });
             }
             catch
             {
@@ -139,6 +333,55 @@ export class NodeAdapter implements ServerAdapter
                 return;
             }
 
+            let lazyAbortController: AbortController | undefined;
+            const rawDisconnected = (): boolean => Boolean(
+                req.aborted
+                || ( res.destroyed && !res.writableEnded && !res.finished )
+            );
+            ( fetchReq as any ).__isDisconnected = (): boolean =>
+                lazyAbortController !== undefined ? lazyAbortController.signal.aborted : rawDisconnected();
+            ( fetchReq as any ).__getDisconnectSignal = (): AbortSignal =>
+            {
+                if( lazyAbortController === undefined )
+                {
+                    const ac = new AbortController();
+                    lazyAbortController = ac;
+
+                    if( rawDisconnected())
+                    {
+                        ac.abort();
+                    }
+                    else
+                    {
+                        const abortOnDisconnect = () =>
+                        {
+                            if( !ac.signal.aborted )
+                            {
+                                ac.abort();
+                            }
+                        };
+
+                        if( typeof req.on === 'function' )
+                        {
+                            req.on( 'aborted', abortOnDisconnect );
+                        }
+
+                        if( typeof res.on === 'function' )
+                        {
+                            res.on( 'close', () =>
+                            {
+                                if( !res.writableEnded && !res.finished )
+                                {
+                                    abortOnDisconnect();
+                                }
+                            });
+                        }
+                    }
+                }
+
+                return lazyAbortController.signal;
+            };
+
             if( req.socket?.remoteAddress )
             {
                 ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
@@ -146,25 +389,64 @@ export class NodeAdapter implements ServerAdapter
 
             if( req.socket && typeof req.socket.getPeerCertificate === 'function' ) 
             {
-                attachClientCert( fetchReq, req.socket.getPeerCertificate());
+                attachClientCert( fetchReq, req.socket.getPeerCertificate(), req.socket.authorized );
             }
-            const response = await handler( fetchReq );
+
+            let response: Response;
+
+            try
+            {
+                response = await handler( fetchReq );
+            }
+            catch
+            {
+                if( !res.headersSent && !res.destroyed )
+                {
+                    res.statusCode = 500;
+                    res.end( 'Internal Server Error' );
+                }
+
+                return;
+            }
             res.statusCode = response.status;
+            let hasSetCookie = false;
+
             response.headers.forEach(( value, key ) =>
             {
-                if( key.toLowerCase() !== 'set-cookie' )
+                if( key === 'set-cookie' || ( key.length === 10 && key.toLowerCase() === 'set-cookie' ))
+                {
+                    hasSetCookie = true;
+                }
+                else
                 {
                     res.setHeader( key, value );
                 }
             });
 
-            const setCookies = typeof response.headers.getSetCookie === 'function'
-                ? response.headers.getSetCookie()
-                : [];
-
-            if( setCookies.length > 0 )
+            if( hasSetCookie && typeof response.headers.getSetCookie === 'function' )
             {
-                res.setHeader( 'set-cookie', setCookies );
+                const setCookies = response.headers.getSetCookie();
+
+                if( setCookies.length > 0 )
+                {
+                    res.setHeader( 'set-cookie', setCookies );
+                }
+            }
+
+            if( DIRECT_RESPONSE_BODY in response && !response.bodyUsed )
+            {
+                const direct = ( response as any )[DIRECT_RESPONSE_BODY] as string | Uint8Array | null;
+
+                if( direct === null || direct === '' || method === 'HEAD' )
+                {
+                    res.end();
+                }
+                else
+                {
+                    res.end( direct );
+                }
+
+                return;
             }
 
             if( response.body ) 
@@ -251,6 +533,28 @@ export class NodeAdapter implements ServerAdapter
             {
                 server.on( 'upgrade', async ( req: any, socket: any, head: any ) => 
                 {
+                    if( socket && typeof socket.on === 'function' )
+                    {
+                        socket.on( 'error', () =>
+                        {
+                            try
+                            {
+                                socket.destroy();
+                            }
+                            catch
+                            {
+                                // ignore socket destroy error
+                            }
+                        });
+                    }
+
+                    if( req.method && req.method !== 'GET' )
+                    {
+                        endUpgradeSocket( socket, 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n' );
+
+                        return;
+                    }
+
                     let fetchReq: Request;
 
                     try
@@ -270,9 +574,16 @@ export class NodeAdapter implements ServerAdapter
                     ( fetchReq as any ).nodeSocket = socket;
                     ( fetchReq as any ).nodeHead = head;
 
-                    if( req.socket?.remoteAddress )
+                    const peerSocket = req.socket || socket;
+
+                    if( peerSocket?.remoteAddress )
                     {
-                        ( fetchReq as any ).remoteAddress = req.socket.remoteAddress;
+                        ( fetchReq as any ).remoteAddress = peerSocket.remoteAddress;
+                    }
+
+                    if( peerSocket && typeof peerSocket.getPeerCertificate === 'function' )
+                    {
+                        attachClientCert( fetchReq, peerSocket.getPeerCertificate(), peerSocket.authorized );
                     }
 
                     try
@@ -282,15 +593,7 @@ export class NodeAdapter implements ServerAdapter
                         if( !( fetchReq as any ).__wsUpgraded && !socket.destroyed )
                         {
                             const bodyText = await response.text();
-                            const status = response.status || 400;
-                            const statusText = response.statusText || ( status === 404 ? 'Not Found' : 'Bad Request' );
-                            const rawHttp =
-                                `HTTP/1.1 ${status} ${statusText}\r\n` +
-                                'Connection: close\r\n' +
-                                `Content-Length: ${Buffer.byteLength( bodyText )}\r\n\r\n` +
-                                bodyText;
-
-                            endUpgradeSocket( socket, rawHttp );
+                            endUpgradeSocket( socket, formatUpgradeRejection( response, bodyText ));
                         }
                     }
                     catch
@@ -345,6 +648,21 @@ export class NodeAdapter implements ServerAdapter
             return new Response( 'No Node socket available', { status : 400 });
         }
 
+        if( request.method && request.method !== 'GET' )
+        {
+            return new Response( 'WebSocket upgrade requires GET', { status : 400 });
+        }
+
+        const wsVersion = request.headers.get( 'sec-websocket-version' );
+
+        if( wsVersion !== null && !wsVersion.split( ',' ).some( v => v.trim() === '13' ))
+        {
+            return new Response( 'Unsupported Sec-WebSocket-Version', {
+                status  : 426,
+                headers : { 'Sec-WebSocket-Version' : '13' }
+            });
+        }
+
         const wsKey = request.headers.get( 'sec-websocket-key' );
 
         if( !wsKey ) 
@@ -352,10 +670,16 @@ export class NodeAdapter implements ServerAdapter
             return new Response( 'Missing sec-websocket-key', { status : 400 });
         }
 
+        if( !isValidWsHandshakeKey( wsKey ))
+        {
+            return new Response( 'Invalid sec-websocket-key', { status : 400 });
+        }
+
+        const cleanWsKey = wsKey.trim();
         const magicString = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
         const acceptKey = crypto
             .createHash( 'sha1' )
-            .update( wsKey + magicString )
+            .update( cleanWsKey + magicString )
             .digest( 'base64' );
 
         socket.write(
@@ -369,6 +693,11 @@ export class NodeAdapter implements ServerAdapter
         const query = upgradeQuery( request );
 
         const connection = new NodeServerWebSocket( socket, head, request.headers, params, query, metadata.meta?.wsOptions );
+        this.wsConnections.add( connection );
+        connection.on( 'close', () =>
+        {
+            this.wsConnections.delete( connection );
+        });
         RequestProcessor.runWs( metadata, connection, request as any );
 
         return new Response( null, { status : 200 });
@@ -393,6 +722,12 @@ export class NodeAdapter implements ServerAdapter
 
     closeAllConnections(): void
     {
+        for( const ws of [ ...this.wsConnections ])
+        {
+            ws.close( 1001, 'Going Away' );
+        }
+        this.wsConnections.clear();
+
         for( const server of this.nodeServers )
         {
             if( server && typeof server.closeAllConnections === 'function' )
@@ -411,7 +746,9 @@ class NodeServerWebSocket
     /** Fragmented messages span reads, so the reader's state lives with the connection. */
     private frameState         : FrameReadState = {};
     private readonly heartbeat : WsHeartbeat;
-    private closed = false;
+    private bufferedMessages   : any[] = [];
+    private setupComplete      = false;
+    private closed             = false;
 
     constructor(
         private socket: any,
@@ -430,13 +767,18 @@ class NodeServerWebSocket
         this.socket.setTimeout( 0 );
         this.socket.setNoDelay();
 
-        if( head && head.length > 0 ) 
-        {
-            this.rx_buffer.append( head );
-        }
-
         const emit = ( event: string, ...args: any[]) => 
         {
+            if( event === 'message' && !this.setupComplete && this.emitter.listenerCount( 'message' ) === 0 )
+            {
+                if( this.bufferedMessages.length < MAX_BUFFERED_WS_MESSAGES )
+                {
+                    this.bufferedMessages.push( args[0]);
+                }
+
+                return;
+            }
+
             this.emitter.emit( event, ...args );
         };
 
@@ -446,12 +788,15 @@ class NodeServerWebSocket
             WebsocketFrame.read( this.rx_buffer, emit, { maxPayload : this.wsOptions?.maxPayload }, this.frameState );
         });
 
-        const onSocketClose = () => this.finalizeClose( 1000, '', false );
+        const onSocketClose = () => this.finalizeClose( 1006, '', false );
         this.socket.on( 'end', onSocketClose );
         this.socket.on( 'close', onSocketClose );
         this.socket.on( 'error', ( err: any ) => 
         {
-            this.emitter.emit( 'error', err );
+            if( this.emitter.listenerCount( 'error' ) > 0 )
+            {
+                this.emitter.emit( 'error', err );
+            }
         });
 
         this.on( 'ping', ( payload: Buffer ) => 
@@ -472,7 +817,39 @@ class NodeServerWebSocket
             this.close( code, reason );
         });
 
+        if( head && head.length > 0 ) 
+        {
+            this.rx_buffer.append( head );
+            WebsocketFrame.read( this.rx_buffer, emit, { maxPayload : this.wsOptions?.maxPayload }, this.frameState );
+        }
+
         this.heartbeat.start();
+    }
+
+    public flushBufferedMessages(): void
+    {
+        this.setupComplete = true;
+
+        if( this.closed || this.bufferedMessages.length === 0 )
+        {
+            this.bufferedMessages = [];
+
+            return;
+        }
+
+        const pending = this.bufferedMessages.splice( 0 );
+
+        if( this.emitter.listenerCount( 'message' ) === 0 )
+        {
+            return;
+        }
+
+        for( const msg of pending )
+        {
+            if( this.closed ){ break }
+
+            this.emitter.emit( 'message', msg );
+        }
     }
 
     private flushTx(): void
@@ -499,9 +876,12 @@ class NodeServerWebSocket
     {
         if( this.closed ){ return }
         this.closed = true;
+        this.bufferedMessages = [];
         this.heartbeat.stop();
 
-        if( sendCloseFrame && !this.socket.destroyed && this.socket.writable )
+        const safeReason = reason ? truncateWsReason( reason ) : '';
+
+        if( sendCloseFrame && !this.socket.destroyed && this.socket.writable !== false )
         {
             let payload = code !== undefined ? Buffer.allocUnsafe( 2 ) : EMPTY_BUFFER;
 
@@ -509,9 +889,9 @@ class NodeServerWebSocket
             {
                 payload.writeUInt16BE( code, 0 );
 
-                if( reason ) 
+                if( safeReason ) 
                 {
-                    payload = Buffer.concat([payload, Buffer.from( reason, 'utf8' )]);
+                    payload = Buffer.concat([payload, Buffer.from( safeReason, 'utf8' )]);
                 }
             }
         
@@ -531,7 +911,7 @@ class NodeServerWebSocket
         }
         catch ( e ) {}
 
-        this.emitter.emit( 'close', code ?? 1000, reason ?? '' );
+        this.emitter.emit( 'close', code ?? 1000, safeReason );
     }
 
     close( code?: number, reason?: string ) 
@@ -542,6 +922,11 @@ class NodeServerWebSocket
     on( event: string, cb: Function ) 
     {
         this.emitter.on( event, cb as any );
+
+        if( event === 'message' && this.bufferedMessages.length > 0 && !this.setupComplete )
+        {
+            queueMicrotask(() => this.flushBufferedMessages());
+        }
     }
 
     off( event: string, cb: Function ) 

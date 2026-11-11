@@ -3,21 +3,44 @@ import { EventEmitter } from 'node:events';
 import { needsNodeTlsCompat, attachBunClientCert } from '../helpers/peer-cert.js';
 import { NodeTlsCompat } from './node-tls-compat.js';
 import { WsHeartbeat, WsHeartbeatOptions } from './ws-heartbeat.js';
-import { upgradeQuery, isWsPayloadTooLarge } from './ws-upgrade.js';
+import { upgradeQuery, isWsPayloadTooLarge, DEFAULT_MAX_WS_PAYLOAD, truncateWsReason } from './ws-upgrade.js';
 import { resolveBodyLimit } from '../helpers/request-reader.js';
 import { resolveMultipartTotalLimit } from '../helpers/file-upload.js';
+import { getModuleMeta } from '../core/symbols.js';
 
-function endpointUsesFiles( ep: any ): boolean
+function resolveEndpointModuleFiles( ep: any, registry?: any ): any
 {
     if( ep?.files && typeof ep.files === 'object' )
+    {
+        return ep.files;
+    }
+
+    if( registry && ep?.controller )
+    {
+        const modInstance = registry.getControllerModule?.( ep.controller );
+        const modClass = modInstance?.moduleClass ?? modInstance?.constructor;
+        const modFiles = modClass ? getModuleMeta( modClass )?.files : undefined;
+
+        if( modFiles && typeof modFiles === 'object' )
+        {
+            return modFiles;
+        }
+    }
+
+    return undefined;
+}
+
+function endpointUsesFiles( ep: any, moduleFiles?: any ): boolean
+{
+    if( moduleFiles && typeof moduleFiles === 'object' )
     {
         return true;
     }
 
-    return Array.isArray( ep?.params ) && ep.params.some(( p: any ) => p?.source === 'File' || p?.source === 'Files' );
+    return Array.isArray( ep?.params ) && ep.params.some(( p: any ) => p?.source === 'File' || p?.source === 'Files' || p?.source === 'Body' );
 }
 
-function resolveEndpointsMaxBodySize( endpoints: any[]): number
+function resolveEndpointsMaxBodySize( endpoints: any[], registry?: any ): number
 {
     let maxBytes = endpoints.length === 0 ? ( resolveBodyLimit( undefined ).limit ?? Number.MAX_SAFE_INTEGER ) : 0;
 
@@ -35,9 +58,11 @@ function resolveEndpointsMaxBodySize( endpoints: any[]): number
             maxBytes = bodyLimit;
         }
 
-        if( endpointUsesFiles( ep ))
+        const effectiveFiles = resolveEndpointModuleFiles( ep, registry );
+
+        if( endpointUsesFiles( ep, effectiveFiles ))
         {
-            const fileLimit = resolveMultipartTotalLimit( ep?.security, ep?.files );
+            const fileLimit = resolveMultipartTotalLimit( ep?.security, effectiveFiles );
 
             if( fileLimit === undefined )
             {
@@ -52,6 +77,25 @@ function resolveEndpointsMaxBodySize( endpoints: any[]): number
     }
 
     return maxBytes;
+}
+
+function resolveWsMaxPayloadLength( endpoints: any[]): number
+{
+    let maxPayload = 0;
+
+    for( const ep of endpoints )
+    {
+        if( ep?.httpMethod !== 'WS' ){ continue }
+
+        const configured = ep?.meta?.wsOptions?.maxPayload ?? DEFAULT_MAX_WS_PAYLOAD;
+
+        if( configured > maxPayload )
+        {
+            maxPayload = configured;
+        }
+    }
+
+    return maxPayload > 0 ? maxPayload : DEFAULT_MAX_WS_PAYLOAD;
 }
 
 export class BunAdapter implements ServerAdapter
@@ -78,12 +122,13 @@ export class BunAdapter implements ServerAdapter
         }
 
         const { getRegistry } = await import( '../core/registry.js' );
-        const endpoints = getRegistry().getEndpoints();
+        const registry = getRegistry();
+        const endpoints = registry.getEndpoints();
         const hasWs = endpoints.some(( ep: any ) => ep.httpMethod === 'WS' );
 
         const serveOptions: any = {
             port,
-            maxRequestBodySize : http?.maxRequestBodySize ?? resolveEndpointsMaxBodySize( endpoints )
+            maxRequestBodySize : http?.maxRequestBodySize ?? resolveEndpointsMaxBodySize( endpoints, registry )
         };
 
         if( tls )
@@ -129,6 +174,7 @@ export class BunAdapter implements ServerAdapter
             const { RequestProcessor } = await import( '../core/request-processor.js' );
             serveOptions.fetch = wrapFetch;
             serveOptions.websocket = {
+                maxPayloadLength : resolveWsMaxPayloadLength( endpoints ),
                 open( ws: any )
                 {
                     const { metadata, params, query, headers, request } = ws.data;
@@ -137,7 +183,9 @@ export class BunAdapter implements ServerAdapter
                 },
                 message( ws: any, msg: any )
                 {
-                    if( isWsPayloadTooLarge( msg, ws.data.metadata.meta?.wsOptions?.maxPayload ))
+                    const maxPayload = ws.data.metadata.meta?.wsOptions?.maxPayload ?? DEFAULT_MAX_WS_PAYLOAD;
+
+                    if( isWsPayloadTooLarge( msg, maxPayload ))
                     {
                         ws.close( 1009, 'Message Too Big' );
 
@@ -155,7 +203,10 @@ export class BunAdapter implements ServerAdapter
                 },
                 error( ws: any, err: any )
                 {
-                    ws.data.emitter.emit( 'error', err );
+                    if( ws.data.emitter.listenerCount( 'error' ) > 0 )
+                    {
+                        ws.data.emitter.emit( 'error', err );
+                    }
                 }
             };
         }
@@ -244,7 +295,7 @@ export class BunAdapter implements ServerAdapter
 
     closeAllConnections(): void
     {
-        if( this.nodeTls.active )
+        if( this.nodeTls.hasClosingConnections )
         {
             this.nodeTls.closeAllConnections();
 
@@ -292,7 +343,7 @@ class BunServerWebSocket
     close( code?: number, reason?: string )
     {
         this.heartbeat.stop();
-        this.ws.close( code, reason );
+        this.ws.close( code, reason !== undefined ? truncateWsReason( reason ) : undefined );
     }
 
     on( event: string, cb: Function )

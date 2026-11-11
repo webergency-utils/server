@@ -19,7 +19,7 @@ export function httpStatusFromError( err: unknown ): number
 {
     if( err && typeof err === 'object' )
     {
-        const e = err as { status? : unknown, code? : unknown };
+        const e = err as { status? : unknown, code? : unknown, name? : unknown };
 
         if( typeof e.status === 'number' && e.status >= 100 && e.status < 600 )
         {
@@ -29,6 +29,11 @@ export function httpStatusFromError( err: unknown ): number
         if( typeof e.code === 'number' && e.code >= 100 && e.code < 600 )
         {
             return e.code;
+        }
+
+        if( e.name === 'ParseError' )
+        {
+            return 400;
         }
     }
 

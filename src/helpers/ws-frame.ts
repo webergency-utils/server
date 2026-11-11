@@ -60,6 +60,9 @@ const OPCODE_PONG = 0xa;
 
 const KNOWN_OPCODES = new Set([ OPCODE_CONTINUATION, OPCODE_TEXT, OPCODE_BINARY, OPCODE_CLOSE, OPCODE_PING, OPCODE_PONG ]);
 
+/** Default inbound WebSocket message limit (16 MiB) when `wsOptions.maxPayload` is omitted. */
+export const DEFAULT_MAX_WS_PAYLOAD = 16 * 1024 * 1024;
+
 /** RFC 6455 §5.5: control frame payloads may not exceed 125 bytes. */
 const MAX_CONTROL_PAYLOAD = 125;
 
@@ -183,12 +186,63 @@ function emitControl( opcode: number, payload: Buffer, emit: Emit ): boolean
     return true;
 }
 
+function toFrameBuffer(
+    payload     : string | Buffer | ArrayBuffer | ArrayBufferView,
+    copyForMask : boolean
+): Buffer
+{
+    if( typeof payload === 'string' )
+    {
+        return Buffer.from( payload, 'utf8' );
+    }
+
+    if( Buffer.isBuffer( payload ))
+    {
+        if( !copyForMask ){ return payload }
+
+        const copy = Buffer.allocUnsafe( payload.length );
+        payload.copy( copy );
+
+        return copy;
+    }
+
+    if( ArrayBuffer.isView( payload ))
+    {
+        const view = Buffer.from( payload.buffer, payload.byteOffset, payload.byteLength );
+
+        if( !copyForMask ){ return view }
+
+        const copy = Buffer.allocUnsafe( view.length );
+        view.copy( copy );
+
+        return copy;
+    }
+
+    if( payload instanceof ArrayBuffer )
+    {
+        const view = Buffer.from( payload );
+
+        if( !copyForMask ){ return view }
+
+        const copy = Buffer.allocUnsafe( view.length );
+        view.copy( copy );
+
+        return copy;
+    }
+
+    return Buffer.from( String( payload ), 'utf8' );
+}
+
 export class WebsocketFrame 
 {
-    static write( tx_buffer: MultiBuffer, payload: string | Buffer, options: { opcode? : number, mask? : boolean } = {}): void 
+    static write(
+        tx_buffer : MultiBuffer,
+        payload   : string | Buffer | ArrayBuffer | ArrayBufferView,
+        options   : { opcode? : number, mask? : boolean } = {}
+    ): void 
     {
         const flag = 0x80 | ( options.opcode !== undefined ? options.opcode : ( typeof payload === 'string' ? 0x01 : 0x02 ));
-        const bufPayload = typeof payload === 'string' ? Buffer.from( payload, 'utf8' ) : payload;
+        const bufPayload = toFrameBuffer( payload, Boolean( options.mask ));
         const length = bufPayload.length;
         const maskBit = options.mask ? 0x80 : 0;
         const baseHeaderLen = length < 126 ? 2 : ( length < 65536 ? 4 : 10 );
@@ -310,8 +364,9 @@ export class WebsocketFrame
 
             // Fragments accumulate, so the limit applies to the assembled message.
             const buffered = ( state.fragmentSize ?? 0 ) + payload_length;
+            const maxPayload = options?.maxPayload !== undefined ? options.maxPayload : DEFAULT_MAX_WS_PAYLOAD;
 
-            if( options?.maxPayload !== undefined && buffered > options.maxPayload ) 
+            if( buffered > maxPayload ) 
             {
                 emit( 'limit_exceeded' );
 

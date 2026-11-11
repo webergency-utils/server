@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import { RequestProcessor } from '../src/core/request-processor.js';
 import { ServerRequest } from '../src/core/server-request.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';

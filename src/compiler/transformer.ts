@@ -21,4 +21,5 @@ export type { DiagnosticSink } from './diagnostics.js';
 export { discoverFromEntryPoint } from './discovery.js';
 export { transformer } from './endpoint-analyzer.js';
 export { generateManifestCode } from './manifest.js';
+export { SwaggerSpecGenerator } from './swagger.js';
 export { default } from './plugin.js';

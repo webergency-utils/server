@@ -27,7 +27,55 @@ export class NdjsonLineFramer
 
     push( chunk: Buffer | string ): NdjsonLineFramerResult
     {
-        this.buffer += typeof chunk === 'string' ? chunk : this.decoder.write( chunk );
+        // Reject single chunks whose first line (or entire un-newlined body) exceeds maxLineBytes
+        // BEFORE decoding or concatenating into V8 string heap.
+        if( typeof chunk === 'string' )
+        {
+            const firstNl = chunk.indexOf( '\n' );
+
+            if( firstNl === -1 )
+            {
+                if(( this.buffer.length + chunk.length ) > this.maxLineBytes
+                    && ( Buffer.byteLength( this.buffer, 'utf8' ) + Buffer.byteLength( chunk, 'utf8' )) > this.maxLineBytes )
+                {
+                    this.reset();
+
+                    return { lines : [], oversized : true };
+                }
+            }
+            else if( firstNl > this.maxLineBytes
+                && Buffer.byteLength( chunk.substring( 0, firstNl ), 'utf8' ) > this.maxLineBytes )
+            {
+                this.reset();
+
+                return { lines : [], oversized : true };
+            }
+
+            this.buffer += chunk;
+        }
+        else
+        {
+            const firstNl = chunk.indexOf( 0x0a );
+
+            if( firstNl === -1 )
+            {
+                if(( this.buffer.length + chunk.length ) > this.maxLineBytes
+                    && ( Buffer.byteLength( this.buffer, 'utf8' ) + chunk.length ) > this.maxLineBytes )
+                {
+                    this.reset();
+
+                    return { lines : [], oversized : true };
+                }
+            }
+            else if( firstNl > this.maxLineBytes )
+            {
+                this.reset();
+
+                return { lines : [], oversized : true };
+            }
+
+            this.buffer += this.decoder.write( chunk );
+        }
 
         const lines: string[] = [];
         let index: number;

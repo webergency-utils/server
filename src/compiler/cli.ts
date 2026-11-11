@@ -8,6 +8,7 @@
  *   webergency-tsc --outDir dist src/index.ts
  */
 import ts from 'typescript';
+import * as fs from 'fs';
 import * as path from 'path';
 import { resolveRootDir } from './root-dir.js';
 import { createBeforeTransformers, readTsPatchPlugins, TsPatchPlugin } from './emit-transformers.js';
@@ -25,6 +26,12 @@ if( args.includes( '-h' ) || args.includes( '--help' ))
     process.exit( 0 );
 }
 
+if( args.includes( '-v' ) || args.includes( '--version' ))
+{
+    console.log( `webergency-tsc (TypeScript ${ts.version})` );
+    process.exit( 0 );
+}
+
 let projectPath: string | undefined;
 const passthrough: string[] = [];
 
@@ -35,6 +42,36 @@ for( let i = 0; i < args.length; i++ )
     if( a === '-p' || a === '--project' )
     {
         projectPath = args[++i];
+
+        if( !projectPath )
+        {
+            printUsage();
+            process.exit( 1 );
+        }
+        continue;
+    }
+
+    if( a.startsWith( '--project=' ))
+    {
+        projectPath = a.slice( '--project='.length );
+
+        if( !projectPath )
+        {
+            printUsage();
+            process.exit( 1 );
+        }
+        continue;
+    }
+
+    if( a.startsWith( '-p=' ))
+    {
+        projectPath = a.slice( '-p='.length );
+
+        if( !projectPath )
+        {
+            printUsage();
+            process.exit( 1 );
+        }
         continue;
     }
 
@@ -59,8 +96,24 @@ let options: ts.CompilerOptions = { ...parsedCli.options };
 let rootNames: string[] = parsedCli.fileNames;
 let plugins: TsPatchPlugin[] = [];
 
+function resolveConfigFilePath( rawProject: string ): string
+{
+    const resolved = path.resolve( process.cwd(), rawProject );
+
+    try
+    {
+        if( fs.existsSync( resolved ) && fs.statSync( resolved ).isDirectory())
+        {
+            return path.join( resolved, 'tsconfig.json' );
+        }
+    }
+    catch{}
+
+    return resolved;
+}
+
 const configPath = projectPath
-    ? path.resolve( process.cwd(), projectPath )
+    ? resolveConfigFilePath( projectPath )
     : ( rootNames.length === 0
         ? ts.findConfigFile( process.cwd(), ts.sys.fileExists, 'tsconfig.json' )
         : undefined );
@@ -94,7 +147,8 @@ if( configPath )
 
     options = parsed.options;
     rootNames = parsed.fileNames;
-    plugins = readTsPatchPlugins( configFile.config?.compilerOptions );
+    const fromParsed = readTsPatchPlugins( parsed.options );
+    plugins = fromParsed.length > 0 ? fromParsed : readTsPatchPlugins( configFile.config?.compilerOptions );
 }
 else if( rootNames.length === 0 )
 {
@@ -111,6 +165,15 @@ if( resolvedRootDir )
 
 options.experimentalDecorators = options.experimentalDecorators ?? true;
 
+const isNoEmit = Boolean( options.noEmit );
+
+if( isNoEmit )
+{
+    // Temporarily clear noEmit so TypeScript runs custom before-transformers for AOT diagnostics,
+    // while suppressing all disk writes via a no-op writeFile callback.
+    options = { ...options, noEmit : false };
+}
+
 const host = ts.createCompilerHost( options );
 const program = ts.createProgram({
     rootNames,
@@ -120,10 +183,11 @@ const program = ts.createProgram({
 
 // Decorator problems arrive here during emit and are printed alongside tsc's own output.
 const aotDiagnostics: ts.Diagnostic[] = [];
+const noopWriteFile: ts.WriteFileCallback = () => {};
 
 const emitResult = program.emit(
     undefined,
-    undefined,
+    isNoEmit ? noopWriteFile : undefined,
     undefined,
     undefined,
     {

@@ -242,7 +242,8 @@ export class StrictBranchController
         const controllers = classes.filter( c => getControllerMeta( c ));
 
         server = new Server({
-            port : 3000,
+            port         : 3000,
+            exposeErrors : true,
             controllers
         });
         await server.ensureReady();

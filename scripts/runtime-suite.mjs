@@ -13,7 +13,7 @@
  */
 import { Server } from '../dist/index.js';
 import { seedInstanceController } from './seed-controller.mjs';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 
 function detectRuntime()
 {

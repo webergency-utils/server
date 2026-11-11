@@ -35,6 +35,7 @@ describe( 'Actual AOT Integration Test', () =>
         aotHosts = await loadAotHosts();
         server = new Server({
             port         : 3000,
+            exposeErrors : true,
             controllers  : aotHosts.controllers,
             guards       : aotHosts.guards,
             interceptors : aotHosts.interceptors,

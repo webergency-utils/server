@@ -6,6 +6,9 @@ import { getInjectableMeta } from './symbols.js';
 
 /** Tear-down runs dependents before the providers they depend on. */
 const REVERSE_ORDER_HOOKS = new Set([ 'onDestroy' ]);
+const EMPTY_DEPS: string[] = [];
+const EMPTY_PROP_ENTRIES: [ string, string ][] = [];
+const SYNC_BAILOUT = Symbol( 'webergency.di.syncBailout' );
 
 /**
  * Everything about a token that does not depend on the rest of the graph: which provider
@@ -14,10 +17,19 @@ const REVERSE_ORDER_HOOKS = new Set([ 'onDestroy' ]);
  */
 export interface Binding
 {
-    provider        : any
-    declaringModule : any
-    explicitScope   : Scope | undefined
-    deps            : string[]
+    token              : string
+    provider           : any
+    providerClass      : any
+    isSimpleClass      : boolean
+    hasValue           : boolean
+    hasOnInit          : boolean
+    declaringModule    : any
+    declaringKey       : string
+    explicitScope      : Scope | undefined
+    resolvedScope?     : Scope
+    deps               : string[]
+    constructorDeps    : string[]
+    propertyDepEntries : [ string, string ][]
 }
 
 /** Instances, bindings, and resolution guards are all keyed by token *and* module. */
@@ -54,6 +66,8 @@ export class ApplicationRegistry
     missingAotHosts      : string[] = [];
     /** Provider lookups memoized per `(token, module)` so resolution is not a repeated walk. */
     bindings           = new Map<string, Binding>();
+    /** Fast global-scope binding cache keyed directly by `token` (no `scopedKey` concat). */
+    private globalBindings  = new Map<string, Binding>();
     /** Resolved scopes memoized per `(token, module)`. */
     scopes             = new Map<string, Scope>();
     /** Dependency cycles found while resolving scopes, reported as `A -> B -> A`. */
@@ -66,15 +80,22 @@ export class ApplicationRegistry
     public static collectPropertyDeps( cls: any ): Record<string, string>
     {
         const deps: Record<string, string> = {};
+        const chain: any[] = [];
         let current = cls;
 
         while( current && current !== Function.prototype && current !== Object.prototype )
         {
             if( Object.prototype.hasOwnProperty.call( current, '__injections__' ) && current.__injections__?.propertyDeps )
             {
-                Object.assign( deps, current.__injections__.propertyDeps );
+                chain.push( current.__injections__.propertyDeps );
             }
             current = Object.getPrototypeOf( current );
+        }
+
+        // Apply base-class injections first so subclass @Inject overrides win on shared field names.
+        for( let i = chain.length - 1; i >= 0; i-- )
+        {
+            Object.assign( deps, chain[i]);
         }
 
         return deps;
@@ -114,6 +135,7 @@ export class ApplicationRegistry
     private invalidateResolutionCache()
     {
         this.bindings.clear();
+        this.globalBindings.clear();
         this.scopes.clear();
         this.cacheVersion++;
     }
@@ -340,25 +362,30 @@ export class ApplicationRegistry
         this.routeKeys.clear();
         this.missingAotHosts.length = 0;
         this.bindings.clear();
+        this.globalBindings.clear();
         this.scopes.clear();
         this.dependencyCycles.clear();
         this.defaultResponseMode = undefined;
         this.cacheVersion++;
     }
 
-    locateProviderInScope( token: string, moduleInstance: any, visited = new Set<any>()): any
+    private locateProviderEntryInScope(
+        token: string,
+        moduleInstance: any,
+        visited = new Set<any>()
+    ): { provider : any, declaringModule : any } | null
     {
         if( visited.has( moduleInstance )){ return null }
         visited.add( moduleInstance );
 
         if( moduleInstance.providers.has( token ))
         {
-            return moduleInstance.providers.get( token );
+            return { provider : moduleInstance.providers.get( token ), declaringModule : moduleInstance };
         }
 
         if( moduleInstance.controllers.has( token ))
         {
-            return moduleInstance.controllers.get( token );
+            return { provider : moduleInstance.controllers.get( token ), declaringModule : moduleInstance };
         }
 
         for( const impM of moduleInstance.imports )
@@ -367,7 +394,17 @@ export class ApplicationRegistry
             // from the provider walk below.
             if( this.isExportedFromModule( token, impM, new Set( visited )))
             {
-                return impM.providers.get( token ) || impM.controllers.get( token ) || this.locateProviderInScope( token, impM, new Set( visited ));
+                if( impM.providers.has( token ))
+                {
+                    return { provider : impM.providers.get( token ), declaringModule : impM };
+                }
+
+                if( impM.controllers.has( token ))
+                {
+                    return { provider : impM.controllers.get( token ), declaringModule : impM };
+                }
+
+                return this.locateProviderEntryInScope( token, impM, new Set( visited ));
             }
         }
 
@@ -375,11 +412,26 @@ export class ApplicationRegistry
         {
             if( globalM !== moduleInstance && this.isExportedFromModule( token, globalM, new Set( visited )))
             {
-                return globalM.providers.get( token ) || globalM.controllers.get( token ) || this.locateProviderInScope( token, globalM, new Set( visited ));
+                if( globalM.providers.has( token ))
+                {
+                    return { provider : globalM.providers.get( token ), declaringModule : globalM };
+                }
+
+                if( globalM.controllers.has( token ))
+                {
+                    return { provider : globalM.controllers.get( token ), declaringModule : globalM };
+                }
+
+                return this.locateProviderEntryInScope( token, globalM, new Set( visited ));
             }
         }
 
         return null;
+    }
+
+    locateProviderInScope( token: string, moduleInstance: any, visited = new Set<any>()): any
+    {
+        return this.locateProviderEntryInScope( token, moduleInstance, visited )?.provider ?? null;
     }
 
     isExportedFromModule( token: string, moduleInstance: any, visited = new Set<any>()): boolean
@@ -553,13 +605,28 @@ export class ApplicationRegistry
 
     getBinding( token: string, contextModule?: any ): Binding | null
     {
+        if( !contextModule )
+        {
+            const fastCached = this.globalBindings.get( token );
+
+            if( fastCached !== undefined ){ return fastCached }
+        }
+
         const key = scopedKey( token, contextModule );
         const cached = this.bindings.get( key );
 
-        if( cached ){ return cached }
+        if( cached )
+        {
+            if( !contextModule ){ this.globalBindings.set( token, cached ) }
 
+            return cached;
+        }
+
+        const locatedEntry = contextModule
+            ? this.locateProviderEntryInScope( token, contextModule )
+            : null;
         const provider = contextModule
-            ? this.locateProviderInScope( token, contextModule )
+            ? locatedEntry?.provider
             // A module-owned token must resolve through its module so `exports` is enforced;
             // only root-level (module-less) registrations are reachable flat.
             : ( this.tokenToModuleMap.has( token ) ? null : this.providers.get( token ));
@@ -567,8 +634,18 @@ export class ApplicationRegistry
         if( !provider ){ return null }
 
         const providerClass = ApplicationRegistry.providerClassOf( provider );
+        const hasValue = Boolean( provider && typeof provider === 'object' && 'value' in provider );
+        const isFactory = Boolean( provider && typeof provider === 'object' && 'factory' in provider );
+        const isSimpleClass = Boolean( providerClass && !hasValue && !isFactory );
+        const hasOnInit = Boolean(
+            ( providerClass && typeof providerClass.prototype?.onInit === 'function' )
+            || ( hasValue && provider.value && typeof provider.value === 'object' && typeof provider.value.onInit === 'function' )
+            || ( !providerClass && !hasValue && !isFactory && provider && typeof provider === 'object' && typeof provider.onInit === 'function' )
+        );
         let explicitScope: Scope | undefined;
-        let deps: string[] = [];
+        let deps: string[] = EMPTY_DEPS;
+        let constructorDeps: string[] = EMPTY_DEPS;
+        let propertyDepEntries: [ string, string ][] = EMPTY_PROP_ENTRIES;
 
         if( typeof provider === 'function' )
         {
@@ -583,33 +660,75 @@ export class ApplicationRegistry
 
         if( providerClass )
         {
-            const injections = providerClass.__injections__ || {};
-            const propertyDeps = Object.values( ApplicationRegistry.collectPropertyDeps( providerClass )) as string[];
-            deps = [ ...( injections.constructorDeps || []), ...propertyDeps ];
+            const injections = providerClass.__injections__;
+            constructorDeps = injections?.constructorDeps || EMPTY_DEPS;
+            const collectedProps = ApplicationRegistry.collectPropertyDeps( providerClass );
+            const entries = Object.entries( collectedProps ) as [ string, string ][];
+            propertyDepEntries = entries.length > 0 ? entries : EMPTY_PROP_ENTRIES;
+
+            if( constructorDeps.length > 0 && propertyDepEntries.length > 0 )
+            {
+                deps = [ ...constructorDeps, ...propertyDepEntries.map( e => e[1]) ];
+            }
+            else if( constructorDeps.length > 0 )
+            {
+                deps = constructorDeps;
+            }
+            else if( propertyDepEntries.length > 0 )
+            {
+                deps = propertyDepEntries.map( e => e[1]);
+            }
         }
-        else if( provider && typeof provider === 'object' && 'factory' in provider )
+        else if( isFactory )
         {
-            deps = provider.inject || [];
+            deps = provider.inject || EMPTY_DEPS;
         }
 
-        const declaringModule = providerClass && this.classToModuleMap.has( providerClass )
+        const declaringModule = ( providerClass && this.classToModuleMap.has( providerClass ))
             ? this.classToModuleMap.get( providerClass )
-            : contextModule;
+            : ( locatedEntry?.declaringModule ?? this.tokenToModuleMap.get( token ) ?? contextModule );
 
-        const binding: Binding = { provider, declaringModule, explicitScope, deps };
+        const binding: Binding = {
+            token,
+            provider,
+            providerClass,
+            isSimpleClass,
+            hasValue,
+            hasOnInit,
+            declaringModule,
+            declaringKey : scopedKey( token, declaringModule ),
+            explicitScope,
+            deps,
+            constructorDeps,
+            propertyDepEntries
+        };
         this.bindings.set( key, binding );
+
+        if( !contextModule ){ this.globalBindings.set( token, binding ) }
 
         return binding;
     }
 
-    getResolvedScope( token: string, contextModule?: any, visited = new Set<string>()): Scope
+    getResolvedScope( token: string, contextModule?: any, visited?: Set<string> ): Scope
     {
+        if( !visited )
+        {
+            const fastBinding = !contextModule
+                ? this.globalBindings.get( token )
+                : undefined;
+
+            if( fastBinding?.resolvedScope !== undefined )
+            {
+                return fastBinding.resolvedScope;
+            }
+        }
+
         const key = scopedKey( token, contextModule );
         const memoized = this.scopes.get( key );
 
         if( memoized !== undefined ){ return memoized }
 
-        if( visited.has( key ))
+        if( visited?.has( key ))
         {
             // Circular deps are supported through lazy proxies, so this is reported rather
             // than thrown — but the scope of a cycle member cannot be decided here.
@@ -625,11 +744,12 @@ export class ApplicationRegistry
         if( binding.explicitScope === Scope.REQUEST )
         {
             this.scopes.set( key, Scope.REQUEST );
+            binding.resolvedScope = Scope.REQUEST;
 
             return Scope.REQUEST;
         }
 
-        const next = new Set( visited ).add( key );
+        const next = visited ? new Set( visited ).add( key ) : new Set([key]);
         const cyclesBefore = this.dependencyCycles.size;
         let scope = binding.explicitScope === Scope.TRANSIENT ? Scope.TRANSIENT : Scope.SINGLETON;
 
@@ -646,7 +766,11 @@ export class ApplicationRegistry
         }
 
         // A scope decided while a cycle was being broken is provisional, so it is not cached.
-        if( this.dependencyCycles.size === cyclesBefore ){ this.scopes.set( key, scope ) }
+        if( this.dependencyCycles.size === cyclesBefore )
+        {
+            this.scopes.set( key, scope );
+            binding.resolvedScope = scope;
+        }
 
         return scope;
     }
@@ -726,11 +850,13 @@ export class ApplicationRegistry
             return ctx.requestInstances.get( scopedKey( token, binding.declaringModule ));
         }
 
-        const instanceKey = scopedKey( token, currentContext );
+        const binding = this.getBinding( token, currentContext );
+        const ownerModule = binding ? binding.declaringModule : currentContext;
+        const instanceKey = scopedKey( token, ownerModule );
 
-        if( currentContext?.instances.has( token ))
+        if( ownerModule?.instances.has( token ))
         {
-            return currentContext.instances.get( token );
+            return ownerModule.instances.get( token );
         }
 
         return this.instances.get( instanceKey );
@@ -768,7 +894,296 @@ export class ApplicationRegistry
         return new Error( `No provider registered for token: ${token}${contextModule ? ` in module ${contextModule.name}` : ''}` );
     }
 
-    async resolve( token: string, contextModule?: any, resolutionStack?: Set<string> ): Promise<any>
+    private tryInstantiateSync( binding: Binding, ctx: any, visiting?: Set<Binding> ): any
+    {
+        if( this.dependencyCycles.size > 0 || binding.hasOnInit || visiting?.has( binding ))
+        {
+            return SYNC_BAILOUT;
+        }
+
+        if( binding.hasValue ){ return binding.provider.value }
+
+        if( !binding.isSimpleClass )
+        {
+            if(
+                !binding.providerClass
+                && (
+                    !binding.provider
+                    || (
+                        typeof binding.provider !== 'function'
+                        && ( typeof binding.provider !== 'object' || !( 'factory' in binding.provider ))
+                    )
+                )
+            )
+            {
+                return binding.provider;
+            }
+
+            return SYNC_BAILOUT;
+        }
+
+        const cls = binding.providerClass;
+        const cDeps = binding.constructorDeps;
+        const pDeps = binding.propertyDepEntries;
+        const cLen = cDeps.length;
+        const pLen = pDeps.length;
+
+        if( cLen === 0 && pLen === 0 )
+        {
+            return new cls();
+        }
+
+        const nextVisiting = visiting ?? new Set<Binding>();
+        nextVisiting.add( binding );
+
+        let arg0: any;
+        let cArgs: any[] | undefined;
+
+        if( cLen === 1 )
+        {
+            const depToken = cDeps[0];
+            arg0 = depToken === 'any'
+                ? undefined
+                : this.tryResolveSync( depToken, binding.declaringModule, ctx, nextVisiting );
+
+            if( arg0 === SYNC_BAILOUT )
+            {
+                nextVisiting.delete( binding );
+
+                return SYNC_BAILOUT;
+            }
+        }
+        else if( cLen > 1 )
+        {
+            cArgs = new Array( cLen );
+
+            for( let i = 0; i < cLen; i++ )
+            {
+                const depToken = cDeps[i];
+
+                if( depToken === 'any' )
+                {
+                    cArgs[i] = undefined;
+                }
+                else
+                {
+                    const resolved = this.tryResolveSync( depToken, binding.declaringModule, ctx, nextVisiting );
+
+                    if( resolved === SYNC_BAILOUT )
+                    {
+                        nextVisiting.delete( binding );
+
+                        return SYNC_BAILOUT;
+                    }
+
+                    cArgs[i] = resolved;
+                }
+            }
+        }
+
+        let pValues: any[] | undefined;
+
+        if( pLen > 0 )
+        {
+            pValues = new Array( pLen );
+
+            for( let i = 0; i < pLen; i++ )
+            {
+                const resolved = this.tryResolveSync( pDeps[i][1], binding.declaringModule, ctx, nextVisiting );
+
+                if( resolved === SYNC_BAILOUT )
+                {
+                    nextVisiting.delete( binding );
+
+                    return SYNC_BAILOUT;
+                }
+
+                pValues[i] = resolved;
+            }
+        }
+
+        nextVisiting.delete( binding );
+
+        const instance = cLen === 0
+            ? new cls()
+            : ( cLen === 1 ? new cls( arg0 ) : new cls( ...cArgs! ));
+
+        if( pValues !== undefined )
+        {
+            for( let i = 0; i < pLen; i++ )
+            {
+                instance[pDeps[i][0]] = pValues[i];
+            }
+        }
+
+        return instance;
+    }
+
+    private tryResolveSync( token: string, contextModule: any, ctx: any, visiting?: Set<Binding> ): any
+    {
+        if( this.inflightSingletons.size > 0 ){ return SYNC_BAILOUT }
+
+        const currentContext = ( !contextModule && this.tokenToModuleMap.size > 0 )
+            ? this.tokenToModuleMap.get( token )
+            : contextModule;
+
+        if( currentContext )
+        {
+            const cached = currentContext.instances.get( token );
+
+            if( cached !== undefined || currentContext.instances.has( token ))
+            {
+                return cached;
+            }
+        }
+
+        const binding = this.getBinding( token, currentContext );
+
+        if( !binding )
+        {
+            if( !currentContext )
+            {
+                const manualKey = scopedKey( token, null );
+
+                if( this.instances.has( manualKey ))
+                {
+                    return this.instances.get( manualKey );
+                }
+            }
+
+            return SYNC_BAILOUT;
+        }
+
+        if( !currentContext )
+        {
+            const cached = this.instances.get( binding.declaringKey );
+
+            if( cached !== undefined || this.instances.has( binding.declaringKey ))
+            {
+                return cached;
+            }
+        }
+
+        const scope = binding.resolvedScope ?? this.getResolvedScope( token, currentContext );
+
+        if( scope === Scope.REQUEST )
+        {
+            const activeCtx = ctx ?? Context.get();
+
+            if( !activeCtx || ( activeCtx.requestInflight && activeCtx.requestInflight.size > 0 ))
+            {
+                return SYNC_BAILOUT;
+            }
+
+            const requestStore = activeCtx.requestInstances ?? ( activeCtx.requestInstances = new Map<string, any>());
+            const existing = requestStore.get( binding.declaringKey );
+
+            if( existing !== undefined || requestStore.has( binding.declaringKey ))
+            {
+                return existing;
+            }
+
+            const instance = this.tryInstantiateSync( binding, activeCtx, visiting );
+
+            if( instance === SYNC_BAILOUT ){ return SYNC_BAILOUT }
+
+            requestStore.set( binding.declaringKey, instance );
+
+            return instance;
+        }
+
+        if( scope === Scope.TRANSIENT )
+        {
+            const activeCtx = ctx ?? Context.get();
+            const instance = this.tryInstantiateSync( binding, activeCtx, visiting );
+
+            if( instance === SYNC_BAILOUT ){ return SYNC_BAILOUT }
+
+            if( instance && typeof instance === 'object' )
+            {
+                if( activeCtx )
+                {
+                    const store = activeCtx.requestInstances ?? ( activeCtx.requestInstances = new Map<string, any>());
+                    store.set( `transient:${token}:${store.size}`, instance );
+                }
+                else
+                {
+                    this.ephemeralInstances.add( instance );
+                }
+            }
+
+            return instance;
+        }
+
+        // Scope.SINGLETON
+        const ownerModule = currentContext ? binding.declaringModule : null;
+        const ownerKey = binding.declaringKey;
+
+        if( ownerModule )
+        {
+            const cached = ownerModule.instances.get( token );
+
+            if( cached !== undefined || ownerModule.instances.has( token ))
+            {
+                return cached;
+            }
+        }
+        else
+        {
+            const cached = this.instances.get( ownerKey );
+
+            if( cached !== undefined || this.instances.has( ownerKey ))
+            {
+                return cached;
+            }
+        }
+
+        const instance = this.tryInstantiateSync( binding, ctx, visiting );
+
+        if( instance === SYNC_BAILOUT ){ return SYNC_BAILOUT }
+
+        if( ownerModule )
+        {
+            ownerModule.instances.set( token, instance );
+        }
+
+        this.instances.set( ownerKey, instance );
+        this.syncLegacyCompatibility( token, instance );
+
+        return instance;
+    }
+
+    /** Internal synchronous resolution used by RequestProcessor when possible; returns `SYNC_BAILOUT` when async resolution is needed. */
+    public resolveSyncOrBail( token: string, contextModule?: any ): any
+    {
+        return this.tryResolveSync( token, contextModule, undefined );
+    }
+
+    public static readonly SYNC_BAILOUT = SYNC_BAILOUT;
+
+    resolve( token: string, contextModule?: any, resolutionStack?: Set<string> ): Promise<any>
+    {
+        if( !resolutionStack && this.inflightSingletons.size === 0 )
+        {
+            try
+            {
+                const syncResult = this.tryResolveSync( token, contextModule, undefined );
+
+                if( syncResult !== SYNC_BAILOUT )
+                {
+                    return Promise.resolve( syncResult );
+                }
+            }
+            catch( err )
+            {
+                return Promise.reject( err );
+            }
+        }
+
+        return this.resolveAsync( token, contextModule, resolutionStack );
+    }
+
+    private async resolveAsync( token: string, contextModule?: any, resolutionStack?: Set<string> ): Promise<any>
     {
         let currentContext = contextModule;
 
@@ -821,7 +1236,7 @@ export class ApplicationRegistry
 
             if( !binding ){ throw this.missingProvider( token, currentContext ) }
 
-            const cacheKey = scopedKey( token, binding.declaringModule );
+            const cacheKey = binding.declaringKey;
 
             if( requestStore.has( cacheKey ))
             {
@@ -880,7 +1295,7 @@ export class ApplicationRegistry
         {
             if( !binding ){ throw this.missingProvider( token, currentContext ) }
 
-            const guardKey = scopedKey( token, binding.declaringModule );
+            const guardKey = binding.declaringKey;
 
             if( resolutionStack?.has( guardKey ))
             {
@@ -905,14 +1320,41 @@ export class ApplicationRegistry
             throw this.missingProvider( token, currentContext );
         }
 
-        const guardKey = scopedKey( token, binding.declaringModule );
+        const ownerModule = currentContext ? binding.declaringModule : null;
+        const ownerKey = scopedKey( token, ownerModule );
 
-        if( resolutionStack?.has( guardKey ) || resolutionStack?.has( instanceKey ))
+        if( ownerModule )
+        {
+            if( ownerModule.instances.has( token ))
+            {
+                if( !resolutionStack?.has( ownerKey ))
+                {
+                    const pending = this.inflightSingletons.get( ownerKey );
+
+                    if( pending ){ return await pending }
+                }
+
+                return ownerModule.instances.get( token );
+            }
+        }
+        else if( this.instances.has( ownerKey ))
+        {
+            if( !resolutionStack?.has( ownerKey ))
+            {
+                const pending = this.inflightSingletons.get( ownerKey );
+
+                if( pending ){ return await pending }
+            }
+
+            return this.instances.get( ownerKey );
+        }
+
+        if( resolutionStack?.has( ownerKey ) || resolutionStack?.has( instanceKey ))
         {
             return this.lazyProxy( token, currentContext );
         }
 
-        const existingSingleton = this.inflightSingletons.get( instanceKey );
+        const existingSingleton = this.inflightSingletons.get( ownerKey );
 
         if( existingSingleton )
         {
@@ -920,7 +1362,7 @@ export class ApplicationRegistry
         }
 
         const nextStack = new Set( resolutionStack );
-        nextStack.add( guardKey );
+        nextStack.add( ownerKey );
         nextStack.add( instanceKey );
 
         const createSingleton = ( async () =>
@@ -932,12 +1374,12 @@ export class ApplicationRegistry
                 const instance = await this.instantiateProvider(
                     token,
                     binding.provider,
-                    currentContext ? binding.declaringModule : null,
+                    ownerModule,
                     nextStack
                 );
 
-                if( currentContext ){ currentContext.instances.set( token, instance ) }
-                this.instances.set( instanceKey, instance );
+                if( ownerModule ){ ownerModule.instances.set( token, instance ) }
+                this.instances.set( ownerKey, instance );
                 const initPromise = this.runOnInit( instance );
 
                 if( initPromise ){ await initPromise }
@@ -948,11 +1390,11 @@ export class ApplicationRegistry
             }
             finally
             {
-                this.inflightSingletons.delete( instanceKey );
+                this.inflightSingletons.delete( ownerKey );
             }
         })();
 
-        this.inflightSingletons.set( instanceKey, createSingleton );
+        this.inflightSingletons.set( ownerKey, createSingleton );
 
         return await createSingleton;
     }

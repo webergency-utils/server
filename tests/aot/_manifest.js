@@ -1,5 +1,5 @@
 import { MetadataStore } from '@webergency-utils/server';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import { isEvenNumber } from './controllers.js';
 import { DiGuard } from './controllers.compiled.js';
 import { SimpleGuard } from './controllers.compiled.js';

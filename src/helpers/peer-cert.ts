@@ -29,7 +29,7 @@ function asSubject( value: any ): PeerCertSubject
  * Normalize Node/Bun/Deno peer-certificate shapes into PeerCert.
  * Returns undefined when no usable certificate is present.
  */
-export function normalizePeerCert( raw: any ): PeerCert | undefined
+export function normalizePeerCert( raw: any, authorized?: boolean ): PeerCert | undefined
 {
     if( !raw || typeof raw !== 'object' ){ return undefined }
 
@@ -50,6 +50,10 @@ export function normalizePeerCert( raw: any ): PeerCert | undefined
 
     if( !hasIdentity ){ return undefined }
 
+    const isAuthorized = authorized !== undefined
+        ? Boolean( authorized )
+        : ( typeof raw.authorized === 'boolean' ? raw.authorized : true );
+
     return {
         subject,
         issuer,
@@ -64,14 +68,24 @@ export function normalizePeerCert( raw: any ): PeerCert | undefined
         fingerprint    : String( raw.fingerprint || '' ),
         fingerprint256 : raw.fingerprint256 ? String( raw.fingerprint256 ) : undefined,
         serialNumber   : serial,
-        serial
+        serial,
+        authorized     : isAuthorized
     };
 }
 
-/** Attach PeerCert onto a Fetch Request from a raw certificate object. */
-export function attachClientCert( req: Request, raw: any ): void
+/**
+ * Attach PeerCert onto a Fetch Request from a raw certificate object.
+ * Refuses unverified certificates (`authorized === false`) so optional mTLS
+ * (`rejectUnauthorized: false`) cannot spoof `@Peer` identity.
+ */
+export function attachClientCert( req: Request, raw: any, authorized?: boolean ): void
 {
-    const cert = normalizePeerCert( raw );
+    if( authorized === false || raw?.authorized === false )
+    {
+        return;
+    }
+
+    const cert = normalizePeerCert( raw, authorized );
 
     if( cert )
     {
@@ -107,7 +121,7 @@ export function attachBunClientCert( req: Request, server: any ): void
 
         if( socket && typeof socket.getPeerCertificate === 'function' )
         {
-            attachClientCert( req, socket.getPeerCertificate());
+            attachClientCert( req, socket.getPeerCertificate(), socket.authorized );
         }
     }
     catch

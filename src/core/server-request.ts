@@ -1,5 +1,6 @@
 import { parseQueryString } from '@webergency-utils/typechecker/runtime';
 import { Context, type RequestContext } from './context.js';
+import { EMPTY_PARAMS } from './router.js';
 import { PeerCert } from './types.js';
 import { SecurityOptions } from '../decorators.js';
 import
@@ -10,9 +11,12 @@ import
     getContentType,
     getContentTypeCharset,
     isJsonContentType,
+    isMultipartContentType,
     looksLikeUrlEncoded,
+    parseContentLength,
     readRawBody,
     requestLikelyHasBody,
+    resolveBodyLimit,
     sniffBody,
     unsupportedMediaType
 }
@@ -38,8 +42,16 @@ import
 
 export interface TransportRequest extends Request
 {
-    remoteAddress? : string
-    clientCert?    : PeerCert
+    remoteAddress?         : string
+    clientCert?            : PeerCert
+    __getDisconnectSignal? : () => AbortSignal
+    __isDisconnected?      : () => boolean
+}
+
+export interface WireTextResult
+{
+    kind : 'json' | 'urlencoded'
+    text : string
 }
 
 export interface ServerRequestInit extends SecurityOptions
@@ -49,7 +61,7 @@ export interface ServerRequestInit extends SecurityOptions
     queryString?        : string
     requestId?          : string
     remoteAddress?      : string
-    trustProxy?         : TrustProxy
+    trustProxy?         : TrustProxy | boolean
     compiledTrustProxy? : CompiledTrustProxy | null
     peer?               : PeerCert
     signal?             : AbortSignal
@@ -68,8 +80,6 @@ export interface ServerRequestInit extends SecurityOptions
 }
 
 const requestFacadeMap = new WeakMap<object, ServerRequest>();
-
-const EMPTY_PARAMS_BAG: Record<string, string> = {};
 
 function hasDirectSecurityOption( obj: ServerRequestInit ): boolean
 {
@@ -102,37 +112,39 @@ function hasDirectSecurityOption( obj: ServerRequestInit ): boolean
  */
 export class ServerRequest
 {
-    #req                : Request;
-    #url?               : URL;
-    #path?              : string;
-    #params             : Record<string, string>;
-    #queryString?       : string;
-    #query?             : Record<string, string>;
-    #requestId?         : string;
-    #remoteAddress?     : string;
-    #trustProxy?        : TrustProxy;
-    #compiledTrustProxy : CompiledTrustProxy | null | undefined;
-    #ip?                : string;
-    #peer?              : PeerCert;
-    #signal?            : AbortSignal;
-    #security           : SecurityOptions | undefined;
-    #globalFiles?       : FileOptions;
-    #routeFiles?        : FileOptions;
-    #files              : FileOptions | undefined;
-    #globalReviver?     : Reviver | null;
-    #reviver?           : Reviver;
-    #forwardStack?      : string[];
-    #forwardBody?       : Record<string, unknown>;
-    #headers?           : Record<string, string>;
-    #cookies?           : Record<string, string>;
-    #raw?               : ArrayBuffer;
-    #hasJson            = false;
-    #json?              : unknown;
-    #bodyContentType?   : 'application/json' | 'application/x-www-form-urlencoded';
-    #form?              : FormData;
-    #multipart?         : MultipartParseResult;
-    #payload?           : MultipartPayload;
-    #bodyMode?          : 'raw' | 'text' | 'form' | 'stream' | 'multipart';
+    #req                 : Request;
+    #url?                : URL;
+    #path?               : string;
+    #params?             : Record<string, string>;
+    #queryString?        : string;
+    #query?              : Record<string, string>;
+    #requestId?          : string;
+    #remoteAddress?      : string;
+    #trustProxy?         : TrustProxy | boolean;
+    #compiledTrustProxy  : CompiledTrustProxy | null | undefined;
+    #ip?                 : string;
+    #peer?               : PeerCert;
+    #signal?             : AbortSignal;
+    #useReqSignal        = false;
+    #security            : SecurityOptions | undefined;
+    #globalFiles?        : FileOptions;
+    #routeFiles?         : FileOptions;
+    #files               : FileOptions | undefined;
+    #globalReviver?      : Reviver | null;
+    #reviver?            : Reviver;
+    #forwardStack?       : string[];
+    #forwardBody?        : Record<string, unknown>;
+    #headers?            : Record<string, string>;
+    #cookies?            : Record<string, string>;
+    #raw?                : ArrayBuffer;
+    #hasJson             = false;
+    #json?               : unknown;
+    #declaredContentType : string | null | undefined;
+    #bodyContentType?    : 'application/json' | 'application/x-www-form-urlencoded';
+    #form?               : FormData;
+    #multipart?          : MultipartParseResult;
+    #payload?            : MultipartPayload;
+    #bodyMode?           : 'raw' | 'text' | 'form' | 'stream' | 'multipart';
 
     constructor(
         req             : Request,
@@ -152,7 +164,6 @@ export class ServerRequest
             this.#security = undefined;
             this.#files = files;
             this.#routeFiles = files;
-            this.#params = {};
         }
         else
         {
@@ -173,7 +184,7 @@ export class ServerRequest
                     ? mergeFileConfigs([ this.#globalFiles, this.#routeFiles ])
                     : undefined
             );
-            this.#params = opts.params ?? {};
+            this.#params = opts.params === EMPTY_PARAMS ? undefined : opts.params;
             this.#queryString = opts.queryString;
             this.#query = opts.query;
             this.#requestId = opts.requestId;
@@ -202,6 +213,28 @@ export class ServerRequest
         {
             requestFacadeMap.set( req, this );
         }
+    }
+
+    /** Fast internal factory used by `Server.handleFetch` to avoid allocating an options object on every request. */
+    static createInternal(
+        req                : Request,
+        requestId          : string,
+        trustProxy         : TrustProxy | boolean | undefined,
+        compiledTrustProxy : CompiledTrustProxy | null | undefined,
+        globalFiles        : FileOptions | undefined,
+        globalReviver      : Reviver | null | undefined
+    ): ServerRequest
+    {
+        const sreq = new ServerRequest( req );
+        sreq.#requestId = requestId;
+        sreq.#trustProxy = trustProxy;
+        sreq.#compiledTrustProxy = compiledTrustProxy;
+        sreq.#globalFiles = globalFiles;
+        sreq.#files = globalFiles;
+        sreq.#globalReviver = globalReviver;
+        sreq.#useReqSignal = !( req as TransportRequest ).__getDisconnectSignal;
+
+        return sreq;
     }
 
     static from(
@@ -276,7 +309,7 @@ export class ServerRequest
         this.#ip = undefined;
     }
 
-    set trustProxy( val: TrustProxy | undefined )
+    set trustProxy( val: TrustProxy | boolean | undefined )
     {
         this.#trustProxy = val;
         this.#compiledTrustProxy = compileTrustProxy( val );
@@ -337,7 +370,7 @@ export class ServerRequest
     /** Single cookie lookup (first-match-wins per RFC 6265). */
     cookie( name: string ): string | undefined
     {
-        return this.cookies[name];
+        return Object.hasOwn( this.cookies, name ) ? this.cookies[name] : undefined;
     }
 
     /** Wire cookies as a string map (cached). Not mutated by typed `@Cookies` parsers. */
@@ -353,12 +386,20 @@ export class ServerRequest
 
     get params(): Record<string, string>
     {
-        return this.#params;
+        return this.#params ?? ( this.#params = Object.create( null ) as Record<string, string> );
     }
 
     set params( val: Record<string, string> )
     {
-        this.#params = val;
+        this.#params = val === EMPTY_PARAMS ? undefined : val;
+    }
+
+    /** Fast internal parameter read without materializing an empty params bag on static routes. */
+    getParam( name: string ): string | undefined
+    {
+        return this.#params !== undefined && Object.hasOwn( this.#params, name )
+            ? this.#params[name]
+            : undefined;
     }
 
     get queryString(): string
@@ -396,15 +437,60 @@ export class ServerRequest
         return this.#peer ?? ( this.#req as TransportRequest ).clientCert;
     }
 
-    /** AbortSignal when `security.timeout` is set (and later disconnect). */
+    /** Fast boolean check for disconnect/timeout without materializing an `AbortController`. */
+    get isAborted(): boolean
+    {
+        if( this.#signal !== undefined )
+        {
+            return this.#signal.aborted;
+        }
+
+        const disconnected = ( this.#req as TransportRequest ).__isDisconnected;
+
+        if( disconnected !== undefined )
+        {
+            return disconnected();
+        }
+
+        if( this.#useReqSignal )
+        {
+            return Boolean(( this.#req as Request & { signal? : AbortSignal }).signal?.aborted );
+        }
+
+        return false;
+    }
+
+    /** AbortSignal when `security.timeout` is set or on client disconnect. */
     get signal(): AbortSignal | undefined
     {
-        return this.#signal;
+        if( this.#signal !== undefined )
+        {
+            return this.#signal;
+        }
+
+        const lazyDisconnect = ( this.#req as TransportRequest ).__getDisconnectSignal;
+
+        if( lazyDisconnect !== undefined )
+        {
+            this.#signal = lazyDisconnect();
+
+            return this.#signal;
+        }
+
+        if( this.#useReqSignal )
+        {
+            this.#signal = ( this.#req as Request & { signal? : AbortSignal }).signal;
+
+            return this.#signal;
+        }
+
+        return undefined;
     }
 
     set signal( val: AbortSignal | undefined )
     {
         this.#signal = val;
+        this.#useReqSignal = false;
     }
 
     get context(): RequestContext | undefined
@@ -501,9 +587,19 @@ export class ServerRequest
         stack.push( hopKey );
     }
 
+    #getDeclaredContentType(): string | null
+    {
+        if( this.#declaredContentType === undefined )
+        {
+            this.#declaredContentType = getContentType( this.#req );
+        }
+
+        return this.#declaredContentType;
+    }
+
     get effectiveContentType(): string | null
     {
-        return getContentType( this.#req ) ?? this.#bodyContentType ?? null;
+        return this.#getDeclaredContentType() ?? this.#bodyContentType ?? null;
     }
 
     get likelyHasBody(): boolean
@@ -549,6 +645,61 @@ export class ServerRequest
         const raw = await this.#readRaw();
 
         return new TextDecoder().decode( raw );
+    }
+
+    /**
+     * Single-pass wire text reader for typed JSON or urlencoded `@Body` parameters.
+     * Avoids double `#readRaw` awaits and triple `Content-Type` header parses on POST requests.
+     */
+    async tryGetWireText( securityOverride?: SecurityOptions ): Promise<WireTextResult | undefined>
+    {
+        if( this.#hasJson )
+        {
+            return undefined;
+        }
+
+        const declared = this.#getDeclaredContentType();
+        const raw = await this.#readRaw( securityOverride );
+
+        if( !raw.byteLength ){ return undefined }
+
+        if( isJsonContentType( declared ))
+        {
+            return { kind : 'json', text : decodeBodyText( raw ) };
+        }
+
+        if( declared === 'application/x-www-form-urlencoded' )
+        {
+            return { kind : 'urlencoded', text : decodeBodyText( raw ) };
+        }
+
+        if( declared )
+        {
+            return undefined;
+        }
+
+        const text = decodeBodyText( raw );
+
+        try
+        {
+            JSON.parse( text );
+            this.#bodyContentType = 'application/json';
+
+            return { kind : 'json', text };
+        }
+        catch
+        {
+            // fall through
+        }
+
+        if( looksLikeUrlEncoded( text ))
+        {
+            this.#bodyContentType = 'application/x-www-form-urlencoded';
+
+            return { kind : 'urlencoded', text };
+        }
+
+        return undefined;
     }
 
     /**
@@ -811,8 +962,32 @@ export class ServerRequest
         return payload;
     }
 
-    /** Raw body stream — not size-capped; caller must enforce limits. */
-    stream(): ReadableStream<Uint8Array>
+    #resolveStreamLimit( maxBytes?: number | string | false ): number | undefined
+    {
+        if( maxBytes !== undefined )
+        {
+            if( maxBytes === false || maxBytes === 0 || maxBytes === Infinity )
+            {
+                return undefined;
+            }
+
+            return parseSize( maxBytes );
+        }
+
+        if( this.#routeFiles !== undefined || ( this.#files !== undefined && isMultipartContentType( getContentType( this.#req ))))
+        {
+            return resolveMultipartTotalLimit( this.#security, this.#files );
+        }
+
+        return resolveBodyLimit( this.#security ).limit;
+    }
+
+    /**
+     * Raw body stream with passive byte-limit observation (`413 Payload Too Large` on overflow).
+     * Defaults to the route's resolved `maxBodySize` (or multipart `maxTotalSize` / `maxFileSize`
+     * when `@File` is present); pass `0` or `false` to opt out, or an explicit `maxBytes` override.
+     */
+    stream( maxBytes?: number | string | false ): ReadableStream<Uint8Array>
     {
         if( this.#raw !== undefined || this.#bodyMode )
         {
@@ -824,9 +999,41 @@ export class ServerRequest
             throw Object.assign( new Error( 'Request has no body stream' ), { status : 400 });
         }
 
+        const rawStream = this.#req.body as ReadableStream<Uint8Array>;
+        const limit = this.#resolveStreamLimit( maxBytes );
+        const declared = parseContentLength( this.#req.headers.get( 'content-length' ));
         this.#bodyMode = 'stream';
 
-        return this.#req.body as ReadableStream<Uint8Array>;
+        if( limit === undefined )
+        {
+            return rawStream;
+        }
+
+        if( declared !== undefined && declared > limit )
+        {
+            try { void rawStream.cancel()?.catch(() => undefined ) }
+            catch{ /* ignore */ }
+
+            throw Object.assign( new Error( 'Request body too large' ), { status : 413 });
+        }
+
+        let received = 0;
+
+        return rawStream.pipeThrough( new TransformStream<Uint8Array, Uint8Array>({
+            transform( chunk, controller )
+            {
+                received += chunk.byteLength;
+
+                if( received > limit )
+                {
+                    controller.error( Object.assign( new Error( 'Request body too large' ), { status : 413 }));
+
+                    return;
+                }
+
+                controller.enqueue( chunk );
+            }
+        }));
     }
 
     #consumeBody( mode: 'raw' | 'text' | 'form' | 'stream' | 'multipart' )
@@ -854,6 +1061,30 @@ export function resolveRequestFileOptions( req: ServerRequest, moduleFiles?: Fil
     return mergeFileConfigs([ req.globalFiles, moduleFiles, req.routeFiles ]);
 }
 
+function decodeCookieComponent( rawVal: string ): string
+{
+    let val = rawVal;
+
+    if( val.length >= 2 && val.charCodeAt( 0 ) === 0x22 && val.charCodeAt( val.length - 1 ) === 0x22 )
+    {
+        val = val.slice( 1, -1 );
+    }
+
+    if( val.indexOf( '%' ) === -1 )
+    {
+        return val;
+    }
+
+    try
+    {
+        return decodeURIComponent( val );
+    }
+    catch
+    {
+        return val;
+    }
+}
+
 export function parseCookieHeader( cookieHeader: string | null ): Record<string, string>
 {
     const cookies: Record<string, string> = {};
@@ -873,12 +1104,19 @@ export function parseCookieHeader( cookieHeader: string | null ): Record<string,
 
         if( eqIdx !== -1 && eqIdx < end )
         {
-            const key = cookieHeader.slice( start, eqIdx ).trim();
-            const val = cookieHeader.slice( eqIdx + 1, end ).trim();
+            const rawKey = cookieHeader.slice( start, eqIdx ).trim();
+            const key = rawKey ? decodeCookieComponent( rawKey ) : '';
 
-            if( cookies[key] === undefined )
+            if(
+                key
+                && key !== '__proto__'
+                && key !== 'prototype'
+                && key !== 'constructor'
+                && !Object.hasOwn( cookies, key )
+            )
             {
-                cookies[key] = val;
+                const val = cookieHeader.slice( eqIdx + 1, end ).trim();
+                cookies[key] = decodeCookieComponent( val );
             }
         }
 

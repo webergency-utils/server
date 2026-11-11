@@ -3,7 +3,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { RequestProcessor } from '../src/core/request-processor.js';
 import { ApplicationRegistry, runWithRegistry } from '../src/core/registry.js';
 import { setModuleMeta } from '../src/core/symbols.js';
-import { validators } from '@webergency-utils/typechecker';
+import { validators } from '@webergency-utils/typechecker/runtime';
 import { ServerRequest } from '../src/core/server-request.js';
 import type { EndpointMetadata, ParamMetadata } from '../src/core/types.js';
 

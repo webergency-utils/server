@@ -248,7 +248,7 @@ export function resolveBodyLimit( securityConfig?: SecurityOptions ): BodyLimitD
  * `parseInt` accepts trailing garbage (`'10abc'` -> `10`) and duplicate headers arrive
  * joined as `'10, 20'`, so require a single fully numeric value and reject the rest.
  */
-function parseContentLength( raw: string | null ): number | undefined
+export function parseContentLength( raw: string | null ): number | undefined
 {
     if( raw === null ){ return undefined }
 

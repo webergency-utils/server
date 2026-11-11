@@ -65,6 +65,7 @@ export {
     needsNodeTlsCompat,
     tlsMaterialToString
 } from './helpers/peer-cert.js';
+export { computeBodyHash, verifyBodyHash } from './helpers/body-hash.js';
 export * from './microservice/microservice.js';
 export * from './microservice/adapter.js';
 export * from './microservice/tcp-adapter.js';

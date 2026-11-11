@@ -3,7 +3,9 @@ import { bootstrapRegistry, BootstrapOptions } from '../core/bootstrap.js';
 import { RequestProcessor } from '../core/request-processor.js';
 import { MicroserviceAdapter, MicroserviceNoReply } from './adapter.js';
 
-export type MicroserviceOptions = BootstrapOptions;
+export type MicroserviceOptions = BootstrapOptions & {
+    exposeErrors? : boolean
+};
 
 export class Microservice 
 {
@@ -18,7 +20,13 @@ export class Microservice
     constructor(
         private adapter: MicroserviceAdapter,
         private options: MicroserviceOptions = {}
-    ) {}
+    )
+    {
+        if( options.exposeErrors !== undefined && typeof ( adapter as any )?.setExposeErrors === 'function' )
+        {
+            ( adapter as any ).setExposeErrors( options.exposeErrors );
+        }
+    }
 
     public async ensureReady()
     {
@@ -77,7 +85,10 @@ export class Microservice
                     return MicroserviceNoReply;
                 }
 
-                throw new Error( 'Service Unavailable (Shutting Down)' );
+                throw Object.assign( new Error( 'Service Unavailable (Shutting Down)' ), {
+                    status : 503,
+                    data   : { unavailable : true }
+                });
             }
 
             this.activeRequests++;
@@ -88,7 +99,7 @@ export class Microservice
                 {
                     if( !endpoint ) 
                     {
-                        throw new Error( `Pattern "${pattern}" not registered` );
+                        throw Object.assign( new Error( `Pattern "${pattern}" not registered` ), { status : 404 });
                     }
 
                     // @EventPattern: fire-and-forget — no reply envelope, errors stay local.
@@ -138,19 +149,39 @@ export class Microservice
     async shutdown( timeoutMs = 10000 ): Promise<void> 
     {
         this.isShuttingDown = true;
-        await this.adapter.close();
+        const hasTwoPhaseClose = typeof this.adapter.stopAccepting === 'function';
+
+        if( hasTwoPhaseClose )
+        {
+            await this.adapter.stopAccepting!();
+        }
+        else
+        {
+            await this.adapter.close();
+        }
 
         if( this.activeRequests > 0 )
         {
             await new Promise<void>(( resolve ) =>
             {
                 const timer = setTimeout( resolve, timeoutMs );
+                timer.unref?.();
                 this.drainResolvers.push(() =>
                 {
                     clearTimeout( timer );
                     resolve();
                 });
             });
+        }
+
+        if( hasTwoPhaseClose )
+        {
+            if( typeof this.adapter.drain === 'function' )
+            {
+                await this.adapter.drain( timeoutMs );
+            }
+
+            await this.adapter.close();
         }
 
         await runWithRegistry( this.registry, async () =>

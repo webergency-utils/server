@@ -49,7 +49,8 @@ export function parseAnyJson( text: string, reviver?: Reviver ): any
  */
 export function parseAnyQuery( text: string, reviver?: Reviver ): any
 {
-    const obj = parseQueryString( text );
+    const normalized = text.startsWith( '?' ) ? text.slice( 1 ) : text;
+    const obj = parseQueryString( normalized );
 
     return reviver ? reviveTree( obj, reviver ) : obj;
 }

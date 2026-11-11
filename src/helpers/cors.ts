@@ -136,22 +136,35 @@ function getCompiledCors( config: CorsOptions ): CompiledCors
     if( compiled ) { return compiled }
 
     const originRule = config.origin === undefined ? '*' : config.origin;
-    const methods = config.methods === undefined ? DEFAULT_METHODS : config.methods;
+    const rawMethods = config.methods === undefined ? DEFAULT_METHODS : config.methods;
+    let methods: any = rawMethods;
     let methodsStr: string | undefined;
 
-    if( Array.isArray( methods ))
+    if( Array.isArray( rawMethods ))
     {
-        methodsStr = methods === DEFAULT_METHODS ? DEFAULT_METHODS_STR : methods.join( ', ' );
+        methodsStr = rawMethods === DEFAULT_METHODS ? DEFAULT_METHODS_STR : rawMethods.join( ', ' );
     }
-    else if( typeof methods === 'string' )
+    else if( typeof rawMethods === 'string' )
     {
-        methodsStr = methods;
+        methodsStr = rawMethods;
+        methods = rawMethods.split( ',' ).map( m => m.trim()).filter( Boolean );
     }
 
-    const allowedHeadersRule = config.allowedHeaders ?? DEFAULT_ALLOWED_HEADERS;
-    const allowedHeadersStr = config.allowedHeaders && Array.isArray( config.allowedHeaders )
-        ? config.allowedHeaders.join( ', ' )
-        : undefined;
+    let allowedHeadersRule: any = DEFAULT_ALLOWED_HEADERS;
+    let allowedHeadersStr: string | undefined;
+
+    if( Array.isArray( config.allowedHeaders ))
+    {
+        allowedHeadersRule = config.allowedHeaders;
+        allowedHeadersStr = config.allowedHeaders.join( ', ' );
+    }
+    else if( typeof config.allowedHeaders === 'string' )
+    {
+        allowedHeadersRule = config.allowedHeaders === '*'
+            ? '*'
+            : config.allowedHeaders.split( ',' ).map( h => h.trim()).filter( Boolean );
+        allowedHeadersStr = config.allowedHeaders === '*' ? undefined : config.allowedHeaders;
+    }
 
     const exposedHeadersStr = config.exposedHeaders
         ? ( Array.isArray( config.exposedHeaders ) ? config.exposedHeaders.join( ', ' ) : config.exposedHeaders )
@@ -171,6 +184,8 @@ function getCompiledCors( config: CorsOptions ): CompiledCors
         {
             staticNonPreflight['Access-Control-Expose-Headers'] = exposedHeadersStr;
         }
+
+        Object.freeze( staticNonPreflight );
     }
 
     compiled = {
@@ -233,20 +248,23 @@ export function handleCors( request: Request, config: CorsOptions | undefined ):
 
     if( config.credentials && allowedOrigin === '*' ) 
     {
-        allowedOrigin = originHeader || '';
+        // Never reflect arbitrary Origins when configured with wildcard '*' + credentials.
+        // Callers wanting credentialed reflection must opt in explicitly via `origin: true` or an allowlist.
+        allowedOrigin = '';
     }
 
     const headers: CorsHeaders = {};
 
+    // Non-wildcard origin policies must always vary by Origin (even when disallowed or absent)
+    // so shared caches do not serve an uncredentialed/disallowed response to an allowed Origin or vice versa.
+    if( originRule !== '*' )
+    {
+        headers['Vary'] = 'Origin';
+    }
+
     if( allowedOrigin ) 
     {
         headers['Access-Control-Allow-Origin'] = allowedOrigin;
-
-        // Reflected origins must vary by Origin so shared caches do not reuse ACAO.
-        if( allowedOrigin !== '*' ) 
-        {
-            headers['Vary'] = 'Origin';
-        }
 
         if( config.credentials ) 
         {

@@ -5,6 +5,7 @@ export const HTTP_METHOD_DECORATORS = ['Get', 'Post', 'Put', 'Delete', 'Patch', 
 
 export const PARAM_DECORATORS: Record<string, string> = {
     'Request'         : 'Request',
+    'Response'        : 'Response',
     'Headers'         : 'Headers',
     'Header'          : 'Header',
     'Ip'              : 'Ip',
@@ -263,14 +264,7 @@ export function extractResponseMode( decorators: readonly ts.Decorator[] | undef
 /** `@Public` anywhere in the list drops every guard from the target. */
 export function hasPublicDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
 {
-    if( !decorators ) { return false }
-
-    for( const d of decorators )
-    {
-        if( d.expression.getText().includes( 'Public' )) { return true }
-    }
-
-    return false;
+    return hasDecoratorNamed( decorators, 'Public' );
 }
 
 export function hasSeoDecorator( decorators: readonly ts.Decorator[] | undefined ): boolean
@@ -338,25 +332,19 @@ export function isStandaloneGuardClass( node: ts.ClassDeclaration ): boolean
 
 /**
  * True when a class declaration carries a framework decorator (`@Controller`, `@Injectable`,
- * `@Module`) or is a standalone `Guard` / `Interceptor`.
+ * `@Module`) or is a standalone `Guard` / `Interceptor` / `Middleware`.
  */
 export function isRelevantSourceClass( node: ts.ClassDeclaration ): boolean
 {
     const decorators = ts.getDecorators( node );
 
-    if( decorators )
+    if( hasDecoratorNamed( decorators, 'Controller' ) || hasDecoratorNamed( decorators, 'Injectable' ) || hasDecoratorNamed( decorators, 'Module' ))
     {
-        for( const d of decorators )
-        {
-            const text = d.expression.getText();
-
-            if( text.includes( 'Controller' ) || text.includes( 'Injectable' ) || text.includes( 'Module' ))
-            {
-                return true;
-            }
-        }
+        return true;
     }
 
-    return isStandaloneGuardClass( node ) || classImplementsInterface( node, 'Interceptor' );
+    return isStandaloneGuardClass( node )
+        || classImplementsInterface( node, 'Interceptor' )
+        || classImplementsInterface( node, 'Middleware' );
 }
 

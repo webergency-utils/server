@@ -75,10 +75,10 @@ export class RateLimiter
     constructor( private maxKeys: number = DEFAULT_MAX_KEYS ) {}
 
     /**
-     * Consume one unit for `ip` on `path`. Mutates state, so call it once per request;
+     * Consume one unit for `ip` on `path` (and optional `method`). Mutates state, so call it once per request;
      * `checkLimit` is the boolean-only form of the same operation.
      */
-    public consume( ip: string, path: string, limitConfig: RateLimitConfig ): RateLimitResult 
+    public consume( ip: string, path: string, limitConfig: RateLimitConfig, method = '' ): RateLimitResult 
     {
         const windowMs = parseWindow( limitConfig.window );
         const now = Date.now();
@@ -90,7 +90,7 @@ export class RateLimiter
             this.evictExpired( now );
         }
 
-        const storeKey = `${path}:${ip}`;
+        const storeKey = method ? `${method}:${path}:${ip}` : `${path}:${ip}`;
         let bucket = this.rateLimitStore.get( storeKey );
         const isExisting = bucket !== undefined;
 
@@ -98,9 +98,12 @@ export class RateLimiter
         {
             bucket = { windowStart : now, windowMs, count : 0, prevCount : 0 };
         }
-        else
+        else if( bucket.windowMs !== windowMs )
         {
+            bucket.windowStart = now;
             bucket.windowMs = windowMs;
+            bucket.count = 0;
+            bucket.prevCount = 0;
         }
 
         this.rollWindow( bucket, now, windowMs );
@@ -134,9 +137,9 @@ export class RateLimiter
     }
 
     /** Boolean form of `consume`; both consume one unit, so use only one per request. */
-    public checkLimit( ip: string, path: string, limitConfig: RateLimitConfig ): boolean 
+    public checkLimit( ip: string, path: string, limitConfig: RateLimitConfig, method = '' ): boolean 
     {
-        return this.consume( ip, path, limitConfig ).allowed;
+        return this.consume( ip, path, limitConfig, method ).allowed;
     }
 
     /** Advance the bucket to the current window, carrying the previous count when adjacent. */

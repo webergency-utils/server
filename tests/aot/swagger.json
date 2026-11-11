@@ -12,6 +12,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.strict",
+        "operationId": "TypeSafetyController_strict",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -81,6 +82,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.strictIntercepted",
+        "operationId": "TypeSafetyController_strictIntercepted",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -150,6 +152,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.strip",
+        "operationId": "TypeSafetyController_strip",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -219,6 +222,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.relaxed",
+        "operationId": "TypeSafetyController_relaxed",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -288,6 +292,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.union",
+        "operationId": "TypeSafetyController_union",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -433,6 +438,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.status",
+        "operationId": "TypeSafetyController_status",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -518,6 +524,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.mixedArray",
+        "operationId": "TypeSafetyController_mixedArray",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -581,6 +588,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.nested",
+        "operationId": "TypeSafetyController_nested",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -688,6 +696,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.intersection",
+        "operationId": "TypeSafetyController_intersection",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -700,31 +709,19 @@
                       "type": "boolean"
                     },
                     "data": {
-                      "allOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "a": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false,
-                          "required": [
-                            "a"
-                          ]
+                      "type": "object",
+                      "properties": {
+                        "a": {
+                          "type": "string"
                         },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "b": {
-                              "type": "number"
-                            }
-                          },
-                          "additionalProperties": false,
-                          "required": [
-                            "b"
-                          ]
+                        "b": {
+                          "type": "number"
                         }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "a",
+                        "b"
                       ]
                     }
                   },
@@ -743,31 +740,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "a": {
-                        "type": "string"
-                      }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                      "a"
-                    ]
+                "type": "object",
+                "properties": {
+                  "a": {
+                    "type": "string"
                   },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "b": {
-                        "type": "number"
-                      }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                      "b"
-                    ]
+                  "b": {
+                    "type": "number"
                   }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "a",
+                  "b"
                 ]
               }
             }
@@ -781,6 +766,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.queryUnion",
+        "operationId": "TypeSafetyController_queryUnion",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -842,6 +828,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.arrayQuery",
+        "operationId": "TypeSafetyController_arrayQuery",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -891,6 +878,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.coerce",
+        "operationId": "TypeSafetyController_coerce",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -982,6 +970,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.deepBoolean",
+        "operationId": "TypeSafetyController_deepBoolean",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1051,6 +1040,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.coerceUnion",
+        "operationId": "TypeSafetyController_coerceUnion",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1145,6 +1135,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.templateLiteral",
+        "operationId": "TypeSafetyController_templateLiteral",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1190,6 +1181,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.tags",
+        "operationId": "TypeSafetyController_tags",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1249,6 +1241,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.customValidator",
+        "operationId": "TypeSafetyController_customValidator",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1310,6 +1303,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.headExplicit",
+        "operationId": "TypeSafetyController_headExplicit",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1330,6 +1324,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.optionsExplicit",
+        "operationId": "TypeSafetyController_optionsExplicit",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1359,6 +1354,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.getFallback",
+        "operationId": "TypeSafetyController_getFallback",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1388,6 +1384,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.allVerbs (GET)",
+        "operationId": "TypeSafetyController_allVerbs_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1415,6 +1412,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.allVerbs (POST)",
+        "operationId": "TypeSafetyController_allVerbs_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1442,6 +1440,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.allVerbs (PUT)",
+        "operationId": "TypeSafetyController_allVerbs_put",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1469,6 +1468,7 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.allVerbs (DELETE)",
+        "operationId": "TypeSafetyController_allVerbs_delete",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1496,6 +1496,63 @@
           "TypeSafetyController"
         ],
         "summary": "TypeSafetyController.allVerbs (PATCH)",
+        "operationId": "TypeSafetyController_allVerbs_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "TypeSafetyController"
+        ],
+        "summary": "TypeSafetyController.allVerbs (HEAD)",
+        "operationId": "TypeSafetyController_allVerbs_head",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "tags": [
+          "TypeSafetyController"
+        ],
+        "summary": "TypeSafetyController.allVerbs (OPTIONS)",
+        "operationId": "TypeSafetyController_allVerbs_options",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1525,6 +1582,7 @@
           "TagParityController"
         ],
         "summary": "TagParityController.getNumber",
+        "operationId": "TagParityController_getNumber",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1594,6 +1652,7 @@
           "TagParityController"
         ],
         "summary": "TagParityController.getString",
+        "operationId": "TagParityController_getString",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1662,6 +1721,7 @@
           "TagParityController"
         ],
         "summary": "TagParityController.postArray",
+        "operationId": "TagParityController_postArray",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1702,6 +1762,7 @@
           "TagParityController"
         ],
         "summary": "TagParityController.postUniqueArray",
+        "operationId": "TagParityController_postUniqueArray",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1740,6 +1801,7 @@
           "SecureController"
         ],
         "summary": "SecureController.getDefault",
+        "operationId": "SecureController_getDefault",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1760,6 +1822,7 @@
           "SecureController"
         ],
         "summary": "SecureController.getOverride",
+        "operationId": "SecureController_getOverride",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1780,6 +1843,7 @@
           "InheritedController"
         ],
         "summary": "InheritedController.getTest",
+        "operationId": "InheritedController_getTest",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1800,6 +1864,7 @@
           "InheritedController"
         ],
         "summary": "InheritedController.getOverride",
+        "operationId": "InheritedController_getOverride",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1820,6 +1885,7 @@
           "DiTestController"
         ],
         "summary": "DiTestController.test",
+        "operationId": "DiTestController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1857,6 +1923,7 @@
           "DiTestController"
         ],
         "summary": "DiTestController.paramInject",
+        "operationId": "DiTestController_paramInject",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1886,6 +1953,7 @@
           "DiTestController"
         ],
         "summary": "DiTestController.guarded",
+        "operationId": "DiTestController_guarded",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1915,6 +1983,7 @@
           "DiTestController"
         ],
         "summary": "DiTestController.guardedWithParams",
+        "operationId": "DiTestController_guardedWithParams",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1944,10 +2013,17 @@
           "RealtimeController"
         ],
         "summary": "RealtimeController.handleSse",
+        "operationId": "RealtimeController_handleSse",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events Stream"
+                }
+              },
               "application/json": {
                 "schema": {
                   "type": "string",
@@ -1965,10 +2041,17 @@
           "RealtimeController"
         ],
         "summary": "RealtimeController.handleSseStrip",
+        "operationId": "RealtimeController_handleSseStrip",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events Stream"
+                }
+              },
               "application/json": {
                 "schema": {
                   "type": "string",
@@ -1986,10 +2069,17 @@
           "RealtimeController"
         ],
         "summary": "RealtimeController.handleSseInvalid",
+        "operationId": "RealtimeController_handleSseInvalid",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events Stream"
+                }
+              },
               "application/json": {
                 "schema": {
                   "type": "string",
@@ -2007,6 +2097,7 @@
           "MathMicroserviceController"
         ],
         "summary": "MathMicroserviceController.sum",
+        "operationId": "MathMicroserviceController_sum",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2050,6 +2141,7 @@
           "MathMicroserviceController"
         ],
         "summary": "MathMicroserviceController.greet",
+        "operationId": "MathMicroserviceController_greet",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2080,6 +2172,7 @@
           "MathMicroserviceController"
         ],
         "summary": "MathMicroserviceController.notify",
+        "operationId": "MathMicroserviceController_notify",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2110,6 +2203,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.getExact",
+        "operationId": "ReturnTypeController_getExact",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2143,6 +2237,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.getStrip",
+        "operationId": "ReturnTypeController_getStrip",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2176,6 +2271,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.getInvalid",
+        "operationId": "ReturnTypeController_getInvalid",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2209,6 +2305,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.getInferredBranch",
+        "operationId": "ReturnTypeController_getInferredBranch",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2252,6 +2349,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.rpcExact",
+        "operationId": "ReturnTypeController_rpcExact",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2285,6 +2383,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.rpcStrip",
+        "operationId": "ReturnTypeController_rpcStrip",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2318,6 +2417,7 @@
           "ReturnTypeController"
         ],
         "summary": "ReturnTypeController.rpcInvalid",
+        "operationId": "ReturnTypeController_rpcInvalid",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2351,6 +2451,7 @@
           "StrictResponseController"
         ],
         "summary": "StrictResponseController.fail",
+        "operationId": "StrictResponseController_fail",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2384,6 +2485,7 @@
           "StrictResponseController"
         ],
         "summary": "StrictResponseController.overrideRelaxed",
+        "operationId": "StrictResponseController_overrideRelaxed",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2417,6 +2519,7 @@
           "InheritedResponseController"
         ],
         "summary": "InheritedResponseController.inheritedRelaxed",
+        "operationId": "InheritedResponseController_inheritedRelaxed",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2450,6 +2553,7 @@
           "InheritedResponseController"
         ],
         "summary": "InheritedResponseController.overrideStrict",
+        "operationId": "InheritedResponseController_overrideStrict",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2483,6 +2587,7 @@
           "UnprotectedClassController"
         ],
         "summary": "UnprotectedClassController.test",
+        "operationId": "UnprotectedClassController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2503,6 +2608,7 @@
           "UnprotectedClassAllController"
         ],
         "summary": "UnprotectedClassAllController.test",
+        "operationId": "UnprotectedClassAllController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2523,6 +2629,7 @@
           "UnprotectedMethodController"
         ],
         "summary": "UnprotectedMethodController.getOne",
+        "operationId": "UnprotectedMethodController_getOne",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2543,6 +2650,7 @@
           "UnprotectedMethodController"
         ],
         "summary": "UnprotectedMethodController.getAll",
+        "operationId": "UnprotectedMethodController_getAll",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2563,6 +2671,7 @@
           "UninterceptedClassController"
         ],
         "summary": "UninterceptedClassController.test",
+        "operationId": "UninterceptedClassController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2583,6 +2692,7 @@
           "UninterceptedClassAllController"
         ],
         "summary": "UninterceptedClassAllController.test",
+        "operationId": "UninterceptedClassAllController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2603,6 +2713,7 @@
           "UninterceptedMethodController"
         ],
         "summary": "UninterceptedMethodController.getOne",
+        "operationId": "UninterceptedMethodController_getOne",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2623,6 +2734,7 @@
           "UninterceptedMethodController"
         ],
         "summary": "UninterceptedMethodController.getAll",
+        "operationId": "UninterceptedMethodController_getAll",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2643,6 +2755,7 @@
           "MiddlewareTestController"
         ],
         "summary": "MiddlewareTestController.both",
+        "operationId": "MiddlewareTestController_both",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2690,6 +2803,7 @@
           "MiddlewareTestController"
         ],
         "summary": "MiddlewareTestController.override",
+        "operationId": "MiddlewareTestController_override",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2737,6 +2851,7 @@
           "MiddlewareUnmiddlewareController"
         ],
         "summary": "MiddlewareUnmiddlewareController.removeOne",
+        "operationId": "MiddlewareUnmiddlewareController_removeOne",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2784,6 +2899,7 @@
           "MiddlewareUnmiddlewareController"
         ],
         "summary": "MiddlewareUnmiddlewareController.removeAll",
+        "operationId": "MiddlewareUnmiddlewareController_removeAll",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2831,6 +2947,7 @@
           "GuardInterceptorOrderController"
         ],
         "summary": "GuardInterceptorOrderController.test",
+        "operationId": "GuardInterceptorOrderController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2851,6 +2968,7 @@
           "ClassPublicController"
         ],
         "summary": "ClassPublicController.test",
+        "operationId": "ClassPublicController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2871,6 +2989,7 @@
           "MethodPublicController"
         ],
         "summary": "MethodPublicController.test",
+        "operationId": "MethodPublicController_test",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2891,6 +3010,7 @@
           "SeoEmitController"
         ],
         "summary": "SeoEmitController.blog",
+        "operationId": "SeoEmitController_blog",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2927,7 +3047,8 @@
                       "required": [
                         "method",
                         "path"
-                      ]
+                      ],
+                      "description": "Internal rewrite descriptor returned from `@Seo` handlers or passed to `ServerResponse.forward`.\nRe-dispatched by HTTP method + path (public ∪ internal routers; SEO skipped)."
                     }
                   ]
                 }
@@ -2953,6 +3074,7 @@
           "SeoTargetController"
         ],
         "summary": "SeoTargetController.show",
+        "operationId": "SeoTargetController_show",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2992,6 +3114,7 @@
           "SeoToInternalController"
         ],
         "summary": "SeoToInternalController.go",
+        "operationId": "SeoToInternalController_go",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3023,7 +3146,8 @@
                   "required": [
                     "method",
                     "path"
-                  ]
+                  ],
+                  "description": "Internal rewrite descriptor returned from `@Seo` handlers or passed to `ServerResponse.forward`.\nRe-dispatched by HTTP method + path (public ∪ internal routers; SEO skipped)."
                 }
               }
             }
@@ -3037,6 +3161,7 @@
           "ScalarWireController"
         ],
         "summary": "ScalarWireController.paramId",
+        "operationId": "ScalarWireController_paramId",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3113,6 +3238,7 @@
           "ScalarWireController"
         ],
         "summary": "ScalarWireController.paramNum",
+        "operationId": "ScalarWireController_paramNum",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3189,6 +3315,7 @@
           "ScalarWireController"
         ],
         "summary": "ScalarWireController.headerToken",
+        "operationId": "ScalarWireController_headerToken",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3265,6 +3392,7 @@
           "ScalarWireController"
         ],
         "summary": "ScalarWireController.cookieSession",
+        "operationId": "ScalarWireController_cookieSession",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3341,6 +3469,7 @@
           "ScalarWireController"
         ],
         "summary": "ScalarWireController.combo",
+        "operationId": "ScalarWireController_combo",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3404,6 +3533,7 @@
           "ScalarWireController"
         ],
         "summary": "ScalarWireController.form",
+        "operationId": "ScalarWireController_form",
         "responses": {
           "200": {
             "description": "Successful Response",

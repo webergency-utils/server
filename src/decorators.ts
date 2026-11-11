@@ -172,7 +172,7 @@ export function MessagePattern( pattern: string ): MethodDecorator { return () =
 export function EventPattern( pattern: string ): MethodDecorator { return () => {} }
 
 export function Payload( target: any, key: string | symbol, idx: number ): void;
-export function Payload( name?: string ): ParameterDecorator;
+export function Payload( name?: string, mode?: 'strict' | 'strip' ): ParameterDecorator;
 export function Payload( arg1?: any, arg2?: any, arg3?: any ): any 
 {
     if( arg3 !== undefined ) { return } // Direct decorator usage

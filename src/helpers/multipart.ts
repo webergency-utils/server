@@ -10,6 +10,7 @@ import
 }
     from './http-header-parse.js';
 import { createFormBag } from './parsers.js';
+import { reviveAny, type Reviver } from './reviver.js';
 
 const Step =
     {
@@ -434,7 +435,7 @@ export class MultipartPayload
 
     has( name: string ): boolean
     {
-        return this.fieldMap[name] !== undefined || this.fileMap.has( name );
+        return ( Object.hasOwn( this.fieldMap, name ) && this.fieldMap[name] !== undefined ) || this.fileMap.has( name );
     }
 
     /** Keys present as a text field and/or file part. */
@@ -451,6 +452,8 @@ export class MultipartPayload
     /** First text value for `name`, or `undefined`. */
     field( name: string ): string | undefined
     {
+        if( !Object.hasOwn( this.fieldMap, name )){ return undefined }
+
         const value = this.fieldMap[name];
 
         if( value === undefined ){ return undefined }
@@ -461,6 +464,8 @@ export class MultipartPayload
     /** All text values for `name` (empty array if absent). */
     textFields( name: string ): string[]
     {
+        if( !Object.hasOwn( this.fieldMap, name )){ return [] }
+
         const value = this.fieldMap[name];
 
         if( value === undefined ){ return [] }
@@ -494,7 +499,7 @@ export class MultipartPayload
 
         if( files && files.length > 1 ){ return files.slice() }
 
-        return this.fieldMap[name];
+        return Object.hasOwn( this.fieldMap, name ) ? this.fieldMap[name] : undefined;
     }
 
     /**
@@ -502,7 +507,7 @@ export class MultipartPayload
      * bracket rules as urlencoded `parseQueryString` (`profile[name]`, `docs[]`, …).
      * Assigns in wire part order. Wire-level `field()` / `file()` stay literal.
      */
-    toObject(): Record<string, any>
+    toObject( reviver?: Reviver ): Record<string, any>
     {
         const bag = createFormBag();
 
@@ -512,7 +517,7 @@ export class MultipartPayload
             bag.assign( part.name, part.value );
         }
 
-        return bag;
+        return reviver ? reviveAny( bag, reviver ) : bag;
     }
 
     async cleanup()
@@ -935,19 +940,22 @@ export class MultipartParser
 
     private assignField( name: string, value: string )
     {
-        const existing = this.fields[name];
+        if( name !== '__proto__' && name !== 'prototype' && name !== 'constructor' )
+        {
+            const existing = Object.hasOwn( this.fields, name ) ? this.fields[name] : undefined;
 
-        if( existing === undefined )
-        {
-            this.fields[name] = value;
-        }
-        else if( Array.isArray( existing ))
-        {
-            existing.push( value );
-        }
-        else
-        {
-            this.fields[name] = [ existing, value ];
+            if( existing === undefined )
+            {
+                this.fields[name] = value;
+            }
+            else if( Array.isArray( existing ))
+            {
+                existing.push( value );
+            }
+            else
+            {
+                this.fields[name] = [ existing, value ];
+            }
         }
 
         this.parts.push({ name, value });

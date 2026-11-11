@@ -1,4 +1,4 @@
-import { createHash, createHmac, type BinaryToTextEncoding } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual, type BinaryToTextEncoding } from 'node:crypto';
 
 export type BodyHashEncoding = BinaryToTextEncoding | 'buffer';
 
@@ -30,7 +30,17 @@ export interface BodyHashOptions
 
 function instantiateHasher( hasher: HasherInput ): HasherInstance
 {
-    if( typeof hasher !== 'function' ){ return hasher as HasherInstance }
+    if( typeof hasher !== 'function' )
+    {
+        const copyFn = ( hasher as { copy? : unknown }).copy;
+
+        if( typeof copyFn === 'function' )
+        {
+            return ( copyFn as () => HasherInstance ).call( hasher );
+        }
+
+        return hasher as HasherInstance;
+    }
 
     const isClass = (
         /^class\s/.test( Function.prototype.toString.call( hasher )) ||
@@ -65,9 +75,20 @@ export function computeBodyHash(
 
     if( typeof hasher === 'string' )
     {
-        if( options?.key !== undefined )
+        if( options && 'key' in options )
         {
-            const hmac = createHmac( hasher, options.key );
+            const key = options.key;
+
+            if(
+                typeof key === 'string'
+                    ? key.length === 0
+                    : !( key instanceof Uint8Array ) || key.byteLength === 0
+            )
+            {
+                throw new Error( 'BodyHash HMAC key must be a non-empty string or Buffer' );
+            }
+
+            const hmac = createHmac( hasher, key! );
             hmac.update( buf );
 
             return encoding === 'buffer' ? hmac.digest() : hmac.digest( encoding );
@@ -99,4 +120,32 @@ export function computeBodyHash(
     }
 
     return result;
+}
+
+function toVerifyBuffer( input: string | Buffer | Uint8Array ): Buffer
+{
+    if( typeof input === 'string' ){ return Buffer.from( input, 'utf8' ) }
+
+    if( Buffer.isBuffer( input )){ return input }
+
+    return Buffer.from( input.buffer, input.byteOffset, input.byteLength );
+}
+
+/** Constant-time digest comparison helper for `@BodyHash` webhook verification. */
+export function verifyBodyHash(
+    computed: string | Buffer | Uint8Array,
+    expected: string | Buffer | Uint8Array | null | undefined
+): boolean
+{
+    if( expected === null || expected === undefined ){ return false }
+
+    const a = toVerifyBuffer( computed );
+    const b = toVerifyBuffer( expected );
+
+    if( a.byteLength === 0 || a.byteLength !== b.byteLength )
+    {
+        return false;
+    }
+
+    return timingSafeEqual( a, b );
 }

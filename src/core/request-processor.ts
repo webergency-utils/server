@@ -1,7 +1,19 @@
 import { Context, type RequestContext } from './context.js';
 import { ApplicationRegistry, getRegistry } from './registry.js';
 import { isMultipartContentType } from '../helpers/request-reader.js';
-import { EndpointMetadata, ParamMetadata, ServerResponse, SeoFallthrough, ForwardIntent, isSeoForward } from './types.js';
+import
+{
+    DIRECT_RESPONSE_BODY,
+    EndpointMetadata,
+    ForwardIntent,
+    isNullBodyStatus,
+    isSeoForward,
+    ParamMetadata,
+    SeoFallthrough,
+    ServerResponse,
+    tagDirectResponse
+}
+    from './types.js';
 import { ServerRequest, resolveRequestFileOptions } from './server-request.js';
 import { Scope, SecurityOptions, type FileOptions } from '../decorators.js';
 import { getModuleMeta, getBranchSerializers, hasFallbackBranchSerializers } from './symbols.js';
@@ -70,10 +82,16 @@ function serializationErrorCode( err: SerializationError ): string
     return err.message;
 }
 
+export const FINALIZED_RESPONSE = Symbol.for( 'webergency.server.finalizedResponse' );
+
+const ASYNC_PARAM_SOURCES = new Set<string>([ 'Body', 'RawBody', 'BodyHash', 'Inject', 'File', 'Files' ]);
+const EMPTY_ARGS: any[] = [];
+
 const reversedInterceptorsCache = new WeakMap<EndpointMetadata, string[]>();
 const rpcRequestTemplateCache = new WeakMap<EndpointMetadata, Request>();
 
-interface EndpointPlan {
+interface EndpointPlan
+{
     cacheVersion           : number
     controllerModule       : any
     moduleFiles            : FileOptions | undefined
@@ -82,11 +100,21 @@ interface EndpointPlan {
     needsResponseInParams  : boolean
     hasMiddlewares         : boolean
     hasGuards              : boolean
+    hasAsyncParams         : boolean
+    isSse                  : boolean
+    isSeo                  : boolean
     singletonController?   : any
     singletonInterceptors? : any[]
 }
 
 const endpointPlanCache = new WeakMap<ApplicationRegistry, WeakMap<EndpointMetadata, EndpointPlan>>();
+
+function isPromiseLike( val: unknown ): val is PromiseLike<any>
+{
+    return val !== null
+        && ( typeof val === 'object' || typeof val === 'function' )
+        && typeof ( val as PromiseLike<any> ).then === 'function';
+}
 
 function getReversedInterceptors( metadata: EndpointMetadata ): string[]
 {
@@ -118,6 +146,22 @@ function getEndpointPlan( registry: ApplicationRegistry, metadata: EndpointMetad
     if( !plan || plan.cacheVersion !== registry.cacheVersion )
     {
         const controllerModule = registry.getTokenModule( metadata.controller );
+        let singletonController: any;
+
+        if( registry.controllers.has( metadata.controller ))
+        {
+            singletonController = registry.controllers.get( metadata.controller );
+        }
+        else if( registry.getResolvedScope( metadata.controller, controllerModule ) === Scope.SINGLETON )
+        {
+            const syncCtrl = registry.resolveSyncOrBail( metadata.controller, controllerModule );
+
+            if( syncCtrl && syncCtrl !== ApplicationRegistry.SYNC_BAILOUT )
+            {
+                singletonController = syncCtrl;
+            }
+        }
+
         plan = {
             cacheVersion          : registry.cacheVersion,
             controllerModule,
@@ -126,7 +170,11 @@ function getEndpointPlan( registry: ApplicationRegistry, metadata: EndpointMetad
             reversedInterceptors  : getReversedInterceptors( metadata ),
             needsResponseInParams : metadata.params.some( p => p.source === 'Response' ),
             hasMiddlewares        : Boolean( metadata.middlewares && metadata.middlewares.length > 0 ),
-            hasGuards             : metadata.guards.length > 0
+            hasGuards             : metadata.guards.length > 0,
+            hasAsyncParams        : metadata.params.some( p => ASYNC_PARAM_SOURCES.has( p.source )),
+            isSse                 : Boolean( metadata.meta?.sse ),
+            isSeo                 : Boolean( metadata.seo ),
+            singletonController
         };
         byMeta.set( metadata, plan );
     }
@@ -176,6 +224,102 @@ function getParamLabel( p: ParamMetadata ): string
     return p.name || SOURCE_LABELS[p.source] || p.source.toLowerCase();
 }
 
+export interface ExecuteOptions
+{
+    exposeErrors?        : boolean
+    onError?             : ( err: unknown, status: number, requestId?: string ) => void
+    jsonHeadersTemplate? : Headers
+    baseHeadersTemplate? : Headers
+    requestId?           : string
+}
+
+function buildJsonResponse( jsonStr: string, requestId: string | undefined, options?: ExecuteOptions, hasMiddlewareBag?: boolean ): Response
+{
+    const id = options?.requestId ?? requestId;
+
+    if( !hasMiddlewareBag && options?.jsonHeadersTemplate && id )
+    {
+        const res = new Response( jsonStr, { headers : options.jsonHeadersTemplate });
+        res.headers.set( 'x-request-id', id );
+        ( res as any )[DIRECT_RESPONSE_BODY] = jsonStr;
+        ( res as any )[FINALIZED_RESPONSE] = true;
+
+        return res;
+    }
+
+    return tagDirectResponse(
+        new Response( jsonStr, { headers : { 'Content-Type' : 'application/json' } }),
+        jsonStr
+    );
+}
+
+function buildPlainResponse( body: string | null, requestId: string | undefined, options?: ExecuteOptions, hasMiddlewareBag?: boolean ): Response
+{
+    const id = options?.requestId ?? requestId;
+
+    if( !hasMiddlewareBag && options?.baseHeadersTemplate && id )
+    {
+        const res = new Response( body, { headers : options.baseHeadersTemplate });
+        res.headers.set( 'x-request-id', id );
+        ( res as any )[DIRECT_RESPONSE_BODY] = body;
+        ( res as any )[FINALIZED_RESPONSE] = true;
+
+        return res;
+    }
+
+    return tagDirectResponse( new Response( body ), body );
+}
+
+/** Truncate a WebSocket close reason to RFC 6455's 123 UTF-8 byte limit without splitting code points. */
+export function truncateWsReason( reason: string, maxBytes = 123 ): string
+{
+    if( Buffer.byteLength( reason, 'utf8' ) <= maxBytes )
+    {
+        return reason;
+    }
+
+    let out = '';
+    let used = 0;
+
+    for( const ch of reason )
+    {
+        const chBytes = Buffer.byteLength( ch, 'utf8' );
+
+        if( used + chBytes > maxBytes )
+        {
+            break;
+        }
+
+        out += ch;
+        used += chBytes;
+    }
+
+    return out;
+}
+
+function sanitizeSseHeaderField( value: unknown ): string
+{
+    return String( value ).replace( /[\r\n]+/g, ' ' );
+}
+
+function appendSseDataLines( sseString: string, dataStr: string ): string
+{
+    if( dataStr.indexOf( '\n' ) === -1 && dataStr.indexOf( '\r' ) === -1 )
+    {
+        return `${sseString}data: ${dataStr}\n\n`;
+    }
+
+    const lines = dataStr.split( /\r\n|\r|\n/ );
+    let out = sseString;
+
+    for( let i = 0; i < lines.length; i++ )
+    {
+        out += `data: ${lines[i]}\n`;
+    }
+
+    return `${out}\n`;
+}
+
 export class RequestProcessor 
 {
     public static applyReviver(
@@ -196,7 +340,7 @@ export class RequestProcessor
 
     private static throwIfAborted( req: ServerRequest )
     {
-        if( req.signal?.aborted )
+        if( req.isAborted )
         {
             throw Object.assign( new Error( 'Request Timeout' ), { status : 408 });
         }
@@ -264,11 +408,26 @@ export class RequestProcessor
         {
             let sseString = '';
 
-            if( 'event' in chunk ){ sseString += `event: ${chunk.event}\n` }
+            if( chunk.event !== undefined && chunk.event !== null )
+            {
+                sseString += `event: ${sanitizeSseHeaderField( chunk.event )}\n`;
+            }
 
-            if( 'id' in chunk ){ sseString += `id: ${chunk.id}\n` }
+            if( chunk.id !== undefined && chunk.id !== null )
+            {
+                sseString += `id: ${sanitizeSseHeaderField( chunk.id )}\n`;
+            }
 
-            if( 'retry' in chunk ){ sseString += `retry: ${chunk.retry}\n` }
+            if( chunk.retry !== undefined && chunk.retry !== null )
+            {
+                const retryNum = Math.trunc( Number( chunk.retry ));
+
+                if( Number.isFinite( retryNum ) && retryNum >= 0 )
+                {
+                    sseString += `retry: ${retryNum}\n`;
+                }
+            }
+
             const dataVal = 'data' in chunk ? chunk.data : chunk;
             let dataStr: string;
 
@@ -280,165 +439,90 @@ export class RequestProcessor
             {
                 dataStr = typeof dataVal === 'object' ? JSON.stringify( dataVal ) : String( dataVal );
             }
-            sseString += `data: ${dataStr}\n\n`;
 
-            return sseString;
+            return appendSseDataLines( sseString, dataStr );
         }
 
-        if( serializer ){ return `data: ${serializer( chunk )}\n\n` }
+        if( serializer )
+        {
+            return appendSseDataLines( '', serializer( chunk ));
+        }
 
-        return `data: ${String( chunk )}\n\n`;
+        return appendSseDataLines( '', String( chunk ));
     }
 
-    public static async resolveParam(
+    private static extractSyncParamRaw(
         p: ParamMetadata,
-        req: ServerRequest | Request,
-        ctx: any,
-        securityConfig?: SecurityOptions,
-        contextModule?: any,
+        sreq: ServerRequest,
         ws?: any,
         responseBag?: ServerResponse
-    ): Promise<any> 
+    ): any
     {
-        const sreq = ServerRequest.from( req, { security : securityConfig });
-
-        this.throwIfAborted( sreq );
-
-        const bodyIsPreparsed = p.source === 'Body' && sreq.hasCachedBody;
-        let val: any;
-
-        switch ( p.source ) 
+        switch ( p.source )
         {
-            case 'Param': val = sreq.params[p.name!]; break;
-            case 'Body': {
-                if( isMultipartContentType( sreq.effectiveContentType ))
-                {
-                    const payload = await sreq.payload();
-                    // Query-shaped bag: text fields + UploadedFile / UploadedFile[].
-                    // Validated below via assert-style validator with from: 'query'.
-                    val = payload.toObject();
-                }
-                else if( p.parserQuery || p.parser )
-                {
-                    // Typed urlencoded / JSON: raw text → one parse(text).
-                    // With forwardBody, structurally parse once, merge, then assert (not parse).
-                    const urlenc = await sreq.tryGetUrlEncodedText( securityConfig );
-
-                    if( urlenc !== undefined )
-                    {
-                        val = sreq.forwardBody
-                            ? { ...parseAnyQuery( urlenc, sreq.reviver ), ...sreq.forwardBody }
-                            : urlenc;
-                    }
-                    else
-                    {
-                        const jsonText = await sreq.tryGetJsonText( securityConfig );
-
-                        if( jsonText !== undefined )
-                        {
-                            val = sreq.forwardBody
-                                ? { ...parseAnyJson( jsonText, sreq.reviver ), ...sreq.forwardBody }
-                                : jsonText;
-                        }
-                        else
-                        {
-                            val = await sreq.body( securityConfig );
-                        }
-                    }
-                }
-                else
-                {
-                    val = await sreq.body( securityConfig );
-                }
-
-                // Object bags (JSON / multipart / merged urlencoded): apply forwardBody before validate.
-                // Raw urlencoded text (no forwardBody) stays a string for parserQuery.
-                if( sreq.forwardBody && val && typeof val === 'object' && !Array.isArray( val ))
-                {
-                    val = { ...val, ...sreq.forwardBody };
-                }
-                else if( sreq.forwardBody && ( val === undefined || val === null ))
-                {
-                    val = { ...sreq.forwardBody };
-                }
-
-                break;
-            }
-            case 'RawBody': val = await sreq.rawBody( securityConfig ); break;
-            case 'BodyHash': {
-                const raw = await sreq.rawBody( securityConfig );
-                val = computeBodyHash( raw, p.hasher, p.hashOptions );
-                break;
-            }
+            case 'Param': return sreq.getParam( p.name! );
             case 'Query': {
                 if( p.name )
                 {
-                    val = sreq.query[p.name];
-                }
-                else if( p.parser || p.parserQuery )
-                {
-                    val = sreq.queryString;
-                }
-                else
-                {
-                    val = { ...sreq.query };
+                    return Object.hasOwn( sreq.query, p.name ) ? sreq.query[p.name] : undefined;
                 }
 
-                break;
-            }
-            case 'Header': val = sreq.header( p.name! ); break;
-            case 'Headers': val = { ...sreq.headers }; break;
-            case 'Request': val = sreq; break;
-            case 'Response': val = responseBag; break;
-            case 'Ip': val = sreq.ip; break;
-            case 'Url': val = sreq.url; break;
-            case 'Hostname': val = sreq.hostname; break;
-            case 'Path': val = sreq.path; break;
-            case 'Context': val = Context.get(); break;
-            case 'Inject': val = await getRegistry().getInjectable( p.name!, contextModule ); break;
-            case 'WebSocket': val = ws; break;
-            case 'Peer': {
-                val = sreq.peer;
-                break;
-            }
-            case 'Cookies': {
-                val = { ...sreq.cookies };
-                break;
-            }
-            case 'Cookie': {
-                val = p.name ? sreq.cookie( p.name ) : { ...sreq.cookies };
-                break;
-            }
-            case 'File': {
-                if( !p.name )
+                if( p.parser || p.parserQuery )
                 {
-                    throw Object.assign( new Error( '@File parameter requires a field name' ), { status : 500 });
+                    return sreq.queryString;
                 }
 
-                val = await sreq.upload( p.name );
-                break;
+                return { ...sreq.query };
             }
-            case 'Files': {
-                val = await sreq.uploads( p.name || undefined );
-                break;
-            }
+            case 'Header': return sreq.header( p.name! );
+            case 'Headers': return { ...sreq.headers };
+            case 'Request': return sreq;
+            case 'Response': return responseBag;
+            case 'Ip': return sreq.ip;
+            case 'Url': return sreq.url;
+            case 'Hostname': return sreq.hostname;
+            case 'Path': return sreq.path;
+            case 'Context': return Context.get();
+            case 'WebSocket': return ws;
+            case 'Peer': return sreq.peer;
+            case 'Cookies': return { ...sreq.cookies };
+            case 'Cookie': return p.name ? sreq.cookie( p.name ) : { ...sreq.cookies };
+            default: return undefined;
         }
+    }
 
-        if( p.optional && p.source !== 'Body' && ( val === undefined || val === null ))
+    private static finalizeParamValue(
+        p: ParamMetadata,
+        val: any,
+        sreq: ServerRequest,
+        ctx: any,
+        bodyIsPreparsed: boolean
+    ): any
+    {
+        const isBody = p.source === 'Body';
+
+        if( p.optional && !isBody && ( val === undefined || val === null ))
         {
             return undefined;
         }
 
-        const bodyContentType = p.source === 'Body' ? sreq.effectiveContentType : null;
-        const bodyIsMultipart = p.source === 'Body' && isMultipartContentType( bodyContentType );
-        const bodyIsUrlencoded = p.source === 'Body' && bodyContentType === 'application/x-www-form-urlencoded';
+        if( p.optional && isBody && Boolean( p.name ) && val === undefined )
+        {
+            return undefined;
+        }
+
+        const bodyContentType = isBody ? sreq.effectiveContentType : null;
+        const bodyIsMultipart = isBody && isMultipartContentType( bodyContentType );
+        const bodyIsUrlencoded = isBody && bodyContentType === 'application/x-www-form-urlencoded';
 
         // parse() is wire text only. Objects (multipart, forward merge, header/cookie maps)
         // and already-structured pre-cached bodies stay on the assert/validator channel.
         const canParse = !bodyIsMultipart
             && !bodyIsPreparsed
+            && !( isBody && sreq.forwardBody !== undefined )
+            && !( isBody && Boolean( p.name ))
             && ( p.parser || p.parserQuery )
-            && ( typeof val === 'string' || ( p.source !== 'Body' && ( val === undefined || val === null )));
+            && ( typeof val === 'string' || ( !isBody && ( val === undefined || val === null )));
 
         if( canParse )
         {
@@ -463,13 +547,15 @@ export class RequestProcessor
                     const parseArg = sreq.reviver
                         ? { reviver : sreq.reviver }
                         : paramLabel;
-                    val = parserFn( val, parseArg as any );
+                    const parsed = parserFn( val, parseArg as any );
 
                     // Cache validated body so a later body() call does not re-parse.
-                    if( p.source === 'Body' && !sreq.hasCachedBody )
+                    if( isBody && !sreq.hasCachedBody )
                     {
-                        sreq.cacheParsedBody( val );
+                        sreq.cacheParsedBody( parsed );
                     }
+
+                    return parsed;
                 }
                 catch( e: any )
                 {
@@ -486,9 +572,27 @@ export class RequestProcessor
 
                     throw e;
                 }
-
-                return val;
             }
+        }
+
+        // Scalar wire parameters compiled with `parser` only (no fallback `validator`) MUST not
+        // pass non-string arrays/objects (e.g. `?id=1&id=2` or `?id[a]=b`) through unvalidated.
+        if(
+            !isBody
+            && ( p.parser || p.parserQuery )
+            && !p.validator
+            && val !== undefined
+            && val !== null
+            && typeof val !== 'string'
+        )
+        {
+            ctx.success = false;
+            ctx.errors.push({
+                path  : getParamLabel( p ),
+                error : 'expected string'
+            });
+
+            return val;
         }
 
         if( p.validator && typeof p.validator === 'function' )
@@ -506,18 +610,221 @@ export class RequestProcessor
             {
                 ctx.from = 'query';
             }
-            else if( p.source === 'Body' )
+            else if( isBody )
             {
                 ctx.from = ( bodyIsUrlencoded || bodyIsMultipart ) ? 'query' : 'json';
             }
 
-            val = p.validator( val, getParamLabel( p ), ctx );
+            const validated = p.validator( val, getParamLabel( p ), ctx );
 
             ctx.mode = oldMode;
             ctx.from = oldFrom;
+
+            return validated;
         }
 
         return val;
+    }
+
+    public static resolveParamsSync(
+        metadata: EndpointMetadata,
+        sreq: ServerRequest,
+        ctx: { success : boolean, errors : any[], mode : string },
+        ws?: any,
+        responseBag?: ServerResponse
+    ): any[]
+    {
+        const params = metadata.params;
+        const len = params.length;
+
+        if( len === 0 ){ return EMPTY_ARGS }
+
+        if( len === 1 )
+        {
+            const p0 = params[0];
+            this.throwIfAborted( sreq );
+
+            return [
+                this.finalizeParamValue(
+                    p0,
+                    this.extractSyncParamRaw( p0, sreq, ws, responseBag ),
+                    sreq,
+                    ctx,
+                    false
+                )
+            ];
+        }
+
+        const args = new Array( len );
+
+        for( let i = 0; i < len; i++ )
+        {
+            const p = params[i];
+            this.throwIfAborted( sreq );
+            args[i] = this.finalizeParamValue(
+                p,
+                this.extractSyncParamRaw( p, sreq, ws, responseBag ),
+                sreq,
+                ctx,
+                false
+            );
+        }
+
+        return args;
+    }
+
+    public static async resolveParam(
+        p: ParamMetadata,
+        req: ServerRequest | Request,
+        ctx: any,
+        securityConfig?: SecurityOptions,
+        contextModule?: any,
+        ws?: any,
+        responseBag?: ServerResponse
+    ): Promise<any> 
+    {
+        const sreq = req instanceof ServerRequest ? req : ServerRequest.from( req, { security : securityConfig });
+
+        if( securityConfig !== undefined && sreq.securityOptions === undefined )
+        {
+            sreq.securityOptions = securityConfig;
+        }
+
+        this.throwIfAborted( sreq );
+
+        const bodyIsPreparsed = p.source === 'Body' && sreq.hasCachedBody;
+        let val: any;
+
+        switch ( p.source ) 
+        {
+            case 'Body': {
+                if( p.name )
+                {
+                    let bodyObj: any;
+
+                    if( isMultipartContentType( sreq.effectiveContentType ))
+                    {
+                        const payload = await sreq.payload();
+                        bodyObj = payload.toObject( sreq.reviver );
+                    }
+                    else
+                    {
+                        bodyObj = await sreq.body( securityConfig );
+                    }
+
+                    if( sreq.forwardBody !== undefined )
+                    {
+                        if( sreq.forwardBody !== null && typeof sreq.forwardBody === 'object' && !Array.isArray( sreq.forwardBody ))
+                        {
+                            if( bodyObj && typeof bodyObj === 'object' && !Array.isArray( bodyObj ))
+                            {
+                                bodyObj = { ...bodyObj, ...sreq.forwardBody };
+                            }
+                            else if( bodyObj === undefined || bodyObj === null )
+                            {
+                                bodyObj = { ...sreq.forwardBody };
+                            }
+                        }
+                        else
+                        {
+                            bodyObj = sreq.forwardBody;
+                        }
+                    }
+
+                    val = ( bodyObj && typeof bodyObj === 'object' && !Array.isArray( bodyObj ) && Object.hasOwn( bodyObj, p.name ))
+                        ? bodyObj[p.name]
+                        : undefined;
+                    break;
+                }
+
+                const hasForwardBody = sreq.forwardBody !== undefined;
+                const forwardIsPlainObj = hasForwardBody
+                    && sreq.forwardBody !== null
+                    && typeof sreq.forwardBody === 'object'
+                    && !Array.isArray( sreq.forwardBody );
+
+                if( hasForwardBody && !forwardIsPlainObj )
+                {
+                    val = sreq.forwardBody;
+                }
+                else if( isMultipartContentType( sreq.effectiveContentType ))
+                {
+                    const payload = await sreq.payload();
+                    // Query-shaped bag: text fields + UploadedFile / UploadedFile[].
+                    // Validated below via assert-style validator with from: 'query'.
+                    val = payload.toObject( sreq.reviver );
+                }
+                else if( p.parserQuery || p.parser )
+                {
+                    // Typed urlencoded / JSON: single-pass wire text → one parse(text).
+                    // With forwardBody, structurally parse once, merge, then assert (not parse).
+                    const wire = await sreq.tryGetWireText( securityConfig );
+
+                    if( wire !== undefined )
+                    {
+                        if( wire.kind === 'urlencoded' )
+                        {
+                            val = forwardIsPlainObj
+                                ? { ...parseAnyQuery( wire.text, sreq.reviver ), ...sreq.forwardBody }
+                                : wire.text;
+                        }
+                        else
+                        {
+                            val = forwardIsPlainObj
+                                ? { ...parseAnyJson( wire.text, sreq.reviver ), ...sreq.forwardBody }
+                                : wire.text;
+                        }
+                    }
+                    else
+                    {
+                        val = await sreq.body( securityConfig );
+                    }
+                }
+                else
+                {
+                    val = await sreq.body( securityConfig );
+                }
+
+                // Object bags (JSON / multipart / merged urlencoded): apply forwardBody before validate.
+                // Raw urlencoded text (no forwardBody) stays a string for parserQuery.
+                if( forwardIsPlainObj && val && typeof val === 'object' && !Array.isArray( val ))
+                {
+                    val = { ...val, ...sreq.forwardBody };
+                }
+                else if( forwardIsPlainObj && ( val === undefined || val === null ))
+                {
+                    val = { ...sreq.forwardBody };
+                }
+
+                break;
+            }
+            case 'RawBody': val = await sreq.rawBody( securityConfig ); break;
+            case 'BodyHash': {
+                const raw = await sreq.rawBody( securityConfig );
+                val = computeBodyHash( raw, p.hasher, p.hashOptions );
+                break;
+            }
+            case 'Inject': val = await getRegistry().getInjectable( p.name!, contextModule ); break;
+            case 'File': {
+                if( !p.name )
+                {
+                    throw Object.assign( new Error( '@File parameter requires a field name' ), { status : 500 });
+                }
+
+                val = await sreq.upload( p.name );
+                break;
+            }
+            case 'Files': {
+                val = await sreq.uploads( p.name || undefined );
+                break;
+            }
+            default: {
+                val = this.extractSyncParamRaw( p, sreq, ws, responseBag );
+                break;
+            }
+        }
+
+        return this.finalizeParamValue( p, val, sreq, ctx, bodyIsPreparsed );
     }
 
     public static async resolveParams(
@@ -530,13 +837,27 @@ export class RequestProcessor
         responseBag?: ServerResponse
     ): Promise<any[]>
     {
-        if( metadata.params.length === 0 ){ return [] }
+        if( metadata.params.length === 0 ){ return EMPTY_ARGS }
 
         const args: any[] = [];
 
         for( const p of metadata.params )
         {
-            args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, ws, responseBag ));
+            if( ASYNC_PARAM_SOURCES.has( p.source ))
+            {
+                args.push( await this.resolveParam( p, sreq, ctx, securityConfig, controllerModule, ws, responseBag ));
+            }
+            else
+            {
+                this.throwIfAborted( sreq );
+                args.push( this.finalizeParamValue(
+                    p,
+                    this.extractSyncParamRaw( p, sreq, ws, responseBag ),
+                    sreq,
+                    ctx,
+                    false
+                ));
+            }
         }
 
         return args;
@@ -675,17 +996,280 @@ export class RequestProcessor
         }
     }
 
-    public static async execute(
+    private static serializeEndpointResult(
+        result: any,
+        metadata: EndpointMetadata,
+        plan: EndpointPlan,
+        sreq: ServerRequest,
+        registry: ApplicationRegistry,
+        requestCtx: RequestContext,
+        middlewareResponse: ServerResponse | undefined,
+        options?: ExecuteOptions
+    ): Response
+    {
+        this.throwIfAborted( sreq );
+
+        const isPlainObjectOrArray = typeof result === 'object'
+            && result !== null
+            && (
+                ( result.constructor === Object && typeof ( result as Record<string, unknown> ).pipe !== 'function' )
+                || Array.isArray( result )
+            );
+
+        if( !isPlainObjectOrArray || plan.isSeo || middlewareResponse?.pendingForward )
+        {
+            const pending =
+                ( result instanceof ServerResponse ? result.pendingForward : undefined )
+                || middlewareResponse?.pendingForward;
+
+            if( plan.isSeo )
+            {
+                if( result === undefined || result === null )
+                {
+                    throw new SeoFallthrough();
+                }
+
+                if( isSeoForward( result ))
+                {
+                    throw new ForwardIntent( result );
+                }
+
+                if( pending )
+                {
+                    this.assertForwardCompatible( middlewareResponse, result );
+
+                    throw new ForwardIntent( pending );
+                }
+
+                throw Object.assign(
+                    new Error( 'SEO endpoint must return a SeoForward descriptor or void' ),
+                    { status : 500 }
+                );
+            }
+
+            if( pending )
+            {
+                this.assertForwardCompatible( middlewareResponse, result );
+
+                throw new ForwardIntent( pending );
+            }
+
+            // Returning ServerResponse means the handler owns the HTTP response
+            // (status / headers / optional streamed body) — skip JSON / return-type paths.
+            if( result instanceof ServerResponse )
+            {
+                return result.toResponse();
+            }
+
+            if( result instanceof Response ) { return result }
+
+            // Binary / Web ReadableStream / Node Readable|ReadStream → pipe to the UA
+            // (before JSON serializers / validators, which cannot consume streams).
+            const streamOrBinary = toStreamOrBinaryBody( result );
+
+            if( streamOrBinary !== undefined )
+            {
+                const binRes = new Response( streamOrBinary );
+
+                if( streamOrBinary instanceof Uint8Array )
+                {
+                    tagDirectResponse( binRes, streamOrBinary );
+                }
+
+                return binRes;
+            }
+        }
+
+        const branchSerializer = ( typeof result === 'object' && result !== null )
+            ? ( requestCtx.branchSerializers?.get( result )
+                ?? ( hasFallbackBranchSerializers() ? getBranchSerializers().get( result ) : undefined ))
+            : undefined;
+        const activeSerializer = branchSerializer
+            || ( typeof metadata.returnTypeSerializer === 'function' ? metadata.returnTypeSerializer : undefined );
+        const blockPreFinalize = middlewareResponse !== undefined || plan.reversedInterceptors.length > 0;
+        const reqId = requestCtx.requestId ?? sreq.requestID;
+
+        if( typeof activeSerializer === 'function' )
+        {
+            try
+            {
+                return buildJsonResponse( activeSerializer( result ), reqId, options, blockPreFinalize );
+            }
+            catch( e: any )
+            {
+                if( e instanceof SerializationError )
+                {
+                    throw new Error( `Response validation failed: ${JSON.stringify([{ path : e.path, error : serializationErrorCode( e ) }])}`, { cause : e });
+                }
+
+                throw e;
+            }
+        }
+
+        let validatedResult = result;
+
+        if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' )
+        {
+            const mode = metadata.returnTypeMode || registry.getDefaultResponseMode();
+            const responseCtx = { success : true, errors : [], mode };
+            validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
+
+            if( !responseCtx.success )
+            {
+                throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
+            }
+        }
+
+        if( typeof validatedResult === 'object' && validatedResult !== null )
+        {
+            return buildJsonResponse( JSON.stringify( validatedResult ), reqId, options, blockPreFinalize );
+        }
+
+        if( validatedResult == null && middlewareResponse && isNullBodyStatus( middlewareResponse.status()))
+        {
+            return buildPlainResponse( null, reqId, options, blockPreFinalize );
+        }
+
+        return buildPlainResponse( validatedResult == null ? '' : String( validatedResult ), reqId, options, blockPreFinalize );
+    }
+
+    private static async handleExecuteError(
+        err: any,
+        sreq: ServerRequest,
+        middlewareResponse: ServerResponse | undefined,
+        options?: ExecuteOptions
+    ): Promise<Response>
+    {
+        if( err instanceof SeoFallthrough || err instanceof ForwardIntent )
+        {
+            throw err;
+        }
+
+        await sreq.cleanupDiskUploads();
+
+        if( err instanceof Response )
+        {
+            return middlewareResponse ? middlewareResponse.applyTo( err ) : err;
+        }
+
+        const status = httpStatusFromError( err );
+        options?.onError?.( err, status, sreq.requestID );
+
+        const errHeaders: Record<string, string> = { 'Content-Type' : 'application/json' };
+
+        if( err && typeof err === 'object' && err.headers && typeof err.headers === 'object' )
+        {
+            if( err.headers instanceof Headers )
+            {
+                err.headers.forEach(( value: string, key: string ) =>
+                {
+                    errHeaders[key] = value;
+                });
+            }
+            else
+            {
+                for( const [ key, value ] of Object.entries( err.headers as Record<string, unknown> ))
+                {
+                    if( typeof value === 'string' )
+                    {
+                        errHeaders[key] = value;
+                    }
+                }
+            }
+        }
+
+        const exposeErrors = options !== undefined ? Boolean( options.exposeErrors ) : true;
+        const errBody = JSON.stringify( clientErrorBody( err, status, exposeErrors ));
+        const response = tagDirectResponse( new Response( errBody, {
+            status,
+            headers : errHeaders
+        }), errBody );
+
+        return middlewareResponse ? middlewareResponse.applyTo( response ) : response;
+    }
+
+    private static async finishFastAsync(
+        rawPromise: PromiseLike<any>,
+        metadata: EndpointMetadata,
+        plan: EndpointPlan,
+        sreq: ServerRequest,
+        registry: ApplicationRegistry,
+        requestCtx: RequestContext,
+        middlewareResponse: ServerResponse | undefined,
+        options?: ExecuteOptions
+    ): Promise<Response>
+    {
+        try
+        {
+            const resolved = await rawPromise;
+
+            return Context.run( requestCtx, () =>
+            {
+                const outResponse = this.serializeEndpointResult(
+                    resolved,
+                    metadata,
+                    plan,
+                    sreq,
+                    registry,
+                    requestCtx,
+                    middlewareResponse,
+                    options
+                );
+
+                return middlewareResponse ? middlewareResponse.applyTo( outResponse ) : outResponse;
+            });
+        }
+        catch( err: any )
+        {
+            return await this.handleExecuteError( err, sreq, middlewareResponse, options );
+        }
+        finally
+        {
+            if( requestCtx.requestInstances?.size )
+            {
+                await this.cleanupRequestContext( requestCtx );
+            }
+        }
+    }
+
+    private static async finishFastError(
+        err: any,
+        sreq: ServerRequest,
+        requestCtx: RequestContext,
+        middlewareResponse: ServerResponse | undefined,
+        options?: ExecuteOptions
+    ): Promise<Response>
+    {
+        try
+        {
+            return await this.handleExecuteError( err, sreq, middlewareResponse, options );
+        }
+        finally
+        {
+            if( requestCtx.requestInstances?.size )
+            {
+                await this.cleanupRequestContext( requestCtx );
+            }
+        }
+    }
+
+    /**
+     * Internal dispatcher returning a direct `Response` when the entire endpoint pipeline
+     * completes synchronously, or a `Promise<Response>` when any step is asynchronous.
+     */
+    public static executeInternal(
         metadata: EndpointMetadata,
         req: ServerRequest | Request,
         securityConfig?: SecurityOptions,
-        registryArg?: ApplicationRegistry
-    ): Promise<Response> 
+        registryArg?: ApplicationRegistry,
+        options?: ExecuteOptions
+    ): Response | Promise<Response>
     {
-        const sreq = ServerRequest.from( req, { security : securityConfig });
+        const sreq = req instanceof ServerRequest ? req : ServerRequest.from( req, { security : securityConfig });
         sreq.securityOptions = securityConfig;
 
         const registry = registryArg ?? getRegistry();
+        const plan = getEndpointPlan( registry, metadata );
         const requestCtx: RequestContext = {
             request   : sreq,
             metadata,
@@ -693,21 +1277,173 @@ export class RequestProcessor
             registry
         };
 
+        if(
+            plan.singletonController !== undefined
+            && !plan.hasMiddlewares
+            && !plan.hasGuards
+            && plan.reversedInterceptors.length === 0
+            && !plan.hasAsyncParams
+            && !plan.isSse
+        )
+        {
+            return Context.run( requestCtx, (): Response | Promise<Response> =>
+            {
+                const controller = plan.singletonController;
+
+                if( metadata.reviver !== undefined || plan.moduleReviver !== undefined || sreq.globalReviver !== undefined )
+                {
+                    sreq.reviver = resolveReviver( metadata.reviver, plan.moduleReviver, sreq.globalReviver );
+                }
+
+                if( sreq.globalFiles !== undefined || plan.moduleFiles !== undefined || sreq.routeFiles !== undefined )
+                {
+                    sreq.fileOptions = resolveRequestFileOptions( sreq, plan.moduleFiles );
+                }
+
+                const middlewareResponse = plan.needsResponseInParams ? new ServerResponse() : undefined;
+
+                try
+                {
+                    this.throwIfAborted( sreq );
+
+                    const paramCount = metadata.params.length;
+                    let rawResult: any;
+
+                    if( paramCount === 0 )
+                    {
+                        rawResult = controller[metadata.methodName]();
+                    }
+                    else
+                    {
+                        const ctx = { success : true, errors : [] as any[], mode : 'strict' };
+                        const args = this.resolveParamsSync( metadata, sreq, ctx, undefined, middlewareResponse );
+
+                        this.throwIfAborted( sreq );
+
+                        if( !ctx.success )
+                        {
+                            const badBody = JSON.stringify({
+                                success : false,
+                                message : 'request validation failed',
+                                errors  : ctx.errors
+                            });
+                            const badRes = tagDirectResponse( new Response( badBody, {
+                                status  : 400,
+                                headers : { 'Content-Type' : 'application/json' }
+                            }), badBody );
+                            const applied = middlewareResponse ? middlewareResponse.applyTo( badRes ) : badRes;
+
+                            if( requestCtx.requestInstances?.size )
+                            {
+                                return this.cleanupRequestContext( requestCtx ).then(() => applied );
+                            }
+
+                            return applied;
+                        }
+
+                        rawResult = paramCount === 1
+                            ? controller[metadata.methodName]( args[0])
+                            : ( paramCount === 2
+                                ? controller[metadata.methodName]( args[0], args[1])
+                                : controller[metadata.methodName]( ...args ));
+                    }
+
+                    if( isPromiseLike( rawResult ))
+                    {
+                        return this.finishFastAsync(
+                            rawResult,
+                            metadata,
+                            plan,
+                            sreq,
+                            registry,
+                            requestCtx,
+                            middlewareResponse,
+                            options
+                        );
+                    }
+
+                    const outResponse = this.serializeEndpointResult(
+                        rawResult,
+                        metadata,
+                        plan,
+                        sreq,
+                        registry,
+                        requestCtx,
+                        middlewareResponse,
+                        options
+                    );
+                    const finalOut = middlewareResponse ? middlewareResponse.applyTo( outResponse ) : outResponse;
+
+                    if( requestCtx.requestInstances?.size )
+                    {
+                        return this.cleanupRequestContext( requestCtx ).then(() => finalOut );
+                    }
+
+                    return finalOut;
+                }
+                catch( err: any )
+                {
+                    if(( err instanceof SeoFallthrough || err instanceof ForwardIntent ) && !requestCtx.requestInstances?.size )
+                    {
+                        throw err;
+                    }
+
+                    return this.finishFastError( err, sreq, requestCtx, middlewareResponse, options );
+                }
+            });
+        }
+
+        return this.executeFullAsync( metadata, sreq, plan, registry, requestCtx, securityConfig, options );
+    }
+
+    public static execute(
+        metadata: EndpointMetadata,
+        req: ServerRequest | Request,
+        securityConfig?: SecurityOptions,
+        registryArg?: ApplicationRegistry,
+        options?: ExecuteOptions
+    ): Promise<Response> 
+    {
+        try
+        {
+            const res = this.executeInternal( metadata, req, securityConfig, registryArg, options );
+
+            return res instanceof Promise ? res : Promise.resolve( res );
+        }
+        catch( err )
+        {
+            return Promise.reject( err );
+        }
+    }
+
+    private static executeFullAsync(
+        metadata: EndpointMetadata,
+        sreq: ServerRequest,
+        plan: EndpointPlan,
+        registry: ApplicationRegistry,
+        requestCtx: RequestContext,
+        securityConfig?: SecurityOptions,
+        options?: ExecuteOptions
+    ): Promise<Response>
+    {
         return Context.run( requestCtx, async () => 
         {
-            const plan = getEndpointPlan( registry, metadata );
             const { controllerModule } = plan;
             const controller = plan.singletonController ?? await this.resolveController( plan, metadata, registry );
 
             if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
-            sreq.reviver = resolveReviver(
-                metadata.reviver,
-                plan.moduleReviver,
-                sreq.globalReviver
-            );
+            if( metadata.reviver !== undefined || plan.moduleReviver !== undefined || sreq.globalReviver !== undefined )
+            {
+                sreq.reviver = resolveReviver(
+                    metadata.reviver,
+                    plan.moduleReviver,
+                    sreq.globalReviver
+                );
+            }
 
             const ctx = { success : true, errors : [] as any[], mode : 'strict' };
+            let deferContextCleanup = false;
             let middlewareResponse: ServerResponse | undefined =
                 ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
             const getResponseBag = (): ServerResponse =>
@@ -724,22 +1460,26 @@ export class RequestProcessor
 
                 // 2. Resolve parameters (Parsing & Validation) & Execute Method
                 let result: any;
+                const paramCount = metadata.params.length;
 
-                if( metadata.params.length === 0 )
+                if( paramCount === 0 )
                 {
-                    result = await controller[metadata.methodName]();
+                    const raw = controller[metadata.methodName]();
+                    result = isPromiseLike( raw ) ? await raw : raw;
                 }
                 else
                 {
-                    const args = await this.resolveParams(
-                        metadata,
-                        sreq,
-                        ctx,
-                        securityConfig,
-                        controllerModule,
-                        undefined,
-                        middlewareResponse
-                    );
+                    const args = plan.hasAsyncParams
+                        ? await this.resolveParams(
+                            metadata,
+                            sreq,
+                            ctx,
+                            securityConfig,
+                            controllerModule,
+                            undefined,
+                            middlewareResponse
+                        )
+                        : this.resolveParamsSync( metadata, sreq, ctx, undefined, middlewareResponse );
 
                     this.throwIfAborted( sreq );
 
@@ -747,32 +1487,33 @@ export class RequestProcessor
                     {
                         await sreq.cleanupDiskUploads();
 
-                        return new Response( JSON.stringify({ success : false, message : 'request validation failed', errors : ctx.errors }), { 
+                        const badBody = JSON.stringify({
+                            success : false,
+                            message : 'request validation failed',
+                            errors  : ctx.errors
+                        });
+
+                        return tagDirectResponse( new Response( badBody, { 
                             status  : 400,
                             headers : { 'Content-Type' : 'application/json' }
-                        });
+                        }), badBody );
                     }
 
-                    result = await controller[metadata.methodName]( ...args );
+                    const raw = paramCount === 1
+                        ? controller[metadata.methodName]( args[0])
+                        : ( paramCount === 2
+                            ? controller[metadata.methodName]( args[0], args[1])
+                            : controller[metadata.methodName]( ...args ));
+                    result = isPromiseLike( raw ) ? await raw : raw;
                 }
 
-                this.throwIfAborted( sreq );
-
-                const pending =
-                    ( result instanceof ServerResponse ? result.pendingForward : undefined )
-                    || middlewareResponse?.pendingForward;
-
-                if( metadata.seo )
+                if( plan.isSse ) 
                 {
-                    if( result === undefined || result === null )
-                    {
-                        throw new SeoFallthrough();
-                    }
+                    this.throwIfAborted( sreq );
 
-                    if( isSeoForward( result ))
-                    {
-                        throw new ForwardIntent( result );
-                    }
+                    const pending =
+                        ( result instanceof ServerResponse ? result.pendingForward : undefined )
+                        || middlewareResponse?.pendingForward;
 
                     if( pending )
                     {
@@ -781,39 +1522,13 @@ export class RequestProcessor
                         throw new ForwardIntent( pending );
                     }
 
-                    throw Object.assign(
-                        new Error( 'SEO endpoint must return a SeoForward descriptor or void' ),
-                        { status : 500 }
-                    );
-                }
+                    if( result instanceof ServerResponse )
+                    {
+                        return result.toResponse();
+                    }
 
-                if( pending )
-                {
-                    this.assertForwardCompatible( middlewareResponse, result );
+                    if( result instanceof Response ) { return result }
 
-                    throw new ForwardIntent( pending );
-                }
-
-                // Returning ServerResponse means the handler owns the HTTP response
-                // (status / headers / optional streamed body) — skip JSON / return-type paths.
-                if( result instanceof ServerResponse )
-                {
-                    return result.toResponse();
-                }
-
-                if( result instanceof Response ) { return result }
-
-                // Binary / Web ReadableStream / Node Readable|ReadStream → pipe to the UA
-                // (before JSON serializers / validators, which cannot consume streams).
-                const streamOrBinary = toStreamOrBinaryBody( result );
-
-                if( streamOrBinary !== undefined && !metadata.meta?.sse )
-                {
-                    return new Response( streamOrBinary );
-                }
-
-                if( metadata.meta?.sse ) 
-                {
                     const headers = new Headers({
                         'Content-Type'  : 'text/event-stream',
                         'Cache-Control' : 'no-cache',
@@ -833,19 +1548,69 @@ export class RequestProcessor
                     if( result && typeof result[Symbol.asyncIterator] === 'function' ) 
                     {
                         const encoder = new TextEncoder();
+                        const iterator = result[Symbol.asyncIterator]();
+                        let streamClosed = false;
+                        let cleanedUp = false;
+                        deferContextCleanup = true;
+
+                        const finalizeSseContext = async () =>
+                        {
+                            if( cleanedUp ){ return }
+                            cleanedUp = true;
+
+                            if( requestCtx.requestInstances?.size )
+                            {
+                                await RequestProcessor.cleanupRequestContext( requestCtx );
+                            }
+                        };
+
+                        const closeIterator = async () =>
+                        {
+                            streamClosed = true;
+
+                            if( typeof iterator.return === 'function' )
+                            {
+                                try { await iterator.return() }
+                                catch{ /* ignore generator teardown errors on cancel */ }
+                            }
+
+                            await finalizeSseContext();
+                        };
+
+                        const onAbort = () =>
+                        {
+                            void closeIterator();
+                        };
+
+                        sreq.signal?.addEventListener( 'abort', onAbort, { once : true });
+
                         bodyStream = new ReadableStream({
                             async start( controller ) 
                             {
                                 try 
                                 {
-                                    for await ( const chunk of result ) 
+                                    while( !streamClosed )
                                     {
+                                        const step = await Context.run( requestCtx, () => iterator.next());
+
+                                        if( step.done || streamClosed )
+                                        {
+                                            break;
+                                        }
+
+                                        const chunk = step.value;
+
                                         try 
                                         {
                                             const payload = serializer
                                                 ? chunk
                                                 : RequestProcessor.validateSseChunk( chunk, validator, mode );
-                                            controller.enqueue( encoder.encode( RequestProcessor.formatSseChunk( payload, serializer )));
+                                            const encoded = encoder.encode( RequestProcessor.formatSseChunk( payload, serializer ));
+
+                                            if( !streamClosed )
+                                            {
+                                                controller.enqueue( encoded );
+                                            }
                                         }
                                         catch( err: any ) 
                                         {
@@ -860,12 +1625,31 @@ export class RequestProcessor
                                             throw err;
                                         }
                                     }
-                                    controller.close();
+
+                                    if( !streamClosed )
+                                    {
+                                        streamClosed = true;
+                                        controller.close();
+                                    }
                                 }
                                 catch ( err ) 
                                 {
-                                    controller.error( err );
+                                    if( !streamClosed )
+                                    {
+                                        streamClosed = true;
+                                        controller.error( err );
+                                    }
                                 }
+                                finally
+                                {
+                                    sreq.signal?.removeEventListener( 'abort', onAbort );
+                                    await finalizeSseContext();
+                                }
+                            },
+                            async cancel()
+                            {
+                                sreq.signal?.removeEventListener( 'abort', onAbort );
+                                await closeIterator();
                             }
                         });
                     }
@@ -881,52 +1665,16 @@ export class RequestProcessor
                     return new Response( bodyStream, { headers });
                 }
 
-                const branchSerializer = ( typeof result === 'object' && result !== null )
-                    ? ( requestCtx.branchSerializers?.get( result )
-                        ?? ( hasFallbackBranchSerializers() ? getBranchSerializers().get( result ) : undefined ))
-                    : undefined;
-                const activeSerializer = branchSerializer
-                    || ( typeof metadata.returnTypeSerializer === 'function' ? metadata.returnTypeSerializer : undefined );
-
-                if( typeof activeSerializer === 'function' )
-                {
-                    try 
-                    {
-                        const jsonStr = activeSerializer( result );
-
-                        return new Response( jsonStr, { headers : { 'Content-Type' : 'application/json' } });
-                    }
-                    catch( e: any ) 
-                    {
-                        if( e instanceof SerializationError ) 
-                        {
-                            throw new Error( `Response validation failed: ${JSON.stringify([{ path : e.path, error : serializationErrorCode( e ) }])}`, { cause : e });
-                        }
-
-                        throw e;
-                    }
-                }
-
-                let validatedResult = result;
-
-                if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
-                {
-                    const mode = metadata.returnTypeMode || registry.getDefaultResponseMode();
-                    const responseCtx = { success : true, errors : [], mode };
-                    validatedResult = metadata.returnTypeValidator( result, 'response', responseCtx );
-
-                    if( !responseCtx.success ) 
-                    {
-                        throw new Error( `Response validation failed: ${JSON.stringify( responseCtx.errors )}` );
-                    }
-                }
-
-                if( typeof validatedResult === 'object' && validatedResult !== null )
-                {
-                    return new Response( JSON.stringify( validatedResult ), { headers : { 'Content-Type' : 'application/json' } });
-                }
-
-                return new Response( validatedResult == null ? '' : String( validatedResult ));
+                return this.serializeEndpointResult(
+                    result,
+                    metadata,
+                    plan,
+                    sreq,
+                    registry,
+                    requestCtx,
+                    middlewareResponse,
+                    options
+                );
             };
 
             const chain = plan.reversedInterceptors.length === 0
@@ -966,29 +1714,13 @@ export class RequestProcessor
             }
             catch ( err: any ) 
             {
-                if( err instanceof SeoFallthrough || err instanceof ForwardIntent )
-                {
-                    throw err;
-                }
+                deferContextCleanup = false;
 
-                await sreq.cleanupDiskUploads();
-
-                if( err instanceof Response ) 
-                {
-                    return middlewareResponse ? middlewareResponse.applyTo( err ) : err;
-                }
-                const status = httpStatusFromError( err );
-
-                const response = new Response( JSON.stringify( clientErrorBody( err, status )), { 
-                    status, 
-                    headers : { 'Content-Type' : 'application/json' } 
-                });
-
-                return middlewareResponse ? middlewareResponse.applyTo( response ) : response;
+                return await this.handleExecuteError( err, sreq, middlewareResponse, options );
             }
             finally
             {
-                if( requestCtx.requestInstances?.size )
+                if( !deferContextCleanup && requestCtx.requestInstances?.size )
                 {
                     await this.cleanupRequestContext( requestCtx );
                 }
@@ -1003,11 +1735,16 @@ export class RequestProcessor
         req: ServerRequest | Request
     ): void
     {
+        const maskErrors = Boolean(( req as any )?.__wsMaskErrors );
+
         void this.executeWs( metadata, ws, req ).catch(( err: any ) =>
         {
             try
             {
-                ws.close( 1011, err?.message || 'Internal WS Handler Error' );
+                const rawReason = ( maskErrors && httpStatusFromError( err ) >= 500 )
+                    ? 'Internal server error'
+                    : ( err?.message || 'Internal WS Handler Error' );
+                ws.close( 1011, truncateWsReason( rawReason ));
             }
             catch
             {
@@ -1023,6 +1760,7 @@ export class RequestProcessor
     ): Promise<void> 
     {
         const handedOffCtx: RequestContext | undefined = ( req as any )?.__wsRequestContext;
+        const maskErrors = Boolean(( req as any )?.__wsMaskErrors );
         const sreq: ServerRequest = handedOffCtx?.request ?? ServerRequest.from( req );
 
         if( ws?.params && Object.keys( sreq.params ).length === 0 )
@@ -1060,6 +1798,7 @@ export class RequestProcessor
             const ctx = { success : true, errors : [] as any[], mode : 'strict' };
             const middlewareResponse: ServerResponse | undefined =
                 ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
+            let deferCleanupUntilClose = false;
 
             try 
             {
@@ -1080,7 +1819,7 @@ export class RequestProcessor
 
                 if( !ctx.success ) 
                 {
-                    ws.close( 4000, JSON.stringify({ success : false, message : 'request validation failed', errors : ctx.errors }));
+                    ws.close( 4000, truncateWsReason( JSON.stringify({ success : false, message : 'request validation failed', errors : ctx.errors })));
 
                     return;
                 }
@@ -1092,12 +1831,32 @@ export class RequestProcessor
                         ? this.wrapInterceptorChain( plan.singletonInterceptors, sreq, finalHandler )
                         : await this.buildInterceptorChain( plan, registry, sreq, finalHandler ));
                 await chain();
+
+                if( typeof ws?.on === 'function' && requestCtx.requestInstances?.size )
+                {
+                    deferCleanupUntilClose = true;
+                    const onWsClose = () =>
+                    {
+                        if( typeof ws.off === 'function' )
+                        {
+                            ws.off( 'close', onWsClose );
+                        }
+
+                        void this.cleanupRequestContext( requestCtx );
+                    };
+                    ws.on( 'close', onWsClose );
+                }
             }
             catch ( err: any ) 
             {
+                deferCleanupUntilClose = false;
+
                 try
                 {
-                    ws.close( 4001, err.message || 'Internal WS Handler Error' );
+                    const rawReason = ( maskErrors && httpStatusFromError( err ) >= 500 )
+                        ? 'Internal server error'
+                        : ( err.message || 'Internal WS Handler Error' );
+                    ws.close( 4001, truncateWsReason( rawReason ));
                 }
                 catch
                 {
@@ -1106,7 +1865,16 @@ export class RequestProcessor
             }
             finally
             {
-                await this.cleanupRequestContext( requestCtx );
+                // Flush any early WebSocket frames buffered while async setup was running.
+                if( typeof ws?.flushBufferedMessages === 'function' )
+                {
+                    ws.flushBufferedMessages();
+                }
+
+                if( !deferCleanupUntilClose )
+                {
+                    await this.cleanupRequestContext( requestCtx );
+                }
             }
         });
     }
@@ -1139,6 +1907,12 @@ export class RequestProcessor
 
                 if( !controller ) { throw new Error( `Controller ${metadata.controller} not registered` ) }
 
+                sreq.reviver = resolveReviver(
+                    metadata.reviver,
+                    plan.moduleReviver,
+                    sreq.globalReviver
+                );
+
                 const ctx = { success : true, errors : [] as any[], mode : 'strict' };
                 let middlewareResponse: ServerResponse | undefined =
                     ( plan.hasMiddlewares || plan.needsResponseInParams ) ? new ServerResponse() : undefined;
@@ -1162,25 +1936,24 @@ export class RequestProcessor
                     });
                 }
 
-                // 2. Resolve parameters (Validation)
-                const args = await this.resolveParams(
-                    metadata,
-                    sreq,
-                    ctx,
-                    undefined,
-                    controllerModule,
-                    undefined,
-                    middlewareResponse
-                );
-
-                if( !ctx.success ) 
-                {
-                    throw Object.assign( new Error( 'Validation failed' ), { status : 400, data : { success : false, message : 'request validation failed', errors : ctx.errors } });
-                }
-
-                // 3. Wrap in Interceptor Chain
+                // 2. Wrap parameter resolution + handler execution inside Interceptor Chain (parity with HTTP)
                 const finalHandler = async () => 
                 {
+                    const args = await this.resolveParams(
+                        metadata,
+                        sreq,
+                        ctx,
+                        undefined,
+                        controllerModule,
+                        undefined,
+                        middlewareResponse
+                    );
+
+                    if( !ctx.success ) 
+                    {
+                        throw Object.assign( new Error( 'Validation failed' ), { status : 400, data : { success : false, message : 'request validation failed', errors : ctx.errors } });
+                    }
+
                     const result = await controller[metadata.methodName]( ...args );
 
                     if( metadata.returnTypeValidator && typeof metadata.returnTypeValidator === 'function' ) 
@@ -1195,6 +1968,23 @@ export class RequestProcessor
                         }
 
                         return validatedResult;
+                    }
+
+                    if( typeof metadata.returnTypeSerializer === 'function' )
+                    {
+                        try
+                        {
+                            return JSON.parse( metadata.returnTypeSerializer( result ));
+                        }
+                        catch( e: any )
+                        {
+                            if( e instanceof SerializationError )
+                            {
+                                throw new Error( `Response validation failed: ${JSON.stringify([{ path : e.path, error : serializationErrorCode( e ) }])}`, { cause : e });
+                            }
+
+                            throw e;
+                        }
                     }
 
                     return result;

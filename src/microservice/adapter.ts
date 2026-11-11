@@ -10,5 +10,9 @@ export type MicroserviceHandlerResult = typeof MicroserviceNoReply | any;
 
 export interface MicroserviceAdapter {
     listen( handler: ( pattern: string, payload: any, connection: MessageConnection ) => Promise<MicroserviceHandlerResult> ): Promise<void>
+    /** Stop accepting new connections without tearing down in-flight ones during graceful drain. */
+    stopAccepting?(): Promise<void>
+    /** Wait for adapter-level in-flight message handlers + reply writes to finish. */
+    drain?( timeoutMs: number ): Promise<void>
     close(): Promise<void>
 }

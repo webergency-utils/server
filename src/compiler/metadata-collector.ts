@@ -3,7 +3,7 @@ import { buildParser, buildValidator, generateHash } from '@webergency-utils/typ
 import { ProjectRegistry } from './registry.js';
 import { PARAM_DECORATORS, parseExpression, extractCorsConfig, extractSecurityConfig, extractResponseMode, extractFileConfig, extractReviver } from './decorator-config.js';
 import { DiagnosticReporter, DiagnosticCode } from './diagnostics.js';
-import { resolveTokenFromType } from './di-resolution.js';
+import { resolveTokenFromType, resolveInjectArgToken, isInjectableTypeSymbol } from './di-resolution.js';
 
 /**
  * What a decorator list says about one merge dimension (guards, interceptors, middlewares):
@@ -162,11 +162,7 @@ export class MetadataCollector
 
                         if( ts.isCallExpression( e ) && e.arguments.length > 0 ) 
                         {
-                            const arg = e.arguments[0];
-
-                            if( ts.isStringLiteral( arg )) { injectToken = arg.text }
-                            else if( ts.isIdentifier( arg )) { injectToken = arg.text }
-                            else { injectToken = arg.getText() }
+                            injectToken = resolveInjectArgToken( e.arguments[0], checker );
                         }
                         break;
                     }
@@ -188,7 +184,7 @@ export class MetadataCollector
                 const type = checker.getTypeAtLocation( p );
                 const typeName = resolveTokenFromType( p.type, type, checker );
 
-                if( typeName && registry.providers.has( typeName )) 
+                if( typeName && ( registry.providers.has( typeName ) || isInjectableTypeSymbol( p.type, type, checker ))) 
                 {
                     isInject = true;
                     injectToken = typeName;
@@ -217,7 +213,19 @@ export class MetadataCollector
                                 );
                             }
 
-                            if( dName === 'Body' ) 
+                            if( ident.text === 'Payload' )
+                            {
+                                if( e.arguments[0] && ts.isStringLiteral( e.arguments[0]))
+                                {
+                                    pName = e.arguments[0].text;
+                                }
+
+                                if( e.arguments[1] && ts.isStringLiteral( e.arguments[1]))
+                                {
+                                    vMode = e.arguments[1].text as any;
+                                }
+                            }
+                            else if( dName === 'Body' ) 
                             {
                                 if( e.arguments[0] && ts.isStringLiteral( e.arguments[0])) 
                                 {
@@ -316,37 +324,55 @@ export class MetadataCollector
 
                     if( dName === 'Body' ) 
                     {
-                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'json' });
-                        buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
-                        // Multipart (and assert-style) path: validators support UploadedFile via instanceof.
-                        buildValidator( type, checker, registry.validators, typeHash );
-                        metadata.push({
-                            source      : dName,
-                            name        : pName,
-                            parser      : `${typeHash}_${mode}_json`,
-                            parserQuery : `${typeHash}_${mode}_query`,
-                            validator   : typeHash,
-                            mode        : vMode
-                        });
+                        if( pName )
+                        {
+                            // Named `@Payload('field')` extracts a property from an already-parsed body object.
+                            buildValidator( type, checker, registry.validators, typeHash );
+                            metadata.push({
+                                source    : dName,
+                                name      : pName,
+                                validator : typeHash,
+                                mode      : vMode
+                            });
+                        }
+                        else
+                        {
+                            buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'json' });
+                            buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'query' });
+                            // Multipart (and assert-style) path: validators support UploadedFile via instanceof.
+                            buildValidator( type, checker, registry.validators, typeHash );
+                            metadata.push({
+                                source      : dName,
+                                name        : pName,
+                                parser      : `${typeHash}_${mode}_json`,
+                                parserQuery : `${typeHash}_${mode}_query`,
+                                validator   : typeHash,
+                                mode        : vMode
+                            });
+                        }
                     }
                     else if( dName === 'Query' )
                     {
                         if( pName )
                         {
-                            // Named query: scalar wire value → from:'string'. Arrays/objects stay on assert.
+                            // Named query: scalar wire value → from:'string', plus validator fallback
+                            // so boolean flags (`?on` -> true) pass boolean validators while arrays/objects
+                            // (`?id=a&id=b`, `?id[$ne]=1`) fail scalar validation with 400.
+                            buildValidator( type, checker, registry.validators, typeHash );
+
                             try
                             {
                                 buildParser( type, checker, registry.parsers, typeHash, { mode, from : 'string' });
                                 metadata.push({
-                                    source : dName,
-                                    name   : pName,
-                                    parser : `${typeHash}_${mode}_string`,
-                                    mode   : vMode
+                                    source    : dName,
+                                    name      : pName,
+                                    parser    : `${typeHash}_${mode}_string`,
+                                    validator : typeHash,
+                                    mode      : vMode
                                 });
                             }
                             catch
                             {
-                                buildValidator( type, checker, registry.validators, typeHash );
                                 metadata.push({
                                     source    : dName,
                                     name      : pName,

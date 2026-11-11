@@ -4,6 +4,41 @@ import * as fs from 'fs';
 import { buildJsonSchema } from '@webergency-utils/typechecker/transformer';
 import { ProjectRegistry } from './registry.js';
 import { unwrapReturnType } from './endpoint-analyzer.js';
+import { getBaseClass } from './di-resolution.js';
+
+function toOpenApiPath( rawPath: string ): string
+{
+    return rawPath
+        .replace( /:([a-zA-Z0-9_]+)(?:\([^)]*\))?[?*+]?/g, '{$1}' )
+        .replace( /\*([a-zA-Z0-9_]+)/g, '{$1}' )
+        .replace( /\*/g, '{wildcard}' );
+}
+
+function findControllerMethod(
+    classDecl : ts.ClassDeclaration,
+    methodName : string,
+    checker   : ts.TypeChecker
+): ts.MethodDeclaration | undefined
+{
+    let current: ts.ClassDeclaration | null = classDecl;
+
+    while( current )
+    {
+        const sf = current.getSourceFile();
+
+        for( const member of current.members )
+        {
+            if( ts.isMethodDeclaration( member ) && member.name.getText( sf ) === methodName )
+            {
+                return member;
+            }
+        }
+
+        current = getBaseClass( current, checker );
+    }
+
+    return undefined;
+}
 
 export class SwaggerSpecGenerator 
 {
@@ -11,20 +46,29 @@ export class SwaggerSpecGenerator
     {
         const checker = program.getTypeChecker();
     
-        const spec: any = {
-      openapi : '3.0.0',
-      info    : {
-          title       : 'Webergency Application API',
-          version     : '1.0.0',
-          description : 'Automatically generated AOT REST & RPC endpoint documentation.'
-      },
-      paths      : {},
-      components : {
-          schemas : {}
-      }
-    };
+        const spec: any =
+        {
+            openapi : '3.0.0',
+            info    : {
+                title       : 'Webergency Application API',
+                version     : '1.0.0',
+                description : 'Automatically generated AOT REST & RPC endpoint documentation.'
+            },
+            paths      : {},
+            components : {
+                schemas : {}
+            }
+        };
 
         const defs: Record<string, any> = {};
+
+        const rewriteDefRefs = ( value: any ): any =>
+        {
+            let json = JSON.stringify( value );
+            json = json.replace( /#\/\$defs\//g, '#/components/schemas/' );
+
+            return JSON.parse( json );
+        };
 
         const registerSchema = ( schema: any ) => 
         {
@@ -34,15 +78,27 @@ export class SwaggerSpecGenerator
             {
                 for( const [key, val] of Object.entries( schema.$defs )) 
                 {
-                    defs[key] = val;
+                    defs[key] = rewriteDefRefs( val );
                 }
                 delete schema.$defs;
             }
       
-            let json = JSON.stringify( schema );
-            json = json.replace( /#\/\$defs\//g, '#/components/schemas/' );
+            return rewriteDefRefs( schema );
+        };
 
-            return JSON.parse( json );
+        const derefSchema = ( schema: any ): any =>
+        {
+            if( schema && typeof schema.$ref === 'string' && schema.$ref.startsWith( '#/components/schemas/' ))
+            {
+                const key = schema.$ref.slice( '#/components/schemas/'.length );
+
+                if( Object.hasOwn( defs, key ))
+                {
+                    return defs[key];
+                }
+            }
+
+            return schema;
         };
 
         for( const ep of registry.endpoints ) 
@@ -64,14 +120,7 @@ export class SwaggerSpecGenerator
             {
                 if( ts.isClassDeclaration( node ) && node.name?.text === ep.controller ) 
                 {
-                    for( const member of node.members ) 
-                    {
-                        if( ts.isMethodDeclaration( member ) && member.name.getText( sourceFile ) === ep.methodName ) 
-                        {
-                            methodDecl = member;
-                            break;
-                        }
-                    }
+                    methodDecl = findControllerMethod( node, ep.methodName, checker );
                 }
 
                 if( !methodDecl ) { ts.forEachChild( node, findMethod ) }
@@ -81,7 +130,8 @@ export class SwaggerSpecGenerator
 
             if( !methodDecl ) { continue }
 
-            const swaggerPath = ep.path.replace( /:([a-zA-Z0-9_]+)/g, '{$1}' );
+            const declSourceFile = methodDecl.getSourceFile();
+            const swaggerPath = toOpenApiPath( ep.path );
 
             if( !spec.paths[swaggerPath]) 
             {
@@ -130,22 +180,27 @@ export class SwaggerSpecGenerator
                             schema
                         });
                     }
-                    else if( schema && schema.properties ) 
+                    else
                     {
-                        for( const [k, v] of Object.entries( schema.properties )) 
+                        const resolvedSchema = derefSchema( schema );
+
+                        if( resolvedSchema && resolvedSchema.properties ) 
                         {
-                            queryParams.push({
-                                name     : k,
-                                in       : inLocation,
-                                required : ( schema.required || []).includes( k ),
-                                schema   : v
-                            });
+                            for( const [k, v] of Object.entries( resolvedSchema.properties )) 
+                            {
+                                queryParams.push({
+                                    name     : k,
+                                    in       : inLocation,
+                                    required : ( resolvedSchema.required || []).includes( k ),
+                                    schema   : v
+                                });
+                            }
                         }
                     }
                 }
                 else if( paramMeta.source === 'Body' ) 
                 {
-                    const typeText = paramDecl.type ? paramDecl.type.getText( sourceFile ) : '';
+                    const typeText = paramDecl.type ? paramDecl.type.getText( declSourceFile ) : '';
                     const isMultipartBag = /\b(MultipartPayload|UploadedFile)\b/.test( typeText )
                         || !!( ep.files && typeof ep.files === 'object' );
 
@@ -170,11 +225,34 @@ export class SwaggerSpecGenerator
                             }
                         };
                     }
+                    else if( paramMeta.name )
+                    {
+                        const schema = registerSchema( buildJsonSchema( type, checker ));
+                        const existingProps = requestBody?.content?.['application/json']?.schema?.properties || {};
+                        const existingReq: string[] = requestBody?.content?.['application/json']?.schema?.required || [];
+                        const properties = { ...existingProps, [paramMeta.name] : schema };
+                        const requiredList = !paramDecl.questionToken && !paramMeta.optional && !existingReq.includes( paramMeta.name )
+                            ? [ ...existingReq, paramMeta.name ]
+                            : existingReq;
+
+                        requestBody = {
+                            required : true,
+                            content  : {
+                                'application/json' : {
+                                    schema : {
+                                        type : 'object',
+                                        properties,
+                                        ...( requiredList.length > 0 ? { required : requiredList } : {})
+                                    }
+                                }
+                            }
+                        };
+                    }
                     else
                     {
                         const schema = registerSchema( buildJsonSchema( type, checker ));
                         requestBody = {
-                            required : true,
+                            required : !paramMeta.optional,
                             content  : {
                                 'application/json' : {
                                     schema
@@ -239,6 +317,25 @@ export class SwaggerSpecGenerator
                             }
                         }
                     };
+                }
+            }
+
+            // OpenAPI 3.0 requires every `{param}` placeholder in the path template to be declared in `parameters`.
+            const declaredPathNames = new Set( pathParams.map( p => p.name ));
+
+            for( const match of swaggerPath.matchAll( /\{([^}]+)\}/g ))
+            {
+                const placeholder = match[1];
+
+                if( !declaredPathNames.has( placeholder ))
+                {
+                    declaredPathNames.add( placeholder );
+                    pathParams.push({
+                        name     : placeholder,
+                        in       : 'path',
+                        required : true,
+                        schema   : { type : 'string' }
+                    });
                 }
             }
 
@@ -307,20 +404,27 @@ export class SwaggerSpecGenerator
                 }
             }
 
-            const operation: any = {
-        tags      : [ep.controller],
-        summary   : `${ep.controller}.${ep.methodName}`,
-        responses : {
-            '200' : {
-                description : 'Successful Response',
-                content     : {
-                    'application/json' : {
-                        schema : responseSchema
+            const responseContent = ep.meta.sse
+                ? {
+                    'text/event-stream' : { schema : responseSchema },
+                    'application/json'  : { schema : responseSchema }
+                }
+                : {
+                    'application/json' : { schema : responseSchema }
+                };
+
+            const operation: any =
+            {
+                tags        : [ep.controller],
+                summary     : `${ep.controller}.${ep.methodName}`,
+                operationId : `${ep.controller}_${ep.methodName}`,
+                responses   : {
+                    '200' : {
+                        description : 'Successful Response',
+                        content     : responseContent
                     }
                 }
-            }
-        }
-      };
+            };
 
             const allParams = [...pathParams, ...queryParams];
 
@@ -335,15 +439,25 @@ export class SwaggerSpecGenerator
             }
 
             const swaggerMethods = swaggerMethod === 'all'
-                ? ['get', 'post', 'put', 'delete', 'patch']
+                ? [ 'get', 'post', 'put', 'delete', 'patch', 'head', 'options' ]
                 : [swaggerMethod];
 
             for( const m of swaggerMethods ) 
             {
-                spec.paths[swaggerPath][m] = {
-          ...operation,
-          summary : swaggerMethod === 'all' ? `${operation.summary} (${m.toUpperCase()})` : operation.summary
-        };
+                const cloned = structuredClone( operation );
+
+                if( swaggerMethod === 'all' )
+                {
+                    cloned.summary = `${operation.summary} (${m.toUpperCase()})`;
+                    cloned.operationId = `${ep.controller}_${ep.methodName}_${m}`;
+
+                    if( m === 'get' || m === 'head' || m === 'options' )
+                    {
+                        delete cloned.requestBody;
+                    }
+                }
+
+                spec.paths[swaggerPath][m] = cloned;
             }
         }
 
