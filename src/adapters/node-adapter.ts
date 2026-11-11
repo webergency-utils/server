@@ -1,7 +1,7 @@
 import { ServerAdapter, TlsOptions, NodeHttpOptions, normalizeHostList, listenNodeServer } from './adapter.js';
 import { MultiBuffer, WebsocketFrame, FrameReadState } from '../helpers/ws-frame.js';
 import { RequestProcessor } from '../core/request-processor.js';
-import { DIRECT_RESPONSE_BODY } from '../core/types.js';
+import { getDirectResponseBody, hasDirectResponseBody } from '../core/types.js';
 import { toAllowList } from '../core/router.js';
 import { getRegistry } from '../core/registry.js';
 import { EventEmitter } from 'node:events';
@@ -433,9 +433,9 @@ export class NodeAdapter implements ServerAdapter
                 }
             }
 
-            if( DIRECT_RESPONSE_BODY in response && !response.bodyUsed )
+            if( hasDirectResponseBody( response ) && !response.bodyUsed )
             {
-                const direct = ( response as any )[DIRECT_RESPONSE_BODY] as string | Uint8Array | null;
+                const direct = getDirectResponseBody( response ) ?? null;
 
                 if( direct === null || direct === '' || method === 'HEAD' )
                 {

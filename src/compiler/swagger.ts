@@ -6,12 +6,111 @@ import { ProjectRegistry } from './registry.js';
 import { unwrapReturnType } from './endpoint-analyzer.js';
 import { getBaseClass } from './di-resolution.js';
 
-function toOpenApiPath( rawPath: string ): string
+function isOpenApiIdentChar( code: number ): boolean
 {
-    return rawPath
-        .replace( /:([a-zA-Z0-9_]+)(?:\([^)]*\))?[?*+]?/g, '{$1}' )
-        .replace( /\*([a-zA-Z0-9_]+)/g, '{$1}' )
-        .replace( /\*/g, '{wildcard}' );
+    return ( code >= 48 && code <= 57 )
+        || ( code >= 65 && code <= 90 )
+        || ( code >= 97 && code <= 122 )
+        || code === 95;
+}
+
+export function toOpenApiPath( rawPath: string ): string
+{
+    const len = rawPath.length;
+    const parts: string[] = [];
+    let cursor = 0;
+    let cachedCloseParen = -1;
+    let i = 0;
+
+    while( i < len )
+    {
+        const ch = rawPath.charCodeAt( i );
+
+        if( ch === 58 )
+        {
+            let nameEnd = i + 1;
+
+            while( nameEnd < len && isOpenApiIdentChar( rawPath.charCodeAt( nameEnd )))
+            {
+                nameEnd++;
+            }
+
+            if( nameEnd > i + 1 )
+            {
+                if( i > cursor ){ parts.push( rawPath.slice( cursor, i )) }
+
+                const name = rawPath.slice( i + 1, nameEnd );
+                let next = nameEnd;
+
+                if( next < len && rawPath.charCodeAt( next ) === 40 )
+                {
+                    if( cachedCloseParen <= next && cachedCloseParen !== len )
+                    {
+                        const found = rawPath.indexOf( ')', next + 1 );
+                        cachedCloseParen = found === -1 ? len : found;
+                    }
+
+                    if( cachedCloseParen < len )
+                    {
+                        next = cachedCloseParen + 1;
+                    }
+                }
+
+                if( next < len )
+                {
+                    const mod = rawPath.charCodeAt( next );
+
+                    if( mod === 63 || mod === 42 || mod === 43 )
+                    {
+                        next++;
+                    }
+                }
+
+                parts.push( `{${name}}` );
+                cursor = next;
+                i = next;
+                continue;
+            }
+        }
+        else if( ch === 42 )
+        {
+            if( i > cursor ){ parts.push( rawPath.slice( cursor, i )) }
+
+            let nameEnd = i + 1;
+
+            while( nameEnd < len && isOpenApiIdentChar( rawPath.charCodeAt( nameEnd )))
+            {
+                nameEnd++;
+            }
+
+            if( nameEnd > i + 1 )
+            {
+                parts.push( `{${rawPath.slice( i + 1, nameEnd )}}` );
+                cursor = nameEnd;
+                i = nameEnd;
+                continue;
+            }
+
+            parts.push( '{wildcard}' );
+            cursor = i + 1;
+            i++;
+            continue;
+        }
+
+        i++;
+    }
+
+    if( cursor === 0 )
+    {
+        return rawPath;
+    }
+
+    if( cursor < len )
+    {
+        parts.push( rawPath.slice( cursor ));
+    }
+
+    return parts.join( '' );
 }
 
 function findControllerMethod(
@@ -60,12 +159,12 @@ export class SwaggerSpecGenerator
             }
         };
 
-        const defs: Record<string, any> = {};
+        const pathsMap = new Map<string, Map<string, any>>();
+        const defs = new Map<string, any>();
 
         const rewriteDefRefs = ( value: any ): any =>
         {
-            let json = JSON.stringify( value );
-            json = json.replace( /#\/\$defs\//g, '#/components/schemas/' );
+            const json = JSON.stringify( value ).replaceAll( '#/$defs/', '#/components/schemas/' );
 
             return JSON.parse( json );
         };
@@ -76,9 +175,9 @@ export class SwaggerSpecGenerator
       
             if( schema.$defs ) 
             {
-                for( const [key, val] of Object.entries( schema.$defs )) 
+                for( const [ key, val ] of Object.entries( schema.$defs )) 
                 {
-                    defs[key] = rewriteDefRefs( val );
+                    defs.set( key, rewriteDefRefs( val ));
                 }
                 delete schema.$defs;
             }
@@ -92,9 +191,9 @@ export class SwaggerSpecGenerator
             {
                 const key = schema.$ref.slice( '#/components/schemas/'.length );
 
-                if( Object.hasOwn( defs, key ))
+                if( defs.has( key ))
                 {
-                    return defs[key];
+                    return defs.get( key );
                 }
             }
 
@@ -132,10 +231,12 @@ export class SwaggerSpecGenerator
 
             const declSourceFile = methodDecl.getSourceFile();
             const swaggerPath = toOpenApiPath( ep.path );
+            let pathItem = pathsMap.get( swaggerPath );
 
-            if( !spec.paths[swaggerPath]) 
+            if( !pathItem )
             {
-                spec.paths[swaggerPath] = {};
+                pathItem = new Map<string, any>();
+                pathsMap.set( swaggerPath, pathItem );
             }
 
             const swaggerMethod = ep.httpMethod.toLowerCase();
@@ -457,13 +558,17 @@ export class SwaggerSpecGenerator
                     }
                 }
 
-                spec.paths[swaggerPath][m] = cloned;
+                pathItem.set( m, cloned );
             }
         }
 
-        if( Object.keys( defs ).length > 0 ) 
+        spec.paths = Object.fromEntries(
+            Array.from( pathsMap, ([ pathKey, methods ]) => [ pathKey, Object.fromEntries( methods )])
+        );
+
+        if( defs.size > 0 ) 
         {
-            spec.components.schemas = defs;
+            spec.components.schemas = Object.fromEntries( defs );
         }
 
         const swaggerJsonPath = path.resolve( outputDir, 'swagger.json' );

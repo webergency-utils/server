@@ -3,7 +3,6 @@ import { ApplicationRegistry, getRegistry } from './registry.js';
 import { isMultipartContentType } from '../helpers/request-reader.js';
 import
 {
-    DIRECT_RESPONSE_BODY,
     EndpointMetadata,
     ForwardIntent,
     isNullBodyStatus,
@@ -241,7 +240,7 @@ function buildJsonResponse( jsonStr: string, requestId: string | undefined, opti
     {
         const res = new Response( jsonStr, { headers : options.jsonHeadersTemplate });
         res.headers.set( 'x-request-id', id );
-        ( res as any )[DIRECT_RESPONSE_BODY] = jsonStr;
+        tagDirectResponse( res, jsonStr );
         ( res as any )[FINALIZED_RESPONSE] = true;
 
         return res;
@@ -261,7 +260,7 @@ function buildPlainResponse( body: string | null, requestId: string | undefined,
     {
         const res = new Response( body, { headers : options.baseHeadersTemplate });
         res.headers.set( 'x-request-id', id );
-        ( res as any )[DIRECT_RESPONSE_BODY] = body;
+        tagDirectResponse( res, body );
         ( res as any )[FINALIZED_RESPONSE] = true;
 
         return res;
@@ -1147,7 +1146,7 @@ export class RequestProcessor
 
         await sreq.cleanupDiskUploads();
 
-        if( err instanceof Response )
+        if( err instanceof Response && !( err instanceof Error ))
         {
             return middlewareResponse ? middlewareResponse.applyTo( err ) : err;
         }

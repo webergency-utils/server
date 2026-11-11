@@ -5,9 +5,10 @@ import { ApplicationRegistry, getRegistry, runWithRegistry } from './core/regist
 import { bootstrapRegistry } from './core/bootstrap.js';
 import
 {
-    DIRECT_RESPONSE_BODY,
     EndpointMetadata,
     ForwardIntent,
+    getDirectResponseBody,
+    hasDirectResponseBody,
     LogContext,
     Logger,
     SeoFallthrough,
@@ -299,7 +300,7 @@ const serverSignalFinalizer = typeof FinalizationRegistry === 'function'
 
 function cancelResponseBody( res: Response ): void
 {
-    if( DIRECT_RESPONSE_BODY in res || !res.body ){ return }
+    if( hasDirectResponseBody( res ) || !res.body ){ return }
 
     try
     {
@@ -1180,9 +1181,9 @@ export class Server extends EventEmitter
             const merged = new Headers( res.headers );
             applyFinalHeaders( merged, corsHeaders, secHeaders, allowHeader, requestId );
 
-            if( DIRECT_RESPONSE_BODY in res )
+            if( hasDirectResponseBody( res ))
             {
-                const direct = ( res as any )[DIRECT_RESPONSE_BODY] as string | Uint8Array | null;
+                const direct = getDirectResponseBody( res ) ?? null;
 
                 return tagDirectResponse( new Response( direct as BodyInit | null, {
                     status     : res.status,

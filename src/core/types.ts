@@ -191,17 +191,27 @@ export function isNullBodyStatus( status: number ): boolean
 }
 
 /**
- * Internal symbol storing an already-materialized string / Uint8Array / null payload on
+ * Internal side-table storing an already-materialized string / Uint8Array / null payload for
  * framework-built `Response`s so `NodeAdapter` can write `res.end(directBody)` in one call
  * without materializing a Web `ReadableStream` + `Readable.fromWeb().pipe()`.
  */
-export const DIRECT_RESPONSE_BODY = Symbol.for( 'webergency.server.directBody' );
+const directResponseBodies = new WeakMap<Response, string | Uint8Array | null>();
 
 export function tagDirectResponse( response: Response, directBody: string | Uint8Array | null ): Response
 {
-    ( response as any )[DIRECT_RESPONSE_BODY] = directBody;
+    directResponseBodies.set( response, directBody );
 
     return response;
+}
+
+export function hasDirectResponseBody( response: Response ): boolean
+{
+    return directResponseBodies.has( response );
+}
+
+export function getDirectResponseBody( response: Response ): string | Uint8Array | null | undefined
+{
+    return directResponseBodies.get( response );
 }
 
 /**
@@ -419,9 +429,9 @@ export class ServerResponse
                 }), null );
             }
 
-            if( DIRECT_RESPONSE_BODY in response )
+            if( hasDirectResponseBody( response ))
             {
-                const direct = ( response as any )[DIRECT_RESPONSE_BODY] as string | Uint8Array | null;
+                const direct = getDirectResponseBody( response ) ?? null;
 
                 return tagDirectResponse( new Response( direct as BodyInit | null, {
                     status     : this.#status,

@@ -5,9 +5,11 @@ import ts from '../src/compiler/ts.js';
 import { Server } from '../src/server.js';
 import { ServerRequest } from '../src/core/server-request.js';
 import { RequestProcessor } from '../src/core/request-processor.js';
-import { serializeCookie } from '../src/core/types.js';
+import { ServerResponse, serializeCookie, tagDirectResponse } from '../src/core/types.js';
 import { hasPublicDecorator } from '../src/compiler/decorator-config.js';
 import compilerPlugin from '../src/compiler/transformer.js';
+import { SwaggerSpecGenerator, toOpenApiPath } from '../src/compiler/swagger.js';
+import { createRegistry } from '../src/compiler/registry.js';
 import { handleCors } from '../src/helpers/cors.js';
 import { extractHostname, generateSecurityHeaders } from '../src/helpers/security.js';
 import { resolveClientIp, TRUST_PROXY_LOOPBACK } from '../src/helpers/client-ip.js';
@@ -24,6 +26,7 @@ import { NodeAdapter } from '../src/adapters/node-adapter.js';
 import { NdjsonLineFramer } from '../src/microservice/ndjson-framer.js';
 import { defineController, ApplicationRegistry, runWithRegistry } from './helpers/testing.js';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -924,6 +927,124 @@ describe( 'Security Audit Fixes (S1–S13)', () =>
             expect(( await optOutReader.read()).value?.byteLength ).toBe( 12 );
             expect(( await optOutReader.read()).value?.byteLength ).toBe( 12 );
             expect(( await optOutReader.read()).done ).toBe( true );
+        });
+    });
+
+    describe( 'CodeQL Security Alerts (#55, #56, #57)', () =>
+    {
+        it( 'Alert #55: toOpenApiPath should convert route patterns in linear O(n) time without polynomial backtracking', () =>
+        {
+            // Arrange
+            const adversarial = ':0('.repeat( 30000 );
+
+            // Act
+            const start = performance.now();
+            const convertedAdversarial = toOpenApiPath( adversarial );
+            const elapsedMs = performance.now() - start;
+
+            // Assert
+            expect( toOpenApiPath( '/users/:id(\\d+)?/files/*filepath/*' )).toBe(
+                '/users/{id}/files/{filepath}/{wildcard}'
+            );
+            expect( toOpenApiPath( 'math.sum' )).toBe( 'math.sum' );
+            expect( convertedAdversarial.startsWith( '{0}(' )).toBe( true );
+            expect( elapsedMs ).toBeLessThan( 200 );
+        });
+
+        it( 'Alert #56: SwaggerSpecGenerator.generate should not pollute Object.prototype on __proto__ route paths', () =>
+        {
+            // Arrange
+            const tmpDir = fs.mkdtempSync( path.join( os.tmpdir(), 'wu-sec-swag-' ));
+            const ctrlFile = path.join( tmpDir, 'proto.controller.ts' );
+            fs.writeFileSync(
+                ctrlFile,
+                'export class ProtoCtrl { ping(): { ok: boolean } { return { ok: true }; } }\n',
+                'utf8'
+            );
+
+            try
+            {
+                const program = ts.createProgram([ ctrlFile ], {
+                    target : ts.ScriptTarget.ES2022,
+                    module : ts.ModuleKind.NodeNext
+                });
+                const projRegistry = createRegistry();
+                projRegistry.controllers.set( 'ProtoCtrl', {
+                    path       : ctrlFile,
+                    injections : new Map()
+                });
+                projRegistry.endpoints.push({
+                    controller   : 'ProtoCtrl',
+                    methodName   : 'ping',
+                    httpMethod   : 'GET',
+                    path         : '__proto__',
+                    params       : [],
+                    guards       : [],
+                    interceptors : [],
+                    meta         : {}
+                });
+
+                // Act
+                SwaggerSpecGenerator.generate( projRegistry, program, tmpDir );
+
+                // Assert
+                expect(({} as Record<string, unknown> ).get ).toBeUndefined();
+                const rawSpec = fs.readFileSync( path.join( tmpDir, 'swagger.json' ), 'utf8' );
+                expect( rawSpec ).toContain( '"__proto__"' );
+                expect( rawSpec ).toContain( '"ProtoCtrl_ping"' );
+            }
+            finally
+            {
+                fs.rmSync( tmpDir, { recursive : true, force : true });
+            }
+        });
+
+        it( 'Alert #57: ServerResponse.applyTo and error handling should isolate direct bodies via WeakMap and never expose stack traces', async () =>
+        {
+            // Arrange
+            const directRes = tagDirectResponse( new Response( '{"ok":true}', {
+                status  : 200,
+                headers : { 'Content-Type' : 'application/json' }
+            }), '{"ok":true}' );
+            const bag = new ServerResponse().status( 201 ).header( 'X-Bag', '1' );
+
+            class CrashCtrl
+            {
+                boom( res: ServerResponse ): never
+                {
+                    res.status( 502 ).header( 'X-Middleware', 'applied' );
+
+                    throw new Error( 'Secret internal explosion' );
+                }
+            }
+            defineController( CrashCtrl, [{
+                methodName : 'boom',
+                httpMethod : 'GET',
+                path       : '/boom',
+                params     : [{ source : 'Response' }]
+            }]);
+
+            const server = new Server({
+                controllers  : [CrashCtrl],
+                exposeErrors : false,
+                security     : false
+            });
+
+            // Act
+            const merged = bag.applyTo( directRes );
+            const errRes = await server.fetch( new Request( 'http://localhost/boom' ));
+            const errJson = await errRes.json();
+
+            // Assert
+            expect( Object.getOwnPropertySymbols( directRes )).toHaveLength( 0 );
+            expect( merged.status ).toBe( 201 );
+            expect( merged.headers.get( 'x-bag' )).toBe( '1' );
+            expect( await merged.text()).toBe( '{"ok":true}' );
+            expect( errRes.status ).toBe( 502 );
+            expect( errRes.headers.get( 'x-middleware' )).toBe( 'applied' );
+            expect( errJson ).toEqual({ success : false, error : 'Internal server error' });
+            expect( JSON.stringify( errJson )).not.toContain( 'Secret internal explosion' );
+            expect( JSON.stringify( errJson )).not.toContain( 'at CrashCtrl' );
         });
     });
 });
