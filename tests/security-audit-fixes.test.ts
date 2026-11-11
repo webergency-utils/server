@@ -1036,7 +1036,10 @@ describe( 'Security Audit Fixes (S1–S13)', () =>
             const errJson = await errRes.json();
 
             // Assert
-            expect( Object.getOwnPropertySymbols( directRes )).toHaveLength( 0 );
+            expect( Object.getOwnPropertySymbols( directRes )).toEqual(
+                Object.getOwnPropertySymbols( new Response( '{"ok":true}' ))
+            );
+            expect( Symbol.for( 'webergency.server.directBody' ) in directRes ).toBe( false );
             expect( merged.status ).toBe( 201 );
             expect( merged.headers.get( 'x-bag' )).toBe( '1' );
             expect( await merged.text()).toBe( '{"ok":true}' );
