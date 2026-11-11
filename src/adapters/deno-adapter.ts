@@ -52,6 +52,10 @@ export class DenoAdapter implements ServerAdapter
 
         const serveHandler = ( req: Request, info: any ) =>
         {
+            // Deno.serve aborts `req.signal` on successful responses (200 SSE / 101 WS) by default
+            // and logs a deprecation warning when `req.signal` is read without --unstable-no-legacy-abort.
+            ( req as any ).__ignoreReqSignal = true;
+
             if( info?.remoteAddr?.hostname )
             {
                 ( req as any ).remoteAddress = info.remoteAddr.hostname;

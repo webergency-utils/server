@@ -46,6 +46,7 @@ export interface TransportRequest extends Request
     clientCert?            : PeerCert
     __getDisconnectSignal? : () => AbortSignal
     __isDisconnected?      : () => boolean
+    __ignoreReqSignal?     : boolean
 }
 
 export interface WireTextResult
@@ -232,7 +233,8 @@ export class ServerRequest
         sreq.#globalFiles = globalFiles;
         sreq.#files = globalFiles;
         sreq.#globalReviver = globalReviver;
-        sreq.#useReqSignal = !( req as TransportRequest ).__getDisconnectSignal;
+        sreq.#useReqSignal = !( req as TransportRequest ).__getDisconnectSignal
+            && !( req as TransportRequest ).__ignoreReqSignal;
 
         return sreq;
     }
@@ -490,6 +492,12 @@ export class ServerRequest
     set signal( val: AbortSignal | undefined )
     {
         this.#signal = val;
+        this.#useReqSignal = false;
+    }
+
+    /** Detach the underlying HTTP `Request.signal` once an upgrade (`101 Switching Protocols`) has completed. */
+    detachTransportSignal(): void
+    {
         this.#useReqSignal = false;
     }
 

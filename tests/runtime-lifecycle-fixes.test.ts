@@ -26,6 +26,7 @@ import { computeBodyHash } from '../src/helpers/body-hash.js';
 import { MultiBuffer, WebsocketFrame } from '../src/helpers/ws-frame.js';
 import { truncateWsReason, isValidWsHandshakeKey } from '../src/adapters/ws-upgrade.js';
 import { WsHeartbeat } from '../src/adapters/ws-heartbeat.js';
+import { DenoAdapter } from '../src/adapters/deno-adapter.js';
 import { Microservice } from '../src/microservice/microservice.js';
 import { TcpMessageAdapter } from '../src/microservice/tcp-adapter.js';
 import { TcpClient } from '../src/microservice/tcp-client.js';
@@ -36,6 +37,10 @@ import {
     ApplicationRegistry,
     runWithRegistry
 } from './helpers/testing.js';
+
+const isNodeRuntime =
+    typeof ( globalThis as { Bun? : unknown }).Bun === 'undefined'
+    && typeof ( globalThis as { Deno? : unknown }).Deno === 'undefined';
 
 describe( 'Runtime, DI, Protocol, WebSocket & Microservice Fixes (#9–#28)', () =>
 {
@@ -998,7 +1003,7 @@ describe( 'Runtime, DI, Protocol, WebSocket & Microservice Fixes (#9–#28)', ()
             hb.stop();
         });
 
-        it( 'Bug #26 & Disconnect AbortSignal: NodeAdapter should enforce WS key/version, buffer early head frames, emit 1006 on abrupt close, and abort req.signal on HTTP disconnect', async () =>
+        it.skipIf( !isNodeRuntime )( 'Bug #26 & Disconnect AbortSignal: NodeAdapter should enforce WS key/version, buffer early head frames, emit 1006 on abrupt close, and abort req.signal on HTTP disconnect', async () =>
         {
             // Arrange
             const earlyMessages: string[] = [];
@@ -1435,6 +1440,116 @@ describe( 'Runtime, DI, Protocol, WebSocket & Microservice Fixes (#9–#28)', ()
             // Act & Assert 2: clearing instances causes fresh instantiation without stale mirror cache
             registry.instances.clear();
             expect( await registry.resolve( 'RealSvc' )).toEqual({ tag : 'real' });
+        });
+
+        it( 'should ignore Deno legacy post-response req.signal aborts and detach transport signal on WebSocket upgrade', async () =>
+        {
+            // Arrange 1: Simulate Deno.serve legacy req.signal aborting when a successful response is returned
+            const denoGlobal = globalThis as { Deno? : unknown };
+            const prevDeno = denoGlobal.Deno;
+            let capturedServeHandler: (( req: Request, info: unknown ) => Promise<Response> ) | undefined;
+
+            denoGlobal.Deno = {
+                serve : ( _opts: unknown, cb: ( req: Request, info: unknown ) => Promise<Response> ) =>
+                {
+                    capturedServeHandler = cb;
+
+                    return {
+                        finished : Promise.resolve(),
+                        shutdown : async () => undefined
+                    };
+                }
+            };
+
+            try
+            {
+                const adapter = new DenoAdapter();
+                let observedReqFacade: ServerRequest | undefined;
+
+                await adapter.listen( 0, async ( req: Request ) =>
+                {
+                    observedReqFacade = ServerRequest.from( req );
+
+                    return new Response( 'ok', { status : 200 });
+                });
+
+                const legacyAbort = new AbortController();
+                const denoReq = new Request( 'http://localhost/sse', { signal : legacyAbort.signal });
+                await capturedServeHandler!( denoReq, { remoteAddr : { hostname : '127.0.0.1' }});
+                legacyAbort.abort();
+
+                expect( observedReqFacade ).toBeDefined();
+                expect( observedReqFacade!.isAborted ).toBe( false );
+                expect( observedReqFacade!.signal ).toBeUndefined();
+                expect( observedReqFacade!.ip ).toBe( '127.0.0.1' );
+
+                await adapter.close();
+            }
+            finally
+            {
+                if( prevDeno === undefined )
+                {
+                    delete denoGlobal.Deno;
+                }
+                else
+                {
+                    denoGlobal.Deno = prevDeno;
+                }
+            }
+
+            // Arrange 2: Simulate upgrade Request.signal aborting upon 101 Switching Protocols before executeWs runs
+            let resolvedRoom = '';
+            let resolvedToken = '';
+
+            class WsUpgradeCtrl
+            {
+                connect( ws: { send : ( payload: string ) => void }, room: string, token: string )
+                {
+                    resolvedRoom = room;
+                    resolvedToken = token;
+                    ws.send( `${room}:${token}` );
+                }
+            }
+            defineController( WsUpgradeCtrl, [{
+                methodName : 'connect',
+                httpMethod : 'WS',
+                path       : '/ws/:room',
+                params     : [
+                    { source : 'WebSocket' },
+                    { source : 'Param', name : 'room' },
+                    { source : 'Query', name : 'token' }
+                ]
+            }]);
+
+            const registry = new ApplicationRegistry();
+            bootstrapRegistry( registry, { controllers : [WsUpgradeCtrl] });
+
+            const upgradeAbort = new AbortController();
+            const upgradeReq = new Request( 'http://localhost/ws/lobby?token=abc', {
+                signal : upgradeAbort.signal
+            });
+            const sreq = ServerRequest.from( upgradeReq, { params : { room : 'lobby' }});
+            upgradeAbort.abort();
+
+            const sentFrames: string[] = [];
+            const mockWs = {
+                params : { room : 'lobby' },
+                send   : ( payload: string ) => { sentFrames.push( payload ) },
+                close  : vi.fn()
+            };
+
+            const wsEndpoint = registry.getEndpoints().find( ep => ep.httpMethod === 'WS' )!;
+
+            // Act
+            await runWithRegistry( registry, () =>
+                RequestProcessor.executeWs( wsEndpoint, mockWs, sreq )
+            );
+
+            // Assert
+            expect( resolvedRoom ).toBe( 'lobby' );
+            expect( resolvedToken ).toBe( 'abc' );
+            expect( sentFrames ).toEqual([ 'lobby:abc' ]);
+            expect( mockWs.close ).not.toHaveBeenCalled();
         });
     });
 });

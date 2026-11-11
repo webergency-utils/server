@@ -1762,6 +1762,7 @@ export class RequestProcessor
         const handedOffCtx: RequestContext | undefined = ( req as any )?.__wsRequestContext;
         const maskErrors = Boolean(( req as any )?.__wsMaskErrors );
         const sreq: ServerRequest = handedOffCtx?.request ?? ServerRequest.from( req );
+        sreq.detachTransportSignal();
 
         if( ws?.params && Object.keys( sreq.params ).length === 0 )
         {
